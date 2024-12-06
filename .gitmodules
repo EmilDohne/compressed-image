@@ -1,0 +1,6 @@
+[submodule "thirdparty/c-blosc2"]
+	path = thirdparty/c-blosc2
+	url = https://github.com/Blosc/c-blosc2
+[submodule "thirdparty/json"]
+	path = thirdparty/json
+	url = https://github.com/nlohmann/json
