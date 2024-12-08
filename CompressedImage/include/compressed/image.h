@@ -13,71 +13,14 @@
 #include "blosc2.h"
 #include "json.hpp"
 
+#include "fwd.h"
+#include "blosc2_wrapper.h"
+
 using json_ordered = nlohmann::ordered_json;
 
 
 namespace NAMESPACE_COMPRESSED_IMAGE 
 {
-	// forward declaration
-	template <typename T, size_t _Block_Size = 32'768, size_t _Chunk_Size = 16'777'216>
-	struct Image;
-
-
-	/// Memory order of the image where `planar` is:
-	/// 
-	/// RRRR... GGGG... BBBB... AAAA...
-	/// 
-	/// and `interleaved` is 
-	/// 
-	/// RGBA RGBA RGBA RGBA...
-	/// 
-	/// When iterating a single channel at a time storing the images in a planar fashion might lead to faster results
-	/// while for iterating multiple channels at a time it will make more sense to store the images interleaved.
-	enum class memory_order
-	{
-		planar,
-		interleaved
-	};
-
-
-	/// The compression codecs known to us. Inherited from blosc2.
-	enum class codec
-	{
-		blosclz,
-		lz4,
-		lz4hc,
-		zlib,
-		zstd
-	};
-
-
-
-	namespace _Impl
-	{
-
-		// Custom deleter for blosc2 structs for use in a smart pointer
-		template <typename T>
-		struct Blosc2Deleter {};
-
-		template <>
-		struct Blosc2Deleter<blosc2_schunk>
-		{
-			void operator()(blosc2_schunk* schunk)
-			{
-				blosc2_schunk_free(schunk);
-			}
-		};
-
-		template <>
-		struct Blosc2Deleter<blosc2_context>
-		{
-			void operator()(blosc2_context* context)
-			{
-				blosc2_free_ctx(context);
-			}
-		};
-	}
-
 
 	/// Compressed Image representation with easy access to different channels. Internally functions very similar to an NDArray
 	/// with the important distinction that the number of dimensions is fixed to be 3-Dimensional (width, height, channels).
@@ -87,60 +30,194 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	/// The image is stored in a non-resizable fashion so whatever the resolution was going into it, is what the image will be.
 	/// To rescale or refit the image a new Image has to be constructed.
 	/// 
-	/// To fully leverage the capabilities of the Image traversal should be done directly over the image as that will 
-	/// 
 	/// The data is compressed in memory and we store it as part of a blosc2 super-chunk which is essentially a 3d array of 
 	/// super-chunk -> chunk -> block. Where having the block size fit into L1 cache and the Chunk size into L3 cache is desirable
 	/// as each block can be handled by a single cpu core while the chunk fits well within shared L3 memory.
 	/// 
 	/// \tparam _Block_Size 
 	///		The size of the blocks stored inside the chunks, defaults to 32KB which is enough to comfortably fit into the L1 cache
-	///		of most modern CPUs. If you know your cpu can handle larger blocks feel free to up this.
+	///		of most modern CPUs. If you know your cpu can handle larger blocks feel free to up this number.
 	/// 
 	/// \tparam _Chunk_Size 
-	///		The size of each individual chunk, defaults to 16MB which is enough to hold a 4096x4096 image
+	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
+	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
+	///		upped which will give better compression ratios.
 	/// 
-	template <typename T, size_t _Block_Size = 32'768, size_t _Chunk_Size = 16'777'216>
+	template <typename T, size_t _Block_Size = 32'768, size_t _Chunk_Size = 4'194'304>
 	struct Image
 	{
 
-		template <typename T, class Tag = void>
-		class Iterator
-			: public std::iterator<std::forward_iterator_tag, T>
+		// Image iterator, cannot be used in parallel as it iterates the chunks. Dereferencing it gives a 
+		struct Iterator
 		{
-		public:
+			// Iterator type definitions
+			using iterator_category = std::forward_iterator_tag;
+			using difference_type = std::ptrdiff_t;
+			using value_type = std::span<T>;
+			using pointer = value_type*;
+			using reference = value_type&;
 
-			T& operator*() const {};
-			T* operator->() const {};
 
-			Iterator& operator++() {};
-			Iterator operator++(int) {};
+			Iterator(
+				blosc2::schunk_raw_ptr schunk,
+				impl::CompressionView<T>& decompression_buffer,
+				impl::CompressionView<T>& compression_buffer,
+				blosc2::context_raw_ptr compression_context, 
+				blosc2::context_raw_ptr decompression_context,
+				size_t chunk_index
+			)
+				: m_Schunk(schunk),
+				m_Decompressed(decompression_buffer),
+				m_Compressed(compression_buffer),
+				m_CompressionContext(compression_context),
+				m_DecompressionContext(decompression_context),
+				m_ChunkIndex(chunk_index)
+			{
+				if (m_Compressed.max_byte_size() < min_compressed_size())
+				{
+					throw std::length_error(std::format(
+						"Invalid size for compression buffer passed. Expected at least {} but instead got {}",
+						min_compressed_size(), m_Compressed.max_byte_size()));
+				}
 
-			bool operator==(const Iterator& other) { };
-			bool operator!=(const Iterator& other) { return !(*this == other); };
+				if (m_Decompressed.max_byte_size() < min_decompressed_size())
+				{
+					throw std::length_error(std::format(
+						"Invalid size for decompression buffer passed. Expected at least {} but instead got {}",
+						min_decompressed_size(), m_Decompressed.max_byte_size()));
+				}
+
+				if (m_ChunkIndex > m_Schunk->nchunks)
+				{
+					throw std::out_of_range(std::format(
+						"chunk_index is out of range for total number of chunks in blosc2_schunk. Max chunk number is {} but received {}",
+						m_Schunk->nchunks, m_ChunkIndex));
+				}
+			}
+
+			// Dereference operator: decompress the current chunk
+			value_type operator*()
+			{
+				if (!valid())
+				{
+					throw std::runtime_error("Invalid Iterator struct encountered, cannot dereference item");
+				}
+
+				// Compress the previously decompressed chunk if it has been modified.
+				if (m_Decompressed->was_refitted())
+				{
+					compress_chunk(m_CompressionContext, m_Decompressed, m_Compressed);
+					update_chunk(m_Schunk, m_ChunkIndex, )
+				}
+
+				decompress_chunk(m_DecompressionContext, m_Decompressed, m_Compressed);
+				return m_Decompressed.fitted_data;
+			}
+
+			// Pre-increment operator: move to the next chunk
+			Iterator& operator++()
+			{
+				++m_ChunkIndex;
+				return *this;
+			}
+
+			bool operator==(const Iterator& other) const noexcept
+			{
+				return m_ChunkIndex == other.m_ChunkIndex;
+			}
+
+			bool operator!=(const Iterator& other) const noexcept
+			{
+				return !(*this == other);
+			}
 
 		private:
-			Image& m_Parent;
-			std::size_t m_Index;
-			std::size_t m_CurrentChunkIndex;
+			/// Buffer for compressing data, owned by the Image struct and at least _Chunk_Size + BLOSC2_MAX_OVERHEAD in size.
+			impl::CompressionView<T> m_Compressed;
+
+			/// Buffer to decompressed data, owned by the Image struct and at least _Chunk_Size in size;
+			impl::CompressionView<T> m_Decompressed;
+
+			blosc2::schunk_raw_ptr	m_Schunk				= nullptr;
+			blosc2::context_raw_ptr m_CompressionContext	= nullptr;
+			blosc2::context_raw_ptr	m_DecompressionContext	= nullptr;
+			std::size_t	m_ChunkIndex						= 0;
+
+		private:
+
+			/// Check for validity of this struct.
+			bool valid()
+			{
+				bool ptrs_valid = m_Schunk && m_CompressionContext && m_DecompressionContext;
+				if (!ptrs_valid)
+				{
+					return false;
+				}
+
+				bool idx_valid = m_ChunkIndex < m_Schunk->nchunks;
+				bool compressed_data_valid = m_Compressed.max_byte_size() >= min_compressed_size();
+				bool decompressed_data_valid = m_Decompressed.max_byte_size() >= min_decompressed_size();
+
+				return idx_valid && compressed_data_valid && decompressed_data_valid;
+			}
+
+			/// Get the minimum size needed to store the compressed data.
+			constexpr std::size_t min_compressed_size()
+			{
+				return _Chunk_Size + BLOSC2_MAX_OVERHEAD;
+			}
+
+			/// Get the minimum size needed to store the decompressed data.
+			constexpr std::size_t min_decompressed_size()
+			{
+				return _Chunk_Size;
+			}
+
+			/// Decompress a chunk using the given context and chunk pointer. Decompressing into the buffer
+			void decompress_chunk(blosc2::context_raw_ptr decompression_context_ptr, impl::CompressionView<T>& decompressed, impl::CompressionView<const T>& compressed)
+			{
+				int decompressed_size = blosc2_decompress_ctx(
+					decompression_context_ptr,
+					compressed.data.data(),
+					std::numeric_limits<int>::max(),
+					decompressed.data.data(),
+					decompressed.max_byte_size()
+				);
+
+				if (compressed_size < 0)
+				{
+					throw std::runtime_error("Error while compressing blosc2 chunk");
+				}
+
+				decompressed.refit(static_cast<std::size_t>(decompressed_size));
+			}
+
+			/// Compress a chunk from the decompressed view into the compressed view
+			void compress_chunk(blosc2::context_raw_ptr compression_context_ptr, const impl::CompressionView<const T>& decompressed, impl::CompressionView<T>& compressed)
+			{
+				int compressed_size =  blosc2_compress_ctx(
+					compression_context_ptr,
+					decompressed.fitted_data.data(),
+					decompressed.byte_size(),
+					compressed.data.data(),
+					compressed.max_byte_size(),
+					);
+
+				if (compressed_size < 0)
+				{
+					throw std::runtime_error("Error while compressing blosc2 chunk");
+				}
+
+				compressed.refit(static_cast<std::size_t>(compressed_size));
+			}
+
+			void update_chunk(blosc2::schunk_raw_ptr schunk, std::size_t chunk_index, const impl::CompressionView<T>& compressed)
+			{
+				blosc2_schunk_update_chunk(schunk, chunk_index, compressed.fitted_data.data(), true);
+			}
 		};
 
 
-		/// Container class for iterating a specific channel
-		struct ChannelContainer
-		{
-
-		};
-
-
-		typedef Iterator<T>				iterator;
-		typedef Iterator< const T>		const_iterator;
-
-
-		using blosc2_schunk_ptr = std::unique_ptr<blosc2_schunk, _Impl::Blosc2Deleter<blosc2_schunk>>;
-		using blosc2_chunk_ptr = std::byte*;
-		using blosc2_context_ptr = std::unique_ptr<blosc2_context, _Impl::Blosc2Deleter<blosc2_context>>;
-		
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
 		Image(
@@ -153,7 +230,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::size_t compression_level = 5
 		)
 		{
-
+			
 		}
 
 		// ---------------------------------------------------------------------------------------------------------------------
@@ -195,7 +272,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		// ---------------------------------------------------------------------------------------------------------------------
 		void print_statistics()
 		{
-			if (!m_CompressedData)
+			if (!m_Schunk)
 			{
 				return;
 			}
@@ -206,8 +283,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::cout << " Channels:          " << m_NumChannels << std::endl;
 			std::cout << " Channelnames:      " << m_ChannelNames << std::endl;
 			std::cout << " --------------     " << std::endl;
-			std::cout << " Compressed Size:   " << m_CompressedData->cbytes << std::endl;
-			std::cout << " Uncompressed Size: " << m_CompressedData->nbytes << std::endl;
+			std::cout << " Compressed Size:   " << m_Schunk->cbytes << std::endl;
+			std::cout << " Uncompressed Size: " << m_Schunk->nbytes << std::endl;
 			std::cout << " Metadata:          " << "\n " << m_Metadata.dump(4) << std::endl;
 
 		}
@@ -217,15 +294,36 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		// Iterators
 		// ---------------------------------------------------------------------------------------------------------------------
 
-
-		/// Replacement implementation for the parallel for each 
-		template<class ExecutionPolicy, class ForwardIt, class UnaryFunc>
-			requires std::is_execution_policy_v<std::remove_reference_t<ExecutionPolicy>>
-		constexpr UnaryFunc for_each(ExecutionPolicy&& _Exec, ForwardIt _First, ForwardIt _Last, UnaryFunc _Func)
+		Iterator begin()
 		{
-			std::for_each
+			std::span<T> compressed_view(m_CompressionBuffer.data, m_CompressionBuffer.size());
+			std::span<T> decompressed_view(m_DecompressionBuffer.data, m_DecompressionBuffer.size());
+
+			return Iterator(
+				m_Schunk.get(),
+				impl::CompressionView(compressed_view),
+				impl::CompressionView(decompressed_view),
+				m_CompressionContext.get(),
+				m_DecompressionContext.get(),
+				0
+			);
 		}
 
+
+		Iterator end()
+		{
+			std::span<T> compressed_view(m_CompressionBuffer.data, m_CompressionBuffer.size());
+			std::span<T> decompressed_view(m_DecompressionBuffer.data, m_DecompressionBuffer.size());
+
+			return Iterator(
+				m_Schunk.get(),
+				impl::CompressionView(compressed_view),
+				impl::CompressionView(decompressed_view),
+				m_CompressionContext.get(),
+				m_DecompressionContext.get(),
+				m_Schunk->nchunks - 1
+			);
+		}
 
 
 		// ---------------------------------------------------------------------------------------------------------------------
@@ -346,14 +444,42 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 
+		/// Retrieve a view to the compression context. In most cases users will not have to modify this.
+		// ---------------------------------------------------------------------------------------------------------------------
+		// ---------------------------------------------------------------------------------------------------------------------
+		blosc2::context_raw_ptr compression_context() { return m_CompressionContext.get(); }
+
+		/// Retrieve a view to the decompression context. In most cases users will not have to modify this.
+		// ---------------------------------------------------------------------------------------------------------------------
+		// ---------------------------------------------------------------------------------------------------------------------
+		blosc2::context_raw_ptr decompression_context() { return m_DecompressionContext.get(); }
+		
+
+		/// Update the number of threads used internally by c-blosc2 for compression and decompression.
+		/// This is automatically set when iterating through the images with compressed::for_each for example
+		/// by specifying the compression codec.
+		// ---------------------------------------------------------------------------------------------------------------------
+		// ---------------------------------------------------------------------------------------------------------------------
+		void update_nthreads(std::size_t nthreads)
+		{
+			m_CompressionContext	= create_compression_context(nthreads);
+			m_DecompressionContext	= create_decompression_context(nthreads);
+		}
+
+
 	private:
 		/// The storage for the internal data, stored contiguously in a compressed data format
-		blosc2_schunk_ptr m_CompressedData		  = nullptr;
+		blosc2::schunk_ptr m_Schunk		= nullptr;
+		codec m_Codec					= codec::lz4;
+
+		/// Buffers for storing compressed and decompressed data
+		std::array<T, _Chunk_Size + BLOSC2_MAX_OVERHEAD>	m_CompressionBuffer;
+		std::array<T, _Chunk_Size>							m_DecompressionBuffer;
 
 		/// We store a compression and decompression context here to allow us to reuse them rather than having
 		/// to reinitialize them on launch. May be nullptr;
-		blosc2_context_ptr m_CompressionContext   = nullptr;
-		blosc2_context_ptr m_DecompressionContext = nullptr;
+		blosc2::context_ptr m_CompressionContext	= nullptr;
+		blosc2::context_ptr m_DecompressionContext	= nullptr;
 
 		/// Arbitrary user metadata, not authored or managed by us, it's up to the caller to handle what goes in and comes out
 		json m_Metadata;
@@ -387,33 +513,42 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 	private:
 
-		/// Decompress a chunk using the given context and chunk pointer. Decompressing into the buffer
-		blosc2_context_ptr decompress_chunk(blosc2_context_ptr decompression_context_ptr, std::span<T> preallocated_buffer, const blosc2_chunk_ptr chunk_ptr)
+		std::int8_t codec_to_blosc2(codec compcode)
 		{
-			blosc2_decompress_ctx(
-				decompression_context_ptr.get(),
-				chunk_ptr,
-				std::numeric_limits<int32_t>::max(),
-				preallocated_buffer.data(),
-				preallocated_buffer.size()
-			);
+			switch compcode
+			{
+			case codec::blosclz:
+				return BLOSC_BLOSCLZ;
+			case codec:lz4:
+				return BLOSC_LZ4;
+			case codec::lz4hc:
+				return BLOSC_LZ4HC;
+			case codec::zlib:
+				return BLOSC_ZLIB;
+			case codec::zstd:
+				return BLOSC_ZSTD;
+			}
 		}
 
-		/// Compress a chunk using the given context and chunk buffer. Compressing into the chunk buffer. Chunk buffer must be at least buffer.size() + BLOSC2_MAX_OVERHEAD
-		blosc2_context_ptr compress_chunk(blosc2_context_ptr compression_context_ptr, const std::span<const T> buffer, std::span<T> chunk_buffer)
+		blosc2::context_ptr create_compression_context(std::size_t nthreads)
 		{
-			if (chunk_buffer.size() < buffer.size() + BLOSC2_MAX_OVERHEAD)
-			{
-				throw std::length_error(std::format("passed chunk_buffer must be at least of size buffer + BLOSC2_MAX_OVERHEAD. Expected {} but instead got {}", buffer.size() + BLOSC2_MAX_OVERHEAD, chunk_buffer.size())
-			}
+			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
+			cparams.blocksize = _Block_Size;
+			cparams.typesize  = sizeof(T);
+			cparams.nthreads  = nthreads;
+			cparams.schunk	  = m_Schunk.get();
+			cparams.compcode  = codec_to_blosc2(m_Codec);
+			
+			return std::make_unique(blosc2_create_cctx(cparams));
+		}
 
-			blosc2_compress_ctx(
-				compression_context_ptr.get(),
-				preallocated_buffer.data(),
-				preallocated_buffer.size(),
-				chunk_buffer.data(),
-				chunk_buffer.size(),
-			);
+		blosc2::context_ptr create_decompression_context(std::size_t nthreads)
+		{
+			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
+			dparams.schunk   = m_Schunk.get();
+			dparams.nthreads = nthreads;
+
+			return std::make_unique(blosc2_create_dctx(dparams));
 		}
 
 		void validate_strides(std::size_t width_stride, std::size_t height_stride, std::size_t channel_stride) const

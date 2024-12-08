@@ -12,6 +12,7 @@ target_include_directories(CompressedImage PUBLIC "include")
 target_link_libraries(CompressedImage PUBLIC blosc2_static blosc2_include, nlohmann_json_include)
 
 
+
 if (MSVC)
 	target_compile_options(CompressedImage PRIVATE /MP /DNOMINMAX)
 	target_compile_options(CompressedImage PUBLIC /utf-8)
