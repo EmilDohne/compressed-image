@@ -1,0 +1,58 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+     - master
+  pull_request:
+    branches:
+     - master
+  release:
+    types:
+      - published
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+           - name: Ubuntu GCC
+             os: ubuntu-24.04
+             compiler: gcc-13
+             compilercxx: g++-13
+           - name: Ubuntu Clang
+             os: ubuntu-24.04
+             compiler: clang
+             compilercxx: clang++
+           - name: Windows MSVC
+             os: windows-latest
+             compiler: msvc
+             compilercxx: msvc
+           - name: MacOS ARM GCC
+             os: macos-latest
+             compiler: gcc-13
+             compilercxx: g++-13      
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+        
+    - name: Configure CMake ${{ matrix.os }}-${{ matrix.compilercxx }}
+      env:
+        CC: ${{ matrix.compiler }}
+        CXX: ${{ matrix.compilercxx }}
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+
+
+    - name: Build ${{ matrix.os }}-${{ matrix.compilercxx }}
+      env:
+        CC: ${{ matrix.compiler }}
+        CXX: ${{ matrix.compilercxx }}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
