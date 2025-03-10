@@ -9,6 +9,23 @@
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
 
+	namespace impl
+	{
+		template <class ExecutionPolicy>
+		static void update_image_threads(ExecutionPolicy& policy, image<T>& _image)
+		{
+			if constexpr (std::is_same_v<ExecutionPolicy, std::execution::par> || std::is_same_v<ExecutionPolicy, std::execution::par_unseq>)
+			{
+				_image.update_nthreads(std::thread::hardware_concurrency());
+			}
+			else
+			{
+				_image.update_nthreads(1);
+			}
+		}
+	}
+
+
 	/// Iterate over all elements of the image for all the channels applying function f.
 	///
 	/// \param policy The execution policy to apply to the iteration
@@ -17,30 +34,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	// ---------------------------------------------------------------------------------------------------------------------
 	// ---------------------------------------------------------------------------------------------------------------------
 	template<typename T, class ExecutionPolicy, class UnaryFunc>
-	constexpr UnaryFunc for_each(ExecutionPolicy&& policy, image<T> image, UnaryFunc func)
+	constexpr UnaryFunc for_each(ExecutionPolicy&& policy, image<T>& _image, UnaryFunc func)
 	{
-		if constexpr (std::is_same_v<ExecutionPolicy, std::execution::par> || std::is_same_v<ExecutionPolicy, std::execution::par_unseq>)
-		{
-			image.update_nthreads(std::thread::hardware_concurrency());
-		}
-		else
-		{
-			image.update_nthreads(1);
-		}
-
-		image<T>::iterator first = image.begin();
-		image<T>::iterator last = image.end();
+		update_image_threads(policy, _image);
 
 		/// Iterate over all chunks applying the function to them
-		for (; first != last; ++first)
+		for (auto it = _image.begin(); it != _image.end(); ++it)
 		{
-			auto& data = *first;
+			auto& data = *it;
 			std::for_each(policy, data.begin(), data.end(), func);
 		}
-
 		return func;
 	}
 
+
 	/// Iterate over all elements of the image for all the channels applying function f.
 	///
 	/// \param policy The execution policy to apply to the iteration
@@ -49,18 +56,18 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	// ---------------------------------------------------------------------------------------------------------------------
 	// ---------------------------------------------------------------------------------------------------------------------
 	template<typename T, class ExecutionPolicy, class UnaryFunc>
-	constexpr UnaryFunc for_each_channel(ExecutionPolicy&& policy, image<T> image, std::string channalename, UnaryFunc func)
+	constexpr UnaryFunc for_each(ExecutionPolicy&& policy, image<T>& _image, std::string_view channelname, UnaryFunc func)
 	{
-		if constexpr (std::is_same_v<ExecutionPolicy, std::execution::par> || std::is_same_v<ExecutionPolicy, std::execution::par_unseq>)
-		{
-			image.update_nthreads(std::thread::hardware_concurrency());
-		}
-		else
-		{
-			image.update_nthreads(1);
-		}
+		update_image_threads(policy, _image);
 
-
+		/// Iterate over all chunks applying the function to them
+		for (strided_span<T>& decompressed_chunk : _image)
+		{
+			decompressed_chunk.set_channel
+			std::for_each(policy, decompressed_chunk.begin(), decompressed_chunk.end(), func);
+		}
+		return func;
 	}
+
 
 } // NAMESPACE_COMPRESSED_IMAGE

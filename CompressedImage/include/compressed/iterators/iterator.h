@@ -1,81 +1,12 @@
 #pragma once
 
-#include "macros.h"
-#include "blosc2_wrapper.h"
+#include "compressed/macros.h"
+#include "compressed/blosc2_wrapper.h"
+#include "compressed/strided_span.h"
 
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
-
-	/// Iterator operating in strides over a std::span<T> starting at the default 
-	template <typename T>
-	struct strided_iterator
-	{
-		// Iterator type definitions
-		using iterator_category = std::forward_iterator_tag;
-		using difference_type = std::ptrdiff_t;
-		using value_type = T;
-		using pointer = value_type*;
-		using reference = value_type&;
-
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
-		strided_iterator (std::span<T> data, std::size_t start_offset, std::int64_t stride) 
-			: m_Data(data), m_DataIndex(start_offset), m_StartOffset(start_offset), m_Stride(stride)
-		{
-			if (start_offset > data.size())
-			{
-				throw std::out_of_range("Start offset would exceed size of passed buffer")
-			}
-		}
-
-		// Dereference operator: decompress the current chunk and recompress (if necessary) the last channel.
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
-		value_type operator*()
-		{
-			return m_Data[m_DataIndex];
-		}
-
-		// Pre-increment operator: move to the next chunk
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
-		strided_iterator& operator++()
-		{
-			m_DataIndex += m_Stride;
-			return *this;
-		}
-
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
-		bool operator==(const strided_iterator& other) const noexcept
-		{
-			return m_DataIndex == other.m_DataIndex;
-		}
-
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
-		bool operator!=(const strided_iterator& other) const noexcept
-		{
-			return !(*this == other);
-		}
-
-		/// Initialize the end iterator for the given data, start offset and stride to ensure that it is 1 increment beyond the last 
-		/// valid element. Not using this iterator could lead to the iterators not completing execution.
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
-		static strided_iterator end_iterator(std::span<T> data, std::size_t start_offset, std::size_t stride)
-		{
-
-		}
-
-	private:
-		std::span<T> m_Data;
-		std::size_t m_DataIndex			= 0;
-		const std::size_t m_StartOffset	= 0;
-		const std::int64_t m_Stride		= 1;
-	};
-
 
 	// Image iterator, cannot be used in parallel as it iterates the chunks. Dereferencing it gives a span view over the current decompressed 
 	// context.
@@ -87,7 +18,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		// Iterator type definitions
 		using iterator_category = std::forward_iterator_tag;
 		using difference_type = std::ptrdiff_t;
-		using value_type = std::span<T>;
+		using value_type = strided_span<T>;
 		using pointer = value_type*;
 		using reference = value_type&;
 
@@ -97,12 +28,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			blosc2::schunk_raw_ptr schunk,
 			blosc2::context_raw_ptr compression_context,
 			blosc2::context_raw_ptr decompression_context,
+			std::array<std::size_t, 3> strides,
 			size_t chunk_index,
 
-		)
+			)
 			: m_Schunk(schunk),
 			m_CompressionContext(compression_context),
 			m_DecompressionContext(decompression_context),
+			m_Strides(strides),
 			m_ChunkIndex(chunk_index)
 		{
 			// Only initialize the memory if we are not initializing the end() iterator in which case this behaviour is unwanted as it would
@@ -112,7 +45,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				m_CompressionBuffer.resize(_Chunk_Size + BLOSC2_MAX_OVERHEAD);
 				m_DecompressionBuffer.resize(_Chunk_Size);
 
-				m_Compressed   = impl::CompressionView<T>(m_CompressionBuffer.begin(), m_CompressionBuffer.end());
+				m_Compressed = impl::CompressionView<T>(m_CompressionBuffer.begin(), m_CompressionBuffer.end());
 				m_Decompressed = impl::CompressionView<T>(m_DecompressionBuffer.begin(), m_DecompressionBuffer.end());
 
 				// Sanity checks.
@@ -159,7 +92,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// In most cases m_Decompressed.fitted_data should be identical to m_Decompressed.data. However, this is not true
 			// for the last chunk in the schunk
 			decompress_chunk(m_DecompressionContext, m_Decompressed, m_Compressed);
-			return m_Decompressed.fitted_data;
+
+			strided_span<T> out_container(m_Decompressed.fitted_data, 0, 1);
+			return out_container;
 		}
 
 		// Pre-increment operator: move to the next chunk
@@ -204,6 +139,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		blosc2::context_raw_ptr m_CompressionContext = nullptr;
 		blosc2::context_raw_ptr	m_DecompressionContext = nullptr;
 		std::size_t	m_ChunkIndex = 0;
+
+		std::array<std::size_t, 3> m_Strides;
 
 	private:
 

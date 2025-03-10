@@ -16,6 +16,8 @@
 #include "blosc2_wrapper.h"
 #include "constants.h"
 
+#include "iterators/iterator.h"
+
 using json_ordered = nlohmann::ordered_json;
 
 
@@ -130,20 +132,33 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		// ---------------------------------------------------------------------------------------------------------------------
 		iterator begin()
 		{
-			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), 0);
+			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Strides, 0);
 		}
 
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
 		iterator end()
 		{
-			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks);
+			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Strides, m_Schunk->nchunks);
 		}
 
 
 		// ---------------------------------------------------------------------------------------------------------------------
 		// Accessors
 		// ---------------------------------------------------------------------------------------------------------------------
+
+
+		std::size_t get_channel_offset(const std::string_view channelname) const
+		{
+			for (std::size_t i = 0; i < m_ChannelNames.size(); ++i)
+			{
+				if (m_ChannelNames[i] == channelname)
+				{
+					return i;
+				}
+			}
+			throw std::invalid_argument(std::format("Unknown channelname '{}' encountered", channelname));
+		}
 
 		/// Width of the Image
 		// ---------------------------------------------------------------------------------------------------------------------
