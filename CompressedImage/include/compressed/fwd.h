@@ -1,11 +1,12 @@
 #pragma once
 
 #include "macros.h"
+#include "constants.h"
 
+namespace NAMESPACE_COMPRESSED_IMAGE
+{
 
-template <typename T, size_t _Block_Size = 32'768, size_t _Chunk_Size = 16'777'216>
-struct NAMESPACE_COMPRESSED_IMAGE::image;
+	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
+	struct image;
 
-
-template <typename T, std::size_t N>
-struct NAMESPACE_COMPRESSED_IMAGE::strided_span_group;
+} // NAMESPACE_COMPRESSED_IMAGE

@@ -36,17 +36,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		};
 
 
-		typedef schunk_ptr		= std::unique_ptr<blosc2_schunk, deleter<blosc2_schunk>>;
-		/// Raw pointer to a blosc2_schunk. Intended to be used as a view over a `schunk_ptr`
-		/// with ownership staying with the `schunk_ptr`
-		typedef schunk_raw_ptr	= blosc2_schunk*;
-
-		typedef chunk_raw_ptr	= void*;
-
-		typedef context_ptr		= std::unique_ptr<blosc2_context, deleter<blosc2_context>>;
-		/// Raw pointer to a blosc2_context. Intended to be used as a view over a `context_ptr`
-		/// with ownership staying with the `context_ptr`
-		typedef context_raw_ptr = blosc2_context*;
+		typedef std::unique_ptr<blosc2_schunk, deleter<blosc2_schunk>>		schunk_ptr;
+		typedef blosc2_schunk*												schunk_raw_ptr;
+		typedef void*														chunk_raw_ptr;
+		typedef std::unique_ptr<blosc2_context, deleter<blosc2_context>>	context_ptr;
+		typedef blosc2_context*												context_raw_ptr;
 
 
 	} // namespace blosc2

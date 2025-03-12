@@ -7,8 +7,9 @@ if (POLICY CMP0141)
 endif()
 
 set (CMAKE_CXX_STANDARD 20)
+project (CompressedImageBuild)
 
-project ("CompressedImage")
+option(COMPRESSEDIMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." ON)
 
 
 # Add thirdparty libraries
@@ -31,6 +32,17 @@ add_subdirectory(thirdparty/json)
 # Add target for json headers
 add_library(nlohmann_json_include INTERFACE)
 target_include_directories(nlohmann_json_include SYSTEM INTERFACE thirdparty/json/single_include/nlohmann)
+
+# Spdlog for logging
+add_subdirectory(thirdparty/spdlog)
+
+# Include the local vcpkg toolchain, if specified
+if (COMPRESSEDIMAGE_USE_VCPKG)
+    include("${PROJECT_SOURCE_DIR}/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake")
+endif()
+
+# find_package(OpenImageIO CONFIG REQUIRED)
+
 
 # Projects
 # --------------------------------------------------------------------------
