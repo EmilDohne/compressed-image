@@ -1,5 +1,5 @@
 {
-  "name": "compressed_image",
+    "name": "compressed-image",
   "version-string": "v0.1.0",
   "builtin-baseline": "d5cb5b9392b89fe9ad25786022415999202277d6",
   "dependencies": ["openimageio"],

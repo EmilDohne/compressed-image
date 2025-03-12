@@ -12,6 +12,7 @@
 #include "json.hpp"
 
 #include "macros.h"
+#include "enums.h"
 #include "fwd.h"
 #include "blosc2_wrapper.h"
 #include "constants.h"
@@ -24,19 +25,50 @@ using json_ordered = nlohmann::ordered_json;
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
 
+	/// Compressed channel representation, usually stored as a part of a larger image. Allows for serial access while random
+	/// access is limited. 
+	/// 
+	/// \code{.cpp}
+	/// compressed::image<T> = ...;
+	/// for (auto& chunk : image.channel_ref("r"))
+	/// {
+	///		for (auto& [index, pixel] : std::views::enumerate(chunk))
+	///		{
+	///			size_t x = chunk.x(index);
+	///			size_t y = chunk.y(index);
+	///			pixel = (x + y * image.width()) / image.size();
+	///		}
+	/// }
+	/// \endcode
+	/// 
+	/// \tparam _Block_Size 
+	///		The size of the blocks stored inside the chunks, defaults to 32KB which is enough to comfortably fit into the L1 cache
+	///		of most modern CPUs. If you know your cpu can handle larger blocks feel free to up this number.
+	/// 
+	/// \tparam _Chunk_Size 
+	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
+	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
+	///		upped which will give better compression ratios.
 	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
 	struct channel
 	{
 		static constexpr size_t block_size = BlockSize;
 		static constexpr size_t chunk_size = ChunkSize;
 
+		/// Initialize the channel with the given data.
+		/// 
+		/// \param data The span of input data to be compressed.
+		/// \param width The width of the image channel.
+		/// \param height The height of the image channel.
+		/// \param compression_codec The compression codec to be used.
+		/// \param compression_level The compression level (default is 5).
 		channel(
 			const std::span<const T> data,
 			size_t width,
 			size_t height,
-			codec compression_codec = codec::lz4,
+			enums::codec compression_codec = enums::codec::lz4,
 			uint8_t compression_level = 5
-		) : m_Width(width), m_Height(height), m_Codec(compression_codec)
+		) : m_Width(width), m_Height(height), m_Codec(compression_codec), m_CompressionLevel(compression_level)
 		{
 			if (data.size() != width * height)
 			{
@@ -55,24 +87,28 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			// Initialize our Super-Chunk first as that is required for the compression and decompression contexts. 
 			// The cparams and dparams don't matter as we use the verbose blosc2_schunk_append_chunk and blosc2_decompress_ctx
-			blosc2_storage storage = { .cparams = &BLOSC2_CPARAMS_DEFAULTS , .dparams = &BLOSC2_DPARAMS_DEFAULTS };
-			m_Schunk = blosc2_schunk_new(&storage);
+			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
+			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
+			blosc2_storage storage = { .cparams = &cparams, .dparams = &dparams };
+			auto raw_schunk = blosc2_schunk_new(&storage);
+			m_Schunk = blosc2::schunk_ptr(raw_schunk);
 
 			m_CompressionContext = create_compression_context(std::thread::hardware_concurrency());
 			m_DecompressionContext = create_decompression_context(std::thread::hardware_concurrency());
 
-			auto compression_span = std::span<const std::byte>(data.data(), data.size() * sizeof(T));
+			auto compression_span = std::span<const std::byte>(reinterpret_cast<const std::byte*>(data.data()), data.size() * sizeof(T));
 			this->compress(compression_span);
 		}
 
-		iterator begin()
+		/// Returns an iterator pointing to the beginning of the compressed data.
+		iterator<T, ChunkSize> begin()
 		{
-			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), 0, m_Width, m_Height);
+			return iterator<T, ChunkSize>(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), 0, m_Width, m_Height);
 		}
 
-		iterator end()
+		iterator<T, ChunkSize> end()
 		{
-			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks, m_Width, m_Height);
+			return iterator<T, ChunkSize>(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks, m_Width, m_Height);
 		}
 
 		/// Retrieve a view to the compression context. In most cases users will not have to modify this.
@@ -83,30 +119,39 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 
 		/// Update the number of threads used internally by c-blosc2 for compression and decompression.
-		/// This is automatically set when iterating through the images with compressed::for_each for example
-		/// by specifying the compression codec.
+		/// 
+		/// \param nthreads The number of threads to use for compression and decompression
 		void update_nthreads(size_t nthreads)
 		{
 			m_CompressionContext = create_compression_context(nthreads);
 			m_DecompressionContext = create_decompression_context(nthreads);
 		}
 
-		size_t width() { return m_Width; }
-		size_t height() { return m_Height; }
-		codec compression() { return m_Schunk; }
+		/// The channel width
+		size_t width() const noexcept { return m_Width; }
+		/// The channel height
+		size_t height() const noexcept { return m_Height; }
+		/// Retrieve the compression codec used.
+		enums::codec compression() const noexcept { return m_Codec; }
 
-		size_t compressed_size() { return m_Schunk->cbytes; }
-		size_t uncompressed_size() { return m_Schunk->nbytes; }
+		/// Retrieve the compressed data size.
+		size_t compressed_size() const noexcept { return m_Schunk->cbytes; }
+		/// Retrieve the uncompressed data size.
+		size_t uncompressed_size() const noexcept{ return m_Schunk->nbytes; }
+		/// Retrieve the total number of chunks the channel stores.
+		size_t num_chunks() const noexcept { return m_Schunk->nchunks; }
 
 	private:
 		/// The storage for the internal data, stored contiguously in a compressed data format
 		blosc2::schunk_ptr m_Schunk = nullptr;
-		codec m_Codec = codec::lz4;
+		enums::codec m_Codec = enums::codec::lz4;
 
 		/// We store a compression and decompression context here to allow us to reuse them rather than having
 		/// to reinitialize them on launch. May be nullptr;
 		blosc2::context_ptr m_CompressionContext = nullptr;
 		blosc2::context_ptr m_DecompressionContext = nullptr;
+
+		size_t m_CompressionLevel = 5;
 
 		size_t m_Width = 1;
 		size_t m_Height = 1;
@@ -117,45 +162,59 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param compcode the compression codec to get
 		/// 
 		/// \returns The mapped enum as uint8_t since blosc expects it that way
-		constexpr uint8_t codec_to_blosc2(enums::codec compcode)
+		uint8_t codec_to_blosc2(enums::codec compcode)
 		{
-			if constexpr (compcode == enums::codec::blosclz)
+			if (compcode == enums::codec::blosclz)
 			{
 				return static_cast<uint8_t>(BLOSC_BLOSCLZ);
 			}
-			else if constexpr (compcode == enums::codec::lz4)
+			else if (compcode == enums::codec::lz4)
 			{
 				return static_cast<uint8_t>(BLOSC_LZ4);
 			}
-			else if constexpr (compcode == enums::codec::lz4hc)
+			else if (compcode == enums::codec::lz4hc)
 			{
 				return static_cast<uint8_t>(BLOSC_LZ4HC);
 			}
-			else if constexpr (compcode == enums::codec::zlib)
-			{
-				return static_cast<uint8_t>(BLOSC_ZLIB);
-			}
-			else if constexpr (compcode == enums::codec::zstd)
-			{
-				return static_cast<uint8_t>(BLOSC_ZSTD);
-			}
 			return BLOSC_BLOSCLZ;
+		}
+
+		/// Maps a blosc2 compression codec into an enum representation
+		///
+		/// \param compcode the compression codec to get
+		/// 
+		/// \returns The mapped enum
+		constexpr enums::codec blosc2_to_codec(uint8_t compcode)
+		{
+			if constexpr (compcode == BLOSC_BLOSCLZ)
+			{
+				return enums::codec::blosclz;
+			}
+			else if constexpr (compcode == BLOSC_LZ4)
+			{
+				return  enums::codec::lz4;
+			}
+			else if constexpr (compcode == BLOSC_LZ4HC)
+			{
+				return enums::codec::lz4hc;
+			}
+			return enums::codec::blosclz;
 		}
 
 		/// Create a blosc2 compression context with the given number of threads.
 		blosc2::context_ptr create_compression_context(size_t nthreads)
 		{
 			auto cparams = create_blosc2_cparams(nthreads);
-			return blosc2_create_cctx(cparams);
+			return blosc2::context_ptr(blosc2_create_cctx(cparams));
 		}
 
-		blosc2_cparams create_blosc2_cparams(size_t nthreads, uint8_t compression_level)
+		blosc2_cparams create_blosc2_cparams(size_t nthreads)
 		{
 			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
 			cparams.blocksize = BlockSize;
 			cparams.typesize = sizeof(T);
 			cparams.splitmode = BLOSC_AUTO_SPLIT;
-			cparams.clevel = compression_level
+			cparams.clevel = m_CompressionLevel;
 			cparams.nthreads = nthreads;
 			cparams.schunk = m_Schunk.get();
 			cparams.compcode = codec_to_blosc2(m_Codec);
@@ -170,7 +229,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			dparams.schunk = m_Schunk.get();
 			dparams.nthreads = nthreads;
 
-			return blosc2_create_dctx(dparams);
+			return blosc2::context_ptr(blosc2_create_dctx(dparams));
 		}
 
 		/// Get the minimum size needed to store the compressed data.
@@ -190,13 +249,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		void compress(const std::span<const std::byte> data)
 		{
 			size_t orig_byte_size = data.size();
-			size_t num_chunks = std::ceil(orig_byte_size / ChunkSize);
+			size_t _num_chunks = std::ceil(orig_byte_size / ChunkSize);
 
 			// Allocate the chunk once for all of our compression routines.
 			std::vector<std::byte> chunk(min_compressed_size());
 			
 			size_t base_offset = 0;
-			for (auto index : std::views::iota(0, num_chunks))
+			auto gen = std::views::iota(static_cast<size_t>(0), _num_chunks);
+			for (auto index : gen)
 			{
 				// Get the size of the section to compress. If this is the last section
 				// it may not align directly to the chunk boundary so we must compress less
@@ -215,7 +275,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				// we check in the constructor that our chunk size does not exceed int32_t max.
 				const auto cbytes = blosc2_compress_ctx(
 					m_CompressionContext.get(), 
-					static_cast<void*>(subspan.data()), 
+					static_cast<const void*>(subspan.data()), 
 					static_cast<int32_t>(subspan.size()), 
 					static_cast<void*>(chunk.data()),
 					static_cast<int32_t>(chunk.size())
@@ -226,7 +286,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					throw std::runtime_error("Error while compressing blosc2 chunk");
 				}
 
-				blosc2_schunk_append_chunk(m_Schunk.get(), chunk.data(), true);
+				blosc2_schunk_append_chunk(
+					m_Schunk.get(), 
+					reinterpret_cast<uint8_t*>(chunk.data()), 
+					true
+				);
 
 				// Increment our base offset to move onto the next chunk
 				base_offset += section_size;

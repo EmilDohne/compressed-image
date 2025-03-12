@@ -7,14 +7,15 @@
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
-	struct container
+	namespace container
 	{
 
 		/// Chunked span looking into a larger image. Conceptually this is a single decompressed chunk while 
 		/// iterating over an image or a channel. Retrieved by derefencing a compressed::iterator while doing e.g.
 		/// 
-		/// compressed::image = ...;
-		/// for (auto& chunk : image)
+		/// \code{.cpp}
+		/// compressed::image<T> = ...;
+		/// for (auto& chunk : image.channel_ref("r"))
 		/// {
 		///		for (auto& [index, pixel] : std::views::enumerate(chunk))
 		///		{
@@ -23,6 +24,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///			pixel = (x + y * image.width()) / image.size();
 		///		}
 		/// }
+		/// \endcode
 		template <typename T, size_t ChunkSize = s_default_chunksize>
 		struct chunk_span : public std::ranges::view_interface<chunk_span<T, ChunkSize>>
 		{

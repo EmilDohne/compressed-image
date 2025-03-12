@@ -1,0 +1,2 @@
+add_executable(initialize_from_file main.cpp)
+target_link_libraries(initialize_from_file PRIVATE compressed_image)

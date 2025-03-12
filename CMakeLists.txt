@@ -1,4 +1,4 @@
-﻿cmake_minimum_required (VERSION 3.8)
+﻿cmake_minimum_required (VERSION 3.19)
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -9,13 +9,29 @@ endif()
 set (CMAKE_CXX_STANDARD 20)
 project (CompressedImageBuild)
 
-option(COMPRESSEDIMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." ON)
+
+set(MAIN_PROJECT OFF)
+if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    set(MAIN_PROJECT ON)
+endif()
+
+if (MAIN_PROJECT)
+    set(COMPRESSED_IMAGE_BUILD_TESTS ON)
+    set(COMPRESSED_IMAGE_BUILD_EXAMPLES ON)
+endif()
+
+
+option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." ON)
+option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
+option(COMPRESSED_IMAGE_BUILD_EXAMPLES OFF)
 
 
 # Add thirdparty libraries
 # --------------------------------------------------------------------------
 
 # Add c-blosc2
+set(DEACTIVATE_ZLIB ON)
+set(DEACTIVATE_ZSTD ON)
 set(BUILD_TESTS OFF)
 set(BUILD_FUZZERS OFF)
 set(BUILD_BENCHMARKS OFF)
@@ -33,18 +49,28 @@ add_subdirectory(thirdparty/json)
 add_library(nlohmann_json_include INTERFACE)
 target_include_directories(nlohmann_json_include SYSTEM INTERFACE thirdparty/json/single_include/nlohmann)
 
-# Spdlog for logging
-add_subdirectory(thirdparty/spdlog)
-
 # Include the local vcpkg toolchain, if specified
-if (COMPRESSEDIMAGE_USE_VCPKG)
+if (COMPRESSED_IMAGE_USE_VCPKG)
     include("${PROJECT_SOURCE_DIR}/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake")
 endif()
 
-# find_package(OpenImageIO CONFIG REQUIRED)
-
+find_package(OpenImageIO CONFIG QUIET)
+if (OpenImageIO_FOUND)
+    message(STATUS "Found OpenImageIO")
+    add_compile_definitions(COMPRESSED_IMAGE_OIIO_AVAILABLE)
+else()
+    message(WARNING "OpenImageIO not found, some features will not be available")
+endif()
 
 # Projects
 # --------------------------------------------------------------------------
-add_subdirectory (CompressedImage)
+add_subdirectory(compressed_image)
 
+if (COMPRESSED_IMAGE_BUILD_TESTS)
+    add_subdirectory(test)
+endif()
+
+if (COMPRESSED_IMAGE_BUILD_EXAMPLES)
+    add_subdirectory(examples/initialize_from_file)
+    add_subdirectory(examples/tmp)
+endif()

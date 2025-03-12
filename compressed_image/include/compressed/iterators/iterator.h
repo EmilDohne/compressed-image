@@ -3,7 +3,7 @@
 #include "compressed/macros.h"
 #include "compressed/blosc2_wrapper.h"
 #include "compressed/containers/chunk_span.h"
-
+#include "compressed/implementation.h"
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
@@ -55,8 +55,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				m_CompressionBuffer.resize(ChunkSize + BLOSC2_MAX_OVERHEAD);
 				m_DecompressionBuffer.resize(ChunkSize);
 
-				m_Compressed = impl::CompressionView<T>(m_CompressionBuffer.begin(), m_CompressionBuffer.end());
-				m_Decompressed = impl::CompressionView<T>(m_DecompressionBuffer.begin(), m_DecompressionBuffer.end());
+				m_Compressed = impl::compression_view<T>(m_CompressionBuffer.begin(), m_CompressionBuffer.end());
+				m_Decompressed = impl::compression_view<T>(m_DecompressionBuffer.begin(), m_DecompressionBuffer.end());
 
 				// Sanity checks.
 				if (m_Compressed.max_byte_size() < min_compressed_size())
@@ -85,9 +85,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 		}
 
-		// Dereference operator: decompress the current chunk and recompress (if necessary) the last channel.
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
+		/// Dereference operator: decompress the current chunk and recompress (if necessary) the previously compressed
+		/// chunk.
 		value_type operator*()
 		{
 			if (!valid())
@@ -99,7 +98,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			if (m_Decompressed->was_refitted() && m_ChunkIndex != 0)
 			{
 				compress_chunk(m_CompressionContext, m_Decompressed, m_Compressed);
-				update_chunk(m_Schunk, m_ChunkIndex - 1, m_Compressed)
+				update_chunk(m_Schunk, m_ChunkIndex - 1, m_Compressed);
 			}
 
 			// In most cases m_Decompressed.fitted_data should be identical to m_Decompressed.data. However, this is not true
@@ -111,23 +110,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		// Pre-increment operator: move to the next chunk
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
 		iterator& operator++()
 		{
 			++m_ChunkIndex;
 			return *this;
 		}
 
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
 		bool operator==(const iterator& other) const noexcept
 		{
 			return m_ChunkIndex == other.m_ChunkIndex;
 		}
 
-		// ---------------------------------------------------------------------------------------------------------------------
-		// ---------------------------------------------------------------------------------------------------------------------
 		bool operator!=(const iterator& other) const noexcept
 		{
 			return !(*this == other);
@@ -145,8 +138,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		std::vector<T>	m_DecompressionBuffer;
 
 		/// Convenient views over m_CompressionBuffer and m_DecompressionBuffer.
-		impl::CompressionView<T> m_Compressed;
-		impl::CompressionView<T> m_Decompressed;
+		impl::compression_view<T> m_Compressed;
+		impl::compression_view<T> m_Decompressed;
 
 		/// Pointers to the blosc2 structs. The data is owned by the `image` struct and we just have a view over it.
 		blosc2::schunk_raw_ptr	m_Schunk = nullptr;
@@ -197,7 +190,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Decompress a chunk using the given context and chunk pointer. Decompressing into the buffer
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
-		void decompress_chunk(blosc2::context_raw_ptr decompression_context_ptr, impl::CompressionView<T>& decompressed, impl::CompressionView<const T>& compressed)
+		void decompress_chunk(blosc2::context_raw_ptr decompression_context_ptr, impl::compression_view<T>& decompressed, impl::compression_view<const T>& compressed)
 		{
 			int decompressed_size = blosc2_decompress_ctx(
 				decompression_context_ptr,
@@ -207,9 +200,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				decompressed.max_byte_size()
 			);
 
-			if (compressed_size < 0)
+			if (decompressed_size < 0)
 			{
-				throw std::runtime_error("Error while compressing blosc2 chunk");
+				throw std::runtime_error("Error while decompressing blosc2 chunk");
 			}
 
 			decompressed.refit(static_cast<std::size_t>(decompressed_size));
@@ -218,14 +211,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Compress a chunk from the decompressed view into the compressed view
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
-		void compress_chunk(blosc2::context_raw_ptr compression_context_ptr, const impl::CompressionView<const T>& decompressed, impl::CompressionView<T>& compressed)
+		void compress_chunk(blosc2::context_raw_ptr compression_context_ptr, const impl::compression_view<const T>& decompressed, impl::compression_view<T>& compressed)
 		{
 			int compressed_size = blosc2_compress_ctx(
 				compression_context_ptr,
 				decompressed.fitted_data.data(),
 				decompressed.byte_size(),
 				compressed.data.data(),
-				compressed.max_byte_size(),
+				compressed.max_byte_size()
 				);
 
 			if (compressed_size < 0)
@@ -239,7 +232,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Update and replace the chunk inside of the superchunk at the given index.
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
-		void update_chunk(blosc2::schunk_raw_ptr schunk, std::size_t chunk_index, const impl::CompressionView<T>& compressed)
+		void update_chunk(blosc2::schunk_raw_ptr schunk, std::size_t chunk_index, const impl::compression_view<T>& compressed)
 		{
 			blosc2_schunk_update_chunk(schunk, chunk_index, compressed.fitted_data.data(), true);
 		}
