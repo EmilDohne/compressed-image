@@ -271,7 +271,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				std::cout << channelname << ", ";
 			}
-			std::cout << "]" std::end;
+			std::cout << "]" << std::endl;
 			std::cout << " --------------     " << std::endl;
 			std::cout << " Compressed Size:   " << compressed_size << std::endl;
 			std::cout << " Uncompressed Size: " << uncompressed_size << std::endl;
@@ -337,7 +337,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			requires (std::conjunction_v<std::is_constructible<std::string, Args>...>)
 		auto channels_ref(Args... channel_names)
 		{
-			return std::tie(this->channel(std::forward<Args>(channel_names))...);
+			return std::tie(this->channel_ref(std::forward<Args>(channel_names))...);
 		}
 
 		/// Retrieves references to multiple channels by index and returns them as a tuple.
@@ -358,7 +358,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			requires (std::conjunction_v<std::is_convertible<size_t, Args>...>)
 		auto channels_ref(Args... channel_indices)
 		{
-			return std::tie(this->channel(std::forward<Args>(channel_indices))...);
+			return std::tie(this->channel_ref(std::forward<Args>(channel_indices))...);
 		}
 
 		/// Retrieves references to multiple channels by name and returns them in a vector.

@@ -117,7 +117,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Retrieve a view to the decompression context. In most cases users will not have to modify this.
 		blosc2::context_raw_ptr decompression_context() { return m_DecompressionContext.get(); }
 
-
 		/// Update the number of threads used internally by c-blosc2 for compression and decompression.
 		/// 
 		/// \param nthreads The number of threads to use for compression and decompression

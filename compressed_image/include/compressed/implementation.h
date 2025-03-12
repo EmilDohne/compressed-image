@@ -16,6 +16,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		struct compression_view
 		{
 
+			compression_view() = default;
 			compression_view(std::span<T> buffer)
 			{
 				this->data = buffer;
