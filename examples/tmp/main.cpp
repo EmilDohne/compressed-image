@@ -17,4 +17,6 @@ auto main() -> int
 				value += .1f;
 			});
 	}
+
+	image.print_statistics();
 }

@@ -39,6 +39,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_Width(width),
 			m_Height(height)
 		{
+			// Chunk size must be a multiple of the passed type.
+			static_assert(ChunkSize % sizeof(T) == 0);
+
 			// Check that we are not out of range, throw if we are
 			if (m_ChunkIndex > m_Schunk->nchunks)
 			{
@@ -47,30 +50,24 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					m_Schunk->nchunks, m_ChunkIndex));
 			}
 
+			m_CompressionBuffer.resize(ChunkSize + BLOSC2_MAX_OVERHEAD);
+			m_DecompressionBuffer.resize(ChunkSize);
 
-			// Only initialize the memory if we are not initializing the end() iterator in which case this behaviour is unwanted as it would
-			// allocate unnecessary extra memory.
-			if (chunk_index != schunk->nchunks)
+			m_Compressed = impl::compression_view<std::byte>(std::span<std::byte>(m_CompressionBuffer.begin(), m_CompressionBuffer.end()));
+			m_Decompressed = impl::compression_view<std::byte>(std::span<std::byte>(m_DecompressionBuffer.begin(), m_DecompressionBuffer.end()));
+
+			// Sanity checks.
+			if (m_Compressed.max_byte_size() < min_compressed_size())
 			{
-				m_CompressionBuffer.resize(ChunkSize + BLOSC2_MAX_OVERHEAD);
-				m_DecompressionBuffer.resize(ChunkSize);
-
-				m_Compressed = impl::compression_view<T>(std::span<T>(m_CompressionBuffer.begin(), m_CompressionBuffer.end()));
-				m_Decompressed = impl::compression_view<T>(std::span<T>(m_DecompressionBuffer.begin(), m_DecompressionBuffer.end()));
-
-				// Sanity checks.
-				if (m_Compressed.max_byte_size() < min_compressed_size())
-				{
-					throw std::length_error(std::format(
-						"Invalid size for compression buffer passed. Expected at least {} but instead got {}",
-						min_compressed_size(), m_Compressed.max_byte_size()));
-				}
-				if (m_Decompressed.max_byte_size() < min_decompressed_size())
-				{
-					throw std::length_error(std::format(
-						"Invalid size for decompression buffer passed. Expected at least {} but instead got {}",
-						min_decompressed_size(), m_Decompressed.max_byte_size()));
-				}
+				throw std::length_error(std::format(
+					"Invalid size for compression buffer passed. Expected at least {} but instead got {}",
+					min_compressed_size(), m_Compressed.max_byte_size()));
+			}
+			if (m_Decompressed.max_byte_size() < min_decompressed_size())
+			{
+				throw std::length_error(std::format(
+					"Invalid size for decompression buffer passed. Expected at least {} but instead got {}",
+					min_decompressed_size(), m_Decompressed.max_byte_size()));
 			}
 
 			// Check that we don't pass zero width or height as e.g. the x() and y() functions of chunk_span require division by these dimensions
@@ -103,9 +100,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			// In most cases m_Decompressed.fitted_data should be identical to m_Decompressed.data. However, this is not true
 			// for the last chunk in the schunk which may not be the same decompressed size.
-			decompress_chunk(m_DecompressionContext, m_Decompressed, m_Compressed);
+			decompress_chunk(m_DecompressionContext, m_Decompressed);
 
-			container::chunk_span<T, ChunkSize> out_container(m_Decompressed.fitted_data, m_Width, m_Height, m_ChunkIndex);
+			if (m_Decompressed.byte_size() % sizeof(T) != 0)
+			{
+				throw std::runtime_error(
+					std::format(
+						"Unable to dereference iterator as the decompressed size is not a multiple of {}." \
+						" Got {:L} bytes. This is likely an internal decompression error.",
+						sizeof(T), m_Decompressed.byte_size()
+					)
+				);
+			}
+			std::span<T> item_span(reinterpret_cast<T*>(m_Decompressed.fitted_data.data()), m_Decompressed.size() / sizeof(T));
+			container::chunk_span<T, ChunkSize> out_container(item_span, m_Width, m_Height, m_ChunkIndex);
 			return out_container;
 		}
 
@@ -133,15 +141,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 	private:
 
-		/// Buffers for storing compressed and decompressed data
-		std::vector<T>	m_CompressionBuffer;
-		std::vector<T>	m_DecompressionBuffer;
+		/// Buffers for storing compressed and decompressed data. We don't directly
+		/// use these but instead use m_Compressed and m_Decompressed as views over 
+		/// them.
+		std::vector<std::byte>	m_CompressionBuffer;
+		std::vector<std::byte>	m_DecompressionBuffer;
 
 		/// Convenient views over m_CompressionBuffer and m_DecompressionBuffer.
-		impl::compression_view<T> m_Compressed;
-		impl::compression_view<T> m_Decompressed;
+		impl::compression_view<std::byte> m_Compressed;
+		impl::compression_view<std::byte> m_Decompressed;
 
-		/// Pointers to the blosc2 structs. The data is owned by the `image` struct and we just have a view over it.
+		/// Pointers to the blosc2 structs. The data is owned by the `channel` struct and we just have a view over it.
 		blosc2::schunk_raw_ptr	m_Schunk = nullptr;
 		blosc2::context_raw_ptr m_CompressionContext = nullptr;
 		blosc2::context_raw_ptr	m_DecompressionContext = nullptr;
@@ -190,11 +200,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Decompress a chunk using the given context and chunk pointer. Decompressing into the buffer
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
-		void decompress_chunk(blosc2::context_raw_ptr decompression_context_ptr, impl::compression_view<T>& decompressed, const impl::compression_view<T>& compressed)
+		void decompress_chunk(blosc2::context_raw_ptr decompression_context_ptr, impl::compression_view<std::byte>& decompressed)
 		{
 			int decompressed_size = blosc2_decompress_ctx(
 				decompression_context_ptr,
-				compressed.data.data(),
+				m_Schunk->data[m_ChunkIndex],
 				std::numeric_limits<int>::max(),
 				decompressed.data.data(),
 				decompressed.max_byte_size()
@@ -202,16 +212,16 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			if (decompressed_size < 0)
 			{
-				throw std::runtime_error("Error while decompressing blosc2 chunk");
+				throw std::runtime_error(std::format("Error code {} while decompressing blosc2 chunk", decompressed_size));
 			}
 
-			decompressed.refit(static_cast<std::size_t>(decompressed_size));
+			decompressed.refit(static_cast<size_t>(decompressed_size));
 		}
 
 		/// Compress a chunk from the decompressed view into the compressed view
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
-		void compress_chunk(blosc2::context_raw_ptr compression_context_ptr, const impl::compression_view<T>& decompressed, impl::compression_view<T>& compressed)
+		void compress_chunk(blosc2::context_raw_ptr compression_context_ptr, const impl::compression_view<std::byte>& decompressed, impl::compression_view<std::byte>& compressed)
 		{
 			int compressed_size = blosc2_compress_ctx(
 				compression_context_ptr,
@@ -223,18 +233,21 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			if (compressed_size < 0)
 			{
-				throw std::runtime_error("Error while compressing blosc2 chunk");
+				throw std::runtime_error(std::format("Error code {} while compressing blosc2 chunk", compressed_size));
 			}
-
 			compressed.refit(static_cast<size_t>(compressed_size));
 		}
 
 		/// Update and replace the chunk inside of the superchunk at the given index.
 		// ---------------------------------------------------------------------------------------------------------------------
 		// ---------------------------------------------------------------------------------------------------------------------
-		void update_chunk(blosc2::schunk_raw_ptr schunk, std::size_t chunk_index, const impl::compression_view<T>& compressed)
+		void update_chunk(blosc2::schunk_raw_ptr schunk, size_t chunk_index, const impl::compression_view<std::byte>& compressed)
 		{
-			blosc2_schunk_update_chunk(schunk, chunk_index, reinterpret_cast<uint8_t*>(compressed.fitted_data.data()), true);
+			int res = blosc2_schunk_update_chunk(schunk, chunk_index, reinterpret_cast<uint8_t*>(compressed.fitted_data.data()), true);
+			if (res < 0)
+			{
+				throw std::runtime_error(std::format("Error code {} while updating the blosc2 chunk in the super-chunk", res));
+			}
 		}
 	};
 

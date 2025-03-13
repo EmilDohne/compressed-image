@@ -151,8 +151,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t compression_level = 5
 		)
 		{
-			using no_init_vector = std::vector<T, impl::default_init_allocator<T>>;
-
 			// Initialize the OIIO primitives
 			auto input_ptr = OIIO::ImageInput::open(filepath);
 			const OIIO::ImageSpec& spec = input_ptr->spec();
@@ -161,7 +159,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			const size_t channel_size = spec.width * spec.height;
 
 			// Generate the buffers used for all the channels.
-			no_init_vector interleaved_buffer(channel_size * spec.nchannels);
+			std::vector<T> interleaved_buffer(channel_size * spec.nchannels);
 			std::vector<std::vector<T>> channels;
 			for (size_t i = 0; i < spec.nchannels; ++i)
 			{
