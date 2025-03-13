@@ -67,6 +67,7 @@ endif()
 add_subdirectory(compressed_image)
 
 if (COMPRESSED_IMAGE_BUILD_TESTS)
+    add_subdirectory(thirdparty/doctest)
     add_subdirectory(test)
 endif()
 

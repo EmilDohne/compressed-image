@@ -26,18 +26,22 @@ jobs:
              os: ubuntu-24.04
              compiler: gcc-13
              compilercxx: g++-13
+             multiline-separator: \
            - name: Ubuntu Clang
              os: ubuntu-24.04
              compiler: clang
              compilercxx: clang++
+             multiline-separator: \
            - name: Windows MSVC
              os: windows-latest
              compiler: msvc
              compilercxx: msvc
+             multiline-separator: "`"
            - name: MacOS ARM GCC
              os: macos-latest
              compiler: gcc-13
-             compilercxx: g++-13      
+             compilercxx: g++-13     
+             multiline-separator: \
 
     steps:
     - uses: actions/checkout@v4
@@ -45,15 +49,35 @@ jobs:
         submodules: 'recursive'
         fetch-depth: 0
         
+    # Further brew packages needed to run/install vcpkg dependencies
+    - name: Setup MacOS dependencies
+      if: matrix.os == 'macos-latest'
+      run: |
+          brew install ninja
+          brew install autoconf
+          brew install libtool
+          brew install automake
+
+    - name: Initialize vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: '${{ github.workspace }}/thirdparty/vcpkg'
+
     - name: Configure CMake ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:
         CC: ${{ matrix.compiler }}
         CXX: ${{ matrix.compilercxx }}
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: |
+        cmake -B ${{github.workspace}}/build        ${{ matrix.multiline-separator}}
+            -DCMAKE_OSX_ARCHITECTURES="arm64"       ${{ matrix.multiline-separator}}
+            -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}  ${{ matrix.multiline-separator}}
 
 
     - name: Build ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:
         CC: ${{ matrix.compiler }}
         CXX: ${{ matrix.compilercxx }}
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run:  |
+          cmake --build ${{github.workspace}}/build ${{ matrix.multiline-separator}}
+            --config ${{env.BUILD_TYPE}}            ${{ matrix.multiline-separator}}
+            --parallel $(getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || echo %NUMBER_OF_PROCESSORS%)

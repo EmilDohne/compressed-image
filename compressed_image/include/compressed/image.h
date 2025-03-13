@@ -51,7 +51,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	/// \tparam _Chunk_Size 
 	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
 	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
-	///		upped which will give better compression ratios.
+	///		upped which will give better compression ratios. Must be a multiple of sizeof(T).
 	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
 	struct image : public std::ranges::view_interface<image<T, BlockSize, ChunkSize>>
 	{
@@ -186,6 +186,98 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			);
 		}
 
+		/// Read the compressed image from a filepath using openimageio to load the file.
+		static image read(
+			std::filesystem::path filepath,
+			enums::codec compression_codec = enums::codec::lz4,
+			size_t compression_level = 5
+		)
+		{
+			static_assert(ChunkSize % sizeof(T) == 0);
+
+			// Initialize the OIIO primitives
+			auto input_ptr = OIIO::ImageInput::open(filepath);
+			const OIIO::ImageSpec& spec = input_ptr->spec();
+			const auto typedesc = enums::get_type_desc<T>();
+
+			if (spec.tile_width != 0)
+			{
+				throw std::runtime_error("Opening tiled image files is currently unsupported.");
+			}
+
+			const size_t channel_size = spec.width * spec.height;
+			// Flooring to the nearest int is intentional as we don't want to overflow the buffers.
+			const size_t scanlines_per_chunk = ChunkSize / (spec.width * sizeof(T));
+			// Same here, we will handle the last non-complete chunk separately
+			const size_t total_chunks = spec.height / scanlines_per_chunk;
+
+			// Generate the buffers used for all the channels.
+			std::vector<T> interleaved_buffer((ChunkSize / sizeof(T)) * spec.nchannels);
+			std::vector<std::vector<T>> deinterleaved_buffer(spec.nchannels);
+			for (auto& channel : deinterleaved_buffer)
+			{
+				channel = std::vector<T>(ChunkSize / sizeof(T));
+			}
+
+			std::vector<blosc2::schunk_ptr> schunks;
+			for (size_t i = 0; i < spec.nchannels; ++i)
+			{
+				auto cparams = BLOSC2_CPARAMS_DEFAULTS;
+				auto dparams = BLOSC2_DPARAMS_DEFAULTS;
+				blosc2_storage storage = { .cparams = &cparams, .dparams = &dparams };
+				auto raw_schunk = blosc2_schunk_new(&storage);
+				schunks.append(blosc2::schunk_ptr(raw_schunk));
+			}
+
+			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
+			cparams.blocksize = BlockSize;
+			cparams.typesize = sizeof(T);
+			cparams.splitmode = BLOSC_AUTO_SPLIT;
+			cparams.clevel = m_CompressionLevel;
+			cparams.nthreads = nthreads;
+			cparams.schunk = m_Schunk.get();
+			cparams.compcode = codec_to_blosc2(m_Codec);
+
+			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
+			dparams.schunk = m_Schunk.get();
+			dparams.nthreads = nthreads;
+
+			auto decompression_ctx = blosc2::context_ptr(blosc2_create_dctx(dparams));
+
+			for (const auto chunk_idx : std::views::iota(static_cast<size_t>(0), total_chunks))
+			{
+				const size_t base_y = chunk_idx * scanlines_per_chunk;
+				const size_t end_y = base_y + scanlines_per_chunk;
+
+				input_ptr->read_scanlines(0, 0, base_y, end_y, 0, 0, spec.nchannels, typedesc, static_cast<void*>(interleaved_buffer.data()));
+				image_algo::deinterleave(interleaved_buffer, deinterleaved_buffer);
+
+				for (const auto channel_idx : std::views::iota(0, spec.nchannels))
+				{
+
+				}
+			}
+
+			input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(interleaved_buffer.data()));
+
+			std::span<const T> interleaved(interleaved_buffer.begin(), interleaved_buffer.end());
+			std::vector<std::span<T>> deinterleaved;
+			for (auto& channel : channels)
+			{
+				deinterleaved.push_back(std::span<T>(channel.begin(), channel.end()));
+			}
+			image_algo::deinterleave(interleaved, deinterleaved);
+
+			return image<T, BlockSize, ChunkSize>(
+				channels,
+				static_cast<size_t>(spec.width),
+				static_cast<size_t>(spec.height),
+				spec.channelnames,
+				compression_codec,
+				compression_level
+			);
+		}
+
 #endif
 
 		/// Adds a compressed channel to the image.
@@ -273,6 +365,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::cout << " --------------     " << std::endl;
 			std::cout << " Compressed Size:   " << compressed_size << std::endl;
 			std::cout << " Uncompressed Size: " << uncompressed_size << std::endl;
+			std::cout << " Compression ratio: " << static_cast<double>(uncompressed_size) / compressed_size << "x" << std::endl;
 			std::cout << " Num Chunks:        " << num_chunks << std::endl;
 			std::cout << " Metadata:          " << "\n " << m_Metadata.dump(4) << std::endl;
 		}
