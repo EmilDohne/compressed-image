@@ -142,49 +142,74 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 		}
 
+
+		image(
+			std::vector<channel<T, BlockSize, ChunkSize>> channels,
+			size_t width,
+			size_t height,
+			std::vector<std::string> channel_names = {},
+		) : m_Width(width), m_Height(height), m_ChannelNames(channel_names)
+		{
+			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
+			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
+			static_assert(BlockSize < ChunkSize);
+			if (channel_names.size() != channels.size())
+			{
+				std::cout << std::format(
+					"Invalid channelnames passed to image constructor, required them to match the number of" \
+					" channels in the channels parameter.Expected {} items but instead got {} names. Ignoring channel names",
+					channels.size(), channel_names.size()) << std::endl;
+
+				m_ChannelNames = {};
+			}
+			m_Channels = std::move(channels);
+		}
+
+
 #ifdef COMPRESSED_IMAGE_OIIO_AVAILABLE
 
 		/// Read the compressed image from a filepath using openimageio to load the file.
-		static image read(
-			std::filesystem::path filepath,
-			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 5
-		)
-		{
-			// Initialize the OIIO primitives
-			auto input_ptr = OIIO::ImageInput::open(filepath);
-			const OIIO::ImageSpec& spec = input_ptr->spec();
-			const auto typedesc = enums::get_type_desc<T>();
+		//static image read(
+		//	std::filesystem::path filepath,
+		//	enums::codec compression_codec = enums::codec::lz4,
+		//	size_t compression_level = 5
+		//)
+		//{
+		//	// Initialize the OIIO primitives
+		//	auto input_ptr = OIIO::ImageInput::open(filepath);
+		//	const OIIO::ImageSpec& spec = input_ptr->spec();
+		//	const auto typedesc = enums::get_type_desc<T>();
 
-			const size_t channel_size = spec.width * spec.height;
+		//	const size_t channel_size = spec.width * spec.height;
 
-			// Generate the buffers used for all the channels.
-			std::vector<T> interleaved_buffer(channel_size * spec.nchannels);
-			std::vector<std::vector<T>> channels;
-			for (size_t i = 0; i < spec.nchannels; ++i)
-			{
-				channels.push_back(std::vector<T>(channel_size));
-			}
+		//	// Generate the buffers used for all the channels.
+		//	std::vector<T> interleaved_buffer(channel_size * spec.nchannels);
+		//	std::vector<std::vector<T>> channels;
+		//	for (size_t i = 0; i < spec.nchannels; ++i)
+		//	{
+		//		channels.push_back(std::vector<T>(channel_size));
+		//	}
 
-			input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(interleaved_buffer.data()));
+		//	input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(interleaved_buffer.data()));
 
-			std::span<const T> interleaved(interleaved_buffer.begin(), interleaved_buffer.end());
-			std::vector<std::span<T>> deinterleaved;
-			for (auto& channel : channels)
-			{
-				deinterleaved.push_back(std::span<T>(channel.begin(), channel.end()));
-			}
-			image_algo::deinterleave(interleaved, deinterleaved);
+		//	std::span<const T> interleaved(interleaved_buffer.begin(), interleaved_buffer.end());
+		//	std::vector<std::span<T>> deinterleaved;
+		//	for (auto& channel : channels)
+		//	{
+		//		deinterleaved.push_back(std::span<T>(channel.begin(), channel.end()));
+		//	}
+		//	image_algo::deinterleave(interleaved, deinterleaved);
 
-			return image<T, BlockSize, ChunkSize>(
-				channels,
-				static_cast<size_t>(spec.width),
-				static_cast<size_t>(spec.height),
-				spec.channelnames,
-				compression_codec,
-				compression_level
-			);
-		}
+		//	return image<T, BlockSize, ChunkSize>(
+		//		channels,
+		//		static_cast<size_t>(spec.width),
+		//		static_cast<size_t>(spec.height),
+		//		spec.channelnames,
+		//		compression_codec,
+		//		compression_level
+		//	);
+		//}
+
 
 		/// Read the compressed image from a filepath using openimageio to load the file.
 		static image read(
@@ -205,77 +230,78 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				throw std::runtime_error("Opening tiled image files is currently unsupported.");
 			}
 
-			const size_t channel_size = spec.width * spec.height;
-			// Flooring to the nearest int is intentional as we don't want to overflow the buffers.
-			const size_t scanlines_per_chunk = ChunkSize / (spec.width * sizeof(T));
-			// Same here, we will handle the last non-complete chunk separately
-			const size_t total_chunks = spec.height / scanlines_per_chunk;
 
-			// Generate the buffers used for all the channels.
-			std::vector<T> interleaved_buffer((ChunkSize / sizeof(T)) * spec.nchannels);
+			const size_t bytes_per_scanline = static_cast<size_t>(spec.width) * spec.nchannels * sizeof(T);
+			const size_t scanlines_per_chunk = ChunkSize / bytes_per_scanline;
+
+			std::vector<T> interleaved_buffer(ChunkSize / sizeof(T));
 			std::vector<std::vector<T>> deinterleaved_buffer(spec.nchannels);
+
 			for (auto& channel : deinterleaved_buffer)
 			{
-				channel = std::vector<T>(ChunkSize / sizeof(T));
+				channel.resize(ChunkSize / spec.nchannels / sizeof(T));
 			}
 
 			std::vector<blosc2::schunk_ptr> schunks;
+			std::vector<blosc2::context_ptr> contexts;
+
 			for (size_t i = 0; i < spec.nchannels; ++i)
 			{
 				auto cparams = BLOSC2_CPARAMS_DEFAULTS;
 				auto dparams = BLOSC2_DPARAMS_DEFAULTS;
 				blosc2_storage storage = { .cparams = &cparams, .dparams = &dparams };
-				auto raw_schunk = blosc2_schunk_new(&storage);
-				schunks.append(blosc2::schunk_ptr(raw_schunk));
+				auto schunk = blosc2::schunk_ptr(blosc2_schunk_new(&storage));
+
+				schunks.push_back(std::move(schunk));
+				auto compression_ctx = blosc2::create_compression_context(schunks[i], std::thread::hardware_concurrency());
+				contexts.push_back(std::move(compression_ctx));
 			}
 
-			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
-			cparams.blocksize = BlockSize;
-			cparams.typesize = sizeof(T);
-			cparams.splitmode = BLOSC_AUTO_SPLIT;
-			cparams.clevel = m_CompressionLevel;
-			cparams.nthreads = nthreads;
-			cparams.schunk = m_Schunk.get();
-			cparams.compcode = codec_to_blosc2(m_Codec);
+			std::vector<std::byte> chunk_buffer(blosc2::min_compressed_size<ChunkSize>());
+			size_t y = 0;
+			size_t partial_scanline_offset = 0;
+			std::vector<T> leftover_scanline(bytes_per_scanline / sizeof(T));
 
-			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
-			dparams.schunk = m_Schunk.get();
-			dparams.nthreads = nthreads;
-
-			auto decompression_ctx = blosc2::context_ptr(blosc2_create_dctx(dparams));
-
-			for (const auto chunk_idx : std::views::iota(static_cast<size_t>(0), total_chunks))
+			while (y < spec.height)
 			{
-				const size_t base_y = chunk_idx * scanlines_per_chunk;
-				const size_t end_y = base_y + scanlines_per_chunk;
+				size_t scanlines_to_read = std::min(scanlines_per_chunk, spec.height - y);
+				input_ptr->read_scanlines(0, 0, y, y + scanlines_to_read, 0, 0, spec.nchannels, typedesc,
+					static_cast<void*>(interleaved_buffer.data() + partial_scanline_offset));
 
-				input_ptr->read_scanlines(0, 0, base_y, end_y, 0, 0, spec.nchannels, typedesc, static_cast<void*>(interleaved_buffer.data()));
 				image_algo::deinterleave(interleaved_buffer, deinterleaved_buffer);
 
 				for (const auto channel_idx : std::views::iota(0, spec.nchannels))
 				{
+					schunks[channel_idx]->current_nchunk = schunks[channel_idx]->nchunks;
 
+					const auto cbytes = blosc2_compress_ctx(
+						contexts[channel_idx].get(),
+						static_cast<const void*>(deinterleaved_buffer[channel_idx].data()),
+						static_cast<int32_t>(deinterleaved_buffer[channel_idx].size() * sizeof(T)),
+						static_cast<void*>(chunk_buffer.data()),
+						static_cast<int32_t>(chunk_buffer.size())
+					);
+
+					if (cbytes < 0)
+					{
+						throw std::runtime_error("Error while compressing blosc2 chunk");
+					}
+
+					blosc2_schunk_append_chunk(
+						schunks[channel_idx].get(),
+						reinterpret_cast<uint8_t*>(chunk_buffer.data()),
+						true
+					);
 				}
+
+				y += scanlines_to_read;
 			}
 
-			input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(interleaved_buffer.data()));
 
-			std::span<const T> interleaved(interleaved_buffer.begin(), interleaved_buffer.end());
-			std::vector<std::span<T>> deinterleaved;
-			for (auto& channel : channels)
+			for (const auto channel_idx : std::views::iota(0, spec.nchannels))
 			{
-				deinterleaved.push_back(std::span<T>(channel.begin(), channel.end()));
+				m_Channels.push_back()
 			}
-			image_algo::deinterleave(interleaved, deinterleaved);
-
-			return image<T, BlockSize, ChunkSize>(
-				channels,
-				static_cast<size_t>(spec.width),
-				static_cast<size_t>(spec.height),
-				spec.channelnames,
-				compression_codec,
-				compression_level
-			);
 		}
 
 #endif

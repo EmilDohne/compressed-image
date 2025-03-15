@@ -93,11 +93,31 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			auto raw_schunk = blosc2_schunk_new(&storage);
 			m_Schunk = blosc2::schunk_ptr(raw_schunk);
 
-			m_CompressionContext = create_compression_context(std::thread::hardware_concurrency());
-			m_DecompressionContext = create_decompression_context(std::thread::hardware_concurrency());
+			m_CompressionContext = blosc2::create_compression_context(m_Schunk, std::thread::hardware_concurrency());
+			m_DecompressionContext = blosc2::create_decompression_context(m_Schunk, std::thread::hardware_concurrency());
 
 			auto compression_span = std::span<const std::byte>(reinterpret_cast<const std::byte*>(data.data()), data.size() * sizeof(T));
 			this->compress(compression_span);
+		}
+
+
+		channel(
+			blosc2::schunk_ptr schunk,
+			size_t width,
+			size_t height
+		)
+		{
+			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
+			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
+			static_assert(BlockSize < ChunkSize);
+
+			m_Schunk = std::move(schunk);
+			m_Width = width;
+			m_Height = height;
+
+			m_CompressionContext = blosc2::create_compression_context(m_Schunk, std::thread::hardware_concurrency());
+			m_DecompressionContext = blosc2::create_decompression_context(m_Schunk, std::thread::hardware_concurrency());
+
 		}
 
 		/// Returns an iterator pointing to the beginning of the compressed data.
