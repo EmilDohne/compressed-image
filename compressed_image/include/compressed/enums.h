@@ -11,12 +11,15 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 {
 	namespace enums
 	{
-		/// The compression codecs known to us. Inherited from blosc2.
+		/// Enum representing available compression codecs.
+		///
+		/// These codecs are inherited from `blosc2` and define different compression algorithms
+		/// that can be used when storing or transmitting compressed images.
 		enum class codec
 		{
-			blosclz,
-			lz4,
-			lz4hc,
+			blosclz, ///< BloscLZ: Lightweight, fast compression optimized for high-speed decompression.
+			lz4,     ///< LZ4: Extremely fast compression and decompression with moderate compression ratio.
+			lz4hc,   ///< LZ4HC: High-compression variant of LZ4 with slower compression but similar fast decompression.
 		};
 
 

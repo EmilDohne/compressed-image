@@ -77,7 +77,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///
 		/// \param interleaved The input buffer containing the interleaved data.
 		/// \param channel_spans The spans to deinterleave into.
-		///
 		template <typename T>
 		void deinterleave(std::span<const T> interleaved, std::vector<std::span<T>>& channel_spans)
 		{
@@ -99,12 +98,40 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			auto indices = std::views::iota(static_cast<std::size_t>(0), channel_spans.front().size());
 			std::for_each(std::execution::par_unseq, indices.begin(), indices.end(), [&](auto idx)
 				{
-					const std::size_t interleaved_base_idx = idx * spans_size;
-					for (std::size_t i = 0; i < spans_size; ++i)
+					const size_t interleaved_base_idx = idx * spans_size;
+					for (size_t i = 0; i < spans_size; ++i)
 					{
 						channel_spans[i][idx] = interleaved[interleaved_base_idx + i];
 					}
 				});
+		}
+
+
+		/// Deinterleave a unified buffer into multiple channels, using the preallocated buffers.
+		///
+		/// Could be called like this, for example:
+		///
+		/// \code{.cpp}
+		///
+		/// std::vector<T> interleaved = ...; // Previously interleaved data
+		/// std::vector<std::vector<T>> channels = ...; // The channels to deinterleave into
+		/// auto deinterleaved = Render::deinterleave(interleaved, channels);
+		/// 
+		/// \endcode
+		/// 
+		/// \tparam T The data type to deinterleave.
+		///
+		/// \param interleaved The input buffer containing the interleaved data.
+		/// \param channel_spans The spans to deinterleave into.
+		template <typename T>
+		void deinterleave(std::span<const T> interleaved, std::vector<std::vector<T>>& channel_vecs)
+		{
+			std::vector<std::span<T>> spans{};
+			for (auto& vec : channel_vecs)
+			{
+				spans.push_back(std::span<T>(vec.begin(), vec.end()));
+			}
+			deinterleave<T>(interleaved, spans);
 		}
 	
 	} // image_algo

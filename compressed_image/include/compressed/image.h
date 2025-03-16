@@ -22,7 +22,6 @@
 #include "blosc2_wrapper.h"
 #include "constants.h"
 #include "channel.h"
-#include "implementation.h"
 #include "image_algo.h"
 
 #include "iterators/iterator.h"
@@ -51,12 +50,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	/// \tparam _Chunk_Size 
 	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
 	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
-	///		upped which will give better compression ratios. Must be a multiple of sizeof(T).
+	///		upped which might give better compression ratios. Must be a multiple of sizeof(T).
 	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
 	struct image : public std::ranges::view_interface<image<T, BlockSize, ChunkSize>>
 	{
 		static constexpr size_t block_size = BlockSize;
 		static constexpr size_t chunk_size = ChunkSize;
+
+		image() = default;
+		~image() = default;
+		image(const image&) = delete;					// Delete copy constructor
+		image& operator=(const image&) = delete;		// Delete copy assignment
+		image(image&&) noexcept = default;				// Move constructor
+		image& operator=(image&&) noexcept = default;	// Move assignment
 
 
 		/// Constructs an image object with the specified channels, dimensions, and optional compression parameters.
@@ -89,7 +95,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
 			static_assert(BlockSize < ChunkSize);
-			if (channel_names.size() != channels.size())
+			if (channel_names.size() != channels.size() && channel_names.size() != 0)
 			{
 				std::cout << std::format(
 					"Invalid channelnames passed to image constructor, required them to match the number of" \
@@ -148,12 +154,15 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t width,
 			size_t height,
 			std::vector<std::string> channel_names = {},
+			enums::codec compression_codec = enums::codec::lz4,
+			size_t compression_level = 5
 		) : m_Width(width), m_Height(height), m_ChannelNames(channel_names)
 		{
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
 			static_assert(BlockSize < ChunkSize);
-			if (channel_names.size() != channels.size())
+
+			if (channel_names.size() != channels.size() && channel_names.size() != 0)
 			{
 				std::cout << std::format(
 					"Invalid channelnames passed to image constructor, required them to match the number of" \
@@ -168,50 +177,28 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 #ifdef COMPRESSED_IMAGE_OIIO_AVAILABLE
 
-		/// Read the compressed image from a filepath using openimageio to load the file.
-		//static image read(
-		//	std::filesystem::path filepath,
-		//	enums::codec compression_codec = enums::codec::lz4,
-		//	size_t compression_level = 5
-		//)
-		//{
-		//	// Initialize the OIIO primitives
-		//	auto input_ptr = OIIO::ImageInput::open(filepath);
-		//	const OIIO::ImageSpec& spec = input_ptr->spec();
-		//	const auto typedesc = enums::get_type_desc<T>();
-
-		//	const size_t channel_size = spec.width * spec.height;
-
-		//	// Generate the buffers used for all the channels.
-		//	std::vector<T> interleaved_buffer(channel_size * spec.nchannels);
-		//	std::vector<std::vector<T>> channels;
-		//	for (size_t i = 0; i < spec.nchannels; ++i)
-		//	{
-		//		channels.push_back(std::vector<T>(channel_size));
-		//	}
-
-		//	input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(interleaved_buffer.data()));
-
-		//	std::span<const T> interleaved(interleaved_buffer.begin(), interleaved_buffer.end());
-		//	std::vector<std::span<T>> deinterleaved;
-		//	for (auto& channel : channels)
-		//	{
-		//		deinterleaved.push_back(std::span<T>(channel.begin(), channel.end()));
-		//	}
-		//	image_algo::deinterleave(interleaved, deinterleaved);
-
-		//	return image<T, BlockSize, ChunkSize>(
-		//		channels,
-		//		static_cast<size_t>(spec.width),
-		//		static_cast<size_t>(spec.height),
-		//		spec.channelnames,
-		//		compression_codec,
-		//		compression_level
-		//	);
-		//}
-
-
-		/// Read the compressed image from a filepath using openimageio to load the file.
+		/// Reads a compressed image from a file using OpenImageIO and compresses it during reading.
+		/// 
+		/// Requires CompressedImage to have been compiled with OpenImageIO support.
+		/// 
+		/// This function reads an image file in chunks and compresses it on the fly leading to much
+		/// lower memory usage at near-identical performance to raw OpenImageIO reads. On an image
+		/// that is well compressible this can easily achieve a compression ratio of 5-10x.
+		/// 
+		/// The type does not have to match that of the underlying image as OpenImageIO will take
+		/// care of converting the files into the specified format. It is perfectly valid to read 
+		/// a floating point image as e.g. uint16_t etc.
+		/// 
+		/// Example:
+		/// \code{.cpp}
+		/// std::filesystem::path filepath = "image.exr";
+		/// auto img = compressed::image::read<uint8_t>(filepath, compressed::enums::codec::lz4, 5);
+		/// \endcode
+		///
+		/// \param filepath The file path of the image to read.
+		/// \param compression_codec The compression codec to use (default: LZ4).
+		/// \param compression_level The compression level (default: 5).
+		/// \return A compressed image instance.
 		static image read(
 			std::filesystem::path filepath,
 			enums::codec compression_codec = enums::codec::lz4,
@@ -222,6 +209,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			// Initialize the OIIO primitives
 			auto input_ptr = OIIO::ImageInput::open(filepath);
+			if (!input_ptr)
+			{
+				throw std::invalid_argument(std::format("File {} does not exist on disk", filepath.string()));
+			}
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 			const auto typedesc = enums::get_type_desc<T>();
 
@@ -230,78 +221,91 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				throw std::runtime_error("Opening tiled image files is currently unsupported.");
 			}
 
-
 			const size_t bytes_per_scanline = static_cast<size_t>(spec.width) * spec.nchannels * sizeof(T);
-			const size_t scanlines_per_chunk = ChunkSize / bytes_per_scanline;
+			// We want each channel to be up to ChunkSize rather than having all channel
+			const size_t chunk_size_all = ChunkSize * spec.nchannels;
+			const size_t scanlines_per_chunk = chunk_size_all / bytes_per_scanline;
 
-			std::vector<T> interleaved_buffer(ChunkSize / sizeof(T));
+			std::vector<T> interleaved_buffer(chunk_size_all / sizeof(T));
 			std::vector<std::vector<T>> deinterleaved_buffer(spec.nchannels);
-
 			for (auto& channel : deinterleaved_buffer)
 			{
-				channel.resize(ChunkSize / spec.nchannels / sizeof(T));
+				channel.resize(ChunkSize / sizeof(T));
 			}
 
+			// Create and initialize all of our schunks and compression contexts.
 			std::vector<blosc2::schunk_ptr> schunks;
 			std::vector<blosc2::context_ptr> contexts;
-
-			for (size_t i = 0; i < spec.nchannels; ++i)
+			for (auto _ : std::views::iota(0, spec.nchannels))
 			{
-				auto cparams = BLOSC2_CPARAMS_DEFAULTS;
-				auto dparams = BLOSC2_DPARAMS_DEFAULTS;
-				blosc2_storage storage = { .cparams = &cparams, .dparams = &dparams };
-				auto schunk = blosc2::schunk_ptr(blosc2_schunk_new(&storage));
-
-				schunks.push_back(std::move(schunk));
-				auto compression_ctx = blosc2::create_compression_context(schunks[i], std::thread::hardware_concurrency());
-				contexts.push_back(std::move(compression_ctx));
+				schunks.push_back(blosc2::create_default_schunk());
+				contexts.push_back(blosc2::create_compression_context<T, BlockSize>(
+					schunks.back(), 
+					std::thread::hardware_concurrency(),
+					compression_codec,
+					compression_level
+				));
 			}
 
+			// Buffer to hold a single chunk. We will reuse this quite frequently
 			std::vector<std::byte> chunk_buffer(blosc2::min_compressed_size<ChunkSize>());
 			size_t y = 0;
-			size_t partial_scanline_offset = 0;
-			std::vector<T> leftover_scanline(bytes_per_scanline / sizeof(T));
 
+			// Iterate all scanlines and read as many scanlines as possible in one go, compressing them on the fly 
+			// into all of the super-chunks. 
 			while (y < spec.height)
 			{
 				size_t scanlines_to_read = std::min(scanlines_per_chunk, spec.height - y);
-				input_ptr->read_scanlines(0, 0, y, y + scanlines_to_read, 0, 0, spec.nchannels, typedesc,
-					static_cast<void*>(interleaved_buffer.data() + partial_scanline_offset));
+				input_ptr->read_scanlines(
+					0, // subimage
+					0, // miplevel
+					y, // ybegin
+					y + scanlines_to_read, // yend
+					0, // z
+					0, // chbegin
+					spec.nchannels, // chend
+					typedesc,
+					static_cast<void*>(interleaved_buffer.data())
+				);
 
-				image_algo::deinterleave(interleaved_buffer, deinterleaved_buffer);
+				// Deinterleave the buffers, in some cases we may be deinterleaving empty space here but that 
+				// is ok as we refit the buffers. Since in most cases the size will only be off by at most one
+				// scanline. In the case of the last chunk, we may be at worst deinterleaving only one scanline
+				// with the rest being empty space but that is also ok.
+				image_algo::deinterleave(std::span<const T>(interleaved_buffer.begin(), interleaved_buffer.end()), deinterleaved_buffer);
 
-				for (const auto channel_idx : std::views::iota(0, spec.nchannels))
+				// Now start compressing the chunks and appending them into the super-chunks.
+				for (auto channel_idx : std::views::iota(0, spec.nchannels))
 				{
+					// How many elements we actually read per buffer
+					size_t read_elements = scanlines_to_read * spec.width;
+
+					// Increment the schunks internal count. I think this could go into append_chunk? but blosc does
+					// it like this.
 					schunks[channel_idx]->current_nchunk = schunks[channel_idx]->nchunks;
 
-					const auto cbytes = blosc2_compress_ctx(
-						contexts[channel_idx].get(),
-						static_cast<const void*>(deinterleaved_buffer[channel_idx].data()),
-						static_cast<int32_t>(deinterleaved_buffer[channel_idx].size() * sizeof(T)),
-						static_cast<void*>(chunk_buffer.data()),
-						static_cast<int32_t>(chunk_buffer.size())
-					);
-
-					if (cbytes < 0)
-					{
-						throw std::runtime_error("Error while compressing blosc2 chunk");
-					}
-
-					blosc2_schunk_append_chunk(
-						schunks[channel_idx].get(),
-						reinterpret_cast<uint8_t*>(chunk_buffer.data()),
-						true
-					);
+					auto deinterleaved_fitted = std::span<T>(deinterleaved_buffer[channel_idx].data(), read_elements);
+					blosc2::compress<T>(contexts[channel_idx], deinterleaved_fitted, chunk_buffer);
+					blosc2::append_chunk(schunks[channel_idx], chunk_buffer);
 				}
 
 				y += scanlines_to_read;
 			}
 
-
+			// Finally create the channels from the schunk and create the image instance
+			std::vector<compressed::channel<T, BlockSize, ChunkSize>> channels;
 			for (const auto channel_idx : std::views::iota(0, spec.nchannels))
 			{
-				m_Channels.push_back()
+				channels.push_back(compressed::channel<T, BlockSize, ChunkSize>(
+					std::move(schunks[channel_idx]), 
+					spec.width, 
+					spec.height, 
+					compression_codec, 
+					compression_level)
+				);
 			}
+
+			return compressed::image<T, BlockSize, ChunkSize>(std::move(channels), spec.width, spec.height, spec.channelnames, compression_codec, compression_level);
 		}
 
 #endif
@@ -365,7 +369,28 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 		}
 
-		/// Prints some statistics about the imagefile structure
+		/// @brief Prints statistical information about the image file structure.
+		/// 
+		/// This function outputs various details about the compressed image, 
+		/// including dimensions, number of channels, compression ratio, and metadata.
+		/// 
+		/// Example output:
+		/// 
+		///		Statistics for image buffer:
+		///		 Width:             1024
+		///		 Height:            768
+		///		 Channels:          3
+		///		 Channelnames:      [R, G, B]
+		///		 --------------
+		///		 Compressed Size:   123456 bytes
+		///		 Uncompressed Size: 3145728 bytes
+		///		 Compression ratio: 25.5x
+		///		 Num Chunks:        512
+		///		 Metadata:
+		///		 {
+		///		    "author": "User",
+		///		    "timestamp": "2024-03-15"
+		///		 }
 		void print_statistics()
 		{
 			size_t compressed_size = 0;
@@ -382,11 +407,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::cout << " Width:             " << m_Width << std::endl;
 			std::cout << " Height:            " << m_Height << std::endl;
 			std::cout << " Channels:          " << m_Channels.size() << std::endl;
-			std::cout << " Channelnames:      " << "[";
-			for (const auto& channelname : m_ChannelNames)
+			std::cout << " Channelnames:      [";
+
+			for (size_t i = 0; i < m_ChannelNames.size(); ++i)
 			{
-				std::cout << channelname << ", ";
+				std::cout << m_ChannelNames[i];
+				if (i < m_ChannelNames.size() - 1)
+				{
+					std::cout << ", ";
+				}
 			}
+
 			std::cout << "]" << std::endl;
 			std::cout << " --------------     " << std::endl;
 			std::cout << " Compressed Size:   " << compressed_size << std::endl;
@@ -406,6 +437,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		auto end() noexcept { return m_Channels.end(); }
 		auto end() const noexcept { return m_Channels.end(); }
 
+		
 
 		// ---------------------------------------------------------------------------------------------------------------------
 		// Accessors
@@ -495,7 +527,30 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return result;
 		}
 
-		/// Retrieve the logical index of the given channel, throws a std::invalid_argument if that channel is not available.
+		/// Decompress all of the channels and return them in planar fashion.
+		/// 
+		/// Each channel's decompressed data is stored as a separate vector.
+		/// 
+		/// \return A vector of decompressed channel data, where each inner vector corresponds to a channel.
+		std::vector<std::vector<T>> get_decompressed()
+		{
+			std::vector<std::vector<T>> result{};
+			for (auto& channel : m_Channels)
+			{
+				result.push_back(channel.get_decompressed());
+			}
+			return result;
+		}
+
+
+		/// Retrieve the logical index of the given channel.
+		/// 
+		/// This function searches for the specified channel name in the list of available channels.
+		/// If the channel is not found, it throws a `std::invalid_argument`.
+		/// 
+		/// \param channelname The name of the channel to search for.
+		/// \return The index of the channel if found.
+		/// \throws std::invalid_argument if the channel is not available.
 		size_t get_channel_offset(const std::string_view channelname) const
 		{
 			for (size_t i = 0; i < m_ChannelNames.size(); ++i)

@@ -10,74 +10,109 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	namespace container
 	{
 
-		/// Chunked span looking into a larger image. Conceptually this is a single decompressed chunk while 
-		/// iterating over an image or a channel. Retrieved by derefencing a compressed::iterator while doing e.g.
+		/// Represents a chunked view into a larger image, providing access to a decompressed segment of the image or channel.
+		/// 
+		/// This structure acts as a lightweight view into a portion of an image, particularly when working with compressed
+		/// image storage. It allows efficient iteration over the decompressed chunk while providing methods to determine 
+		/// the global X and Y coordinates relative to the full image.
+		/// 
+		/// The chunk is retrieved by dereferencing a `compressed::iterator`, and is used in scenarios like iterating over
+		/// image channels and processing decompressed data in smaller segments.
+		/// 
+		/// ## Example Usage:
 		/// 
 		/// \code{.cpp}
-		/// compressed::image<T> = ...;
+		/// compressed::image<T> image = ...;
 		/// for (auto& chunk : image.channel_ref("r"))
 		/// {
-		///		for (auto& [index, pixel] : std::views::enumerate(chunk))
-		///		{
-		///			size_t x = chunk.x(index);
-		///			size_t y = chunk.y(index);
-		///			pixel = (x + y * image.width()) / image.size();
-		///		}
+		///     for (auto& [index, pixel] : std::views::enumerate(chunk))
+		///     {
+		///         size_t x = chunk.x(index);
+		///         size_t y = chunk.y(index);
+		///         pixel = (x + y * image.width()) / image.size();
+		///     }
 		/// }
 		/// \endcode
+		/// 
+		/// \tparam T The data type stored in the chunk (e.g., pixel values).
+		/// \tparam ChunkSize The fixed size of each chunk, defaulting to `s_default_chunksize`.
 		template <typename T, size_t ChunkSize = s_default_chunksize>
 		struct chunk_span : public std::ranges::view_interface<chunk_span<T, ChunkSize>>
 		{
+			/// The size of each chunk in bytes.
 			static constexpr size_t chunk_size = ChunkSize;
 
+			chunk_span() = default;
 
+			/// Constructs a `chunk_span` pointing to a segment of an image.
+			///
+			/// \param data The span of data representing this chunk.
+			/// \param width The total width of the full image.
+			/// \param height The total height of the full image.
+			/// \param chunk_index The index of this chunk in the overall compressed image sequence.
 			chunk_span(std::span<T> data, size_t width, size_t height, size_t chunk_index)
 				: m_Data(data), m_Width(width), m_Height(height), m_ChunkIndex(chunk_index) {};
 
-			/// For a given index into this span get the X coordinate relative to the whole image/channel.
+			/// Computes the X coordinate of a given index within this chunk, relative to the full image.
 			///
-			/// \param _index The index into this `chunk_span`.
-			/// 
-			/// \returns The image y-coordinate for the given index.
+			/// \param _index The local index within this `chunk_span`.
+			/// \returns The X coordinate in the full image.
 			size_t x(size_t _index) const noexcept
 			{
 				const auto global_index = get_global_index(_index);
 				return global_index % m_Width;
 			}
 
-			/// For a given index into this span get the y coordinate relative to the whole image/channel.
+			/// Computes the Y coordinate of a given index within this chunk, relative to the full image.
 			///
-			/// \param _index The index into this `chunk_span`.
-			/// 
-			/// \returns The image y-coordinate for the given index.
+			/// \param _index The local index within this `chunk_span`.
+			/// \returns The Y coordinate in the full image.
 			size_t y(size_t _index) const noexcept
 			{
 				const auto global_index = get_global_index(_index);
 				return global_index / m_Width;
 			}
 
-			/// Begin iterator over the locally held span, required to fulfill the requirements of 
-			/// std::ranges::view_interface
-			auto begin() noexcept { return m_Data.begin(); }
+			/// Returns the current chunk index we are accessing
+			size_t chunk_index() const noexcept
+			{
+				return m_ChunkIndex;
+			}
 
-			/// end iterator over the locally held span, required to fulfill the requirements of 
-			/// std::ranges::view_interface
-			auto end() noexcept { return m_Data.end(); }
+			/// Returns an iterator to the beginning of the chunk's data.
+			///
+			/// This is required to fulfill the requirements of `std::ranges::view_interface`.
+			/// \returns An iterator to the start of the chunk's span.
+			auto begin() const noexcept { return m_Data.begin(); }
+
+			/// Returns an iterator to the end of the chunk's data.
+			///
+			/// This is required to fulfill the requirements of `std::ranges::view_interface`.
+			/// \returns An iterator to the end of the chunk's span.
+			auto end() const noexcept { return m_Data.end(); }
+
+			/// Returns the size of the chunk.
+			auto size() const noexcept { return m_Data.size(); }
 
 		private:
-			std::span<T> m_Data{};
-			size_t m_Width = 1;
-			size_t m_Height = 1;
-			size_t m_ChunkIndex = 0;
+			std::span<T> m_Data{};  ///< The span of data representing this chunk.
+			size_t m_Width = 1;     ///< The full image width.
+			size_t m_Height = 1;    ///< The full image height.
+			size_t m_ChunkIndex = 0;///< The index of this chunk in the image sequence.
 
-			/// For a span-local index, retrieve the global index into the larger image array (even if it is not accessible)
-			/// to e.g. compute the x and y coordinates for a given offset. For the case where this is the last chunk which may
-			/// not be fully populated this will still work as all previous spans are aligned to that.
-			size_t get_global_index(size_t _index)
+			/// Computes the global index of a given local index within the full image.
+			///
+			/// This function converts a chunk-local index into an absolute index within the full image.
+			/// This is useful for computing the corresponding (X, Y) coordinates.
+			///
+			/// \param _index The local index within this `chunk_span`.
+			/// \returns The global index within the full image.
+			size_t get_global_index(size_t _index) const noexcept
 			{
 				const size_t base_offset = m_ChunkIndex * chunk_size;
 				return base_offset + _index;
 			}
+
 		};
 
 	} // namespace container

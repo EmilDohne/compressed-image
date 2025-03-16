@@ -6,6 +6,7 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set (CMAKE_CXX_STANDARD 20)
 project (CompressedImageBuild)
 
@@ -18,12 +19,14 @@ endif()
 if (MAIN_PROJECT)
     set(COMPRESSED_IMAGE_BUILD_TESTS ON)
     set(COMPRESSED_IMAGE_BUILD_EXAMPLES ON)
+    set(COMPRESSED_IMAGE_BUILD_DOCS ON)
 endif()
 
 
 option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." ON)
 option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
 option(COMPRESSED_IMAGE_BUILD_EXAMPLES OFF)
+option(COMPRESSED_IMAGE_BUILD_DOCS OFF)
 
 
 # Add thirdparty libraries
@@ -67,11 +70,17 @@ endif()
 add_subdirectory(compressed_image)
 
 if (COMPRESSED_IMAGE_BUILD_TESTS)
-    add_subdirectory(thirdparty/doctest)
+    add_library(doctest INTERFACE)
+    target_include_directories(doctest SYSTEM INTERFACE thirdparty/doctest/doctest)
+
     add_subdirectory(test)
 endif()
 
 if (COMPRESSED_IMAGE_BUILD_EXAMPLES)
     add_subdirectory(examples/initialize_from_file)
     add_subdirectory(examples/tmp)
+endif()
+
+if (COMPRESSED_IMAGE_BUILD_DOCS)
+    add_subdirectory(docs)
 endif()
