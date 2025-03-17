@@ -10,3 +10,6 @@
 [submodule "thirdparty/doctest"]
 	path = thirdparty/doctest
 	url = https://github.com/doctest/doctest
+[submodule "thirdparty/benchmark"]
+	path = thirdparty/benchmark
+	url = https://github.com/google/benchmark

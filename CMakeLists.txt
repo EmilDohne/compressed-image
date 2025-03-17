@@ -20,6 +20,7 @@ if (MAIN_PROJECT)
     set(COMPRESSED_IMAGE_BUILD_TESTS ON)
     set(COMPRESSED_IMAGE_BUILD_EXAMPLES ON)
     set(COMPRESSED_IMAGE_BUILD_DOCS ON)
+    set(COMPRESSED_IMAGE_BUILD_BENCHMARKS ON)
 endif()
 
 
@@ -27,6 +28,7 @@ option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg
 option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
 option(COMPRESSED_IMAGE_BUILD_EXAMPLES OFF)
 option(COMPRESSED_IMAGE_BUILD_DOCS OFF)
+option(COMPRESSED_IMAGE_BUILD_BENCHMARKS OFF)
 
 
 # Add thirdparty libraries
@@ -79,6 +81,12 @@ endif()
 if (COMPRESSED_IMAGE_BUILD_EXAMPLES)
     add_subdirectory(examples/initialize_from_file)
     add_subdirectory(examples/tmp)
+endif()
+
+if (COMPRESSED_IMAGE_BUILD_BENCHMARKS)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF)
+    add_subdirectory(thirdparty/benchmark)
+    add_subdirectory(benchmark)
 endif()
 
 if (COMPRESSED_IMAGE_BUILD_DOCS)

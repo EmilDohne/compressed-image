@@ -428,6 +428,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 
+		/// Return the compression ratio over all channels.
+		double compression_ratio() const noexcept
+		{
+			size_t total_uncompressed = 1;
+			size_t total_compressed = 1;
+			for (const auto& channel : m_Channels)
+			{
+				total_compressed += channel.compressed_size();
+				total_uncompressed += channel.uncompressed_size();
+			}
+			return static_cast<double>(total_uncompressed) / total_compressed;
+		}
+
+
 		// ---------------------------------------------------------------------------------------------------------------------
 		// Iterators
 		// ---------------------------------------------------------------------------------------------------------------------
@@ -525,6 +539,22 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				result.append(this->channel(name));
 			}
 			return result;
+		}
+
+		/// Retrieves references to all of the channels in the image
+		/// 
+		/// \return A vector containing references to the all the channels.
+		std::vector<compressed::channel<T, BlockSize, ChunkSize>>& channels()
+		{
+			return m_Channels;
+		}
+
+		/// Retrieves const references to all of the channels in the image
+		/// 
+		/// \return A vector containing references to the all the channels.
+		const std::vector<compressed::channel<T, BlockSize, ChunkSize>>& channels() const
+		{
+			return m_Channels;
 		}
 
 		/// Decompress all of the channels and return them in planar fashion.

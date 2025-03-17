@@ -217,6 +217,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			auto result = std::vector<T>(uncompressed_size() / sizeof(T));
 			size_t offset = 0;
+
 			for (auto chunk_index : std::views::iota(0, m_Schunk->nchunks))
 			{
 				auto buffer_size = std::min(ChunkSize / sizeof(T), result.size() - offset);

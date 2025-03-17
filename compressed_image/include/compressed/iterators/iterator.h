@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ranges>
+#include <vector>
+#include <span>
 
 #include "compressed/macros.h"
 #include "compressed/blosc2_wrapper.h"
