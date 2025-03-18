@@ -13,163 +13,91 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	namespace ranges
 	{
 
-        namespace detail
-        {
-            template <typename... Iterators>
-            struct iterator
-            {
-                using iterator_category = std::forward_iterator_tag;
-                using difference_type = std::ptrdiff_t;
-                using value_type = std::tuple<typename std::iterator_traits<Iterators>::reference...>;
-                using pointer = std::tuple<typename std::iterator_traits<Iterators>::pointer...>;
-                using reference = std::tuple<typename std::iterator_traits<Iterators>::reference...>;
+		namespace detail
+		{
+			template <typename... _Tp>
+			bool variadic_or(_Tp &&...args)
+			{
+				return (... || args);
+			}
 
-                explicit iterator(Iterators... iters) : data_{ iters... } {}
+			template <typename Tuple, std::size_t... I>
+			bool any_equals(Tuple&& t1, Tuple&& t2, std::index_sequence<I...>)
+			{
+				return variadic_or(std::get<I>(std::forward<Tuple>(t1)) == std::get<I>(std::forward<Tuple>(t2))...);
+			}
+		}
 
-                value_type operator*() 
-                {
-                    return dereference(std::index_sequence_for<Iterators...>{});
-                }
+		/// Copied from https://debashish-ghosh.medium.com/lets-iterate-together-fd7f5e49672b.
+		/// zip() implementation that is near-identical to std::ranges::zip() which is C++23 only
+		template <typename... T>
+		struct zip
+		{
+			struct iterator
+			{
+				using iterator_category = std::forward_iterator_tag;
+				using value_type = std::tuple<std::iter_value_t<std::ranges::iterator_t<T>>...>;
+				using reference = std::tuple<std::iter_reference_t<std::ranges::iterator_t<T>>...>;
+				using difference_type = std::ptrdiff_t;
+				using pointer = std::tuple<typename std::iterator_traits<std::ranges::iterator_t<T>>::pointer...>;
 
-                bool operator==(const iterator& other) const { return equal(std::index_sequence_for<Iterators...>{}, other); }
+				reference operator*()
+				{
+					return std::apply([](auto&... e) { return reference(*e...); }, data_);
+				}
 
-                bool operator!=(const iterator& other) const { return !equal(std::index_sequence_for<Iterators...>{}, other); }
+				iterator& operator++()
+				{
+					std::apply([](auto&... e) { ((++e), ...); }, data_);
+					return *this;
+				}
 
-                iterator& operator++()
-                {
-                    advance(std::index_sequence_for<Iterators...>{}, 1);
-                    return *this;
-                }
+				iterator operator++(int)
+				{
+					iterator temp = *this;
+					std::apply([](auto&... e) { ((e++), ...); }, data_);  // Post-increment
+					return temp;
+				}
 
-                iterator operator+(const std::size_t offset) const
-                {
-                    auto it = *this;
-                    it.advance(std::index_sequence_for<Iterators...>{}, offset);
-                    return it;
-                }
+				auto operator!=(const iterator& iter) const
+				{
+					return !detail::any_equals(data_, iter.data_, std::index_sequence_for<T...>{});
+				}
 
-                iterator operator+(const iterator& other) const
-                {
-                    auto it = *this;
-                    const auto distance = std::distance(it, other);
-                    it.advance(std::index_sequence_for<Iterators...>{}, distance);
-                    return it;
-                }
+				bool operator==(const iterator& iter) const
+				{
+					return detail::any_equals(data_, iter.data_, std::index_sequence_for<T...>{});
+				}
 
-                iterator& operator--()
-                {
-                    advance(std::index_sequence_for<Iterators...>{}, -1);
-                    return *this;
-                }
+				difference_type operator-(const iterator& other) const
+				{
+					return std::get<0>(data_) - std::get<0>(other.data_);
+				}
 
-                iterator operator-(const int offset) const
-                {
-                    auto it = *this;
-                    it.advance(std::index_sequence_for<Iterators...>{}, -offset);
-                    return it;
-                }
+				std::tuple<std::ranges::iterator_t<T>...> data_;
+			};
 
-                iterator operator-(const iterator& other) const
-                {
-                    auto iterator = *this;
-                    const auto distance = std::distance(other, iterator);
-                    iterator.advance(std::index_sequence_for<Iterators...>{}, -distance);
-                    return iterator;
-                }
+			zip(T &...args) : data(std::forward_as_tuple(std::forward<T>(args)...)) {}
 
-            private:
+			auto begin()
+			{
+				return iterator{ std::apply(
+					[]<typename... _Tp>(_Tp && ...e) { return std::make_tuple(std::begin(std::forward<_Tp>(e))...); }, data) };
+			}
 
-                template <size_t... I>
-                value_type dereference(std::index_sequence<I...>)
-                {
-                    return std::tie(*std::get<I>(data_)...);
-                }
+			auto end()
+			{
+				return iterator{ std::apply(
+					[]<typename... _Tp>(_Tp && ...e) { return std::make_tuple(std::end(std::forward<_Tp>(e))...); }, data) };
+			}
 
-                template <size_t... I>
-                bool equal(std::index_sequence<I...>, const iterator& other) const
-                {
-                    return ((std::get<I>(data_) == std::get<I>(other.data_)) || ...);
-                }
+			auto size() const
+			{
+				return std::apply([](auto&&... e) { return std::min({ std::ranges::size(e)... }); }, data);
+			}
 
-                template <std::size_t... I>
-                void advance(std::index_sequence<I...>, const int offset)
-                {
-                    ((std::advance(std::get<I>(data_), offset)), ...);
-                }
+			std::tuple<T &...> data;
+		};
 
-                
-                std::tuple<Iterators...> data_;
-            };
-        }
-        
-
-        /// Adapted from https://debashish-ghosh.medium.com/lets-iterate-together-fd7f5e49672b.
-        /// and https://github.com/andreiavrammsd/cpp-zip/blob/master/include/msd/zip.hpp zip() implementation.
-        template <typename... T>
-        struct zip
-        {
-            
-            using iterator = detail::iterator<typename std::conditional_t<std::is_const_v<T>, typename T::const_iterator, typename T::iterator>...>;
-            using const_iterator = detail::iterator<typename T::const_iterator...>;
-            using value_type = typename iterator::value_type;
-
-
-            /// Zip constructor taking a tuple of arguments.
-            explicit zip(T &...args) : data_{ args... } {}
-            iterator begin() const { return begin_impl<iterator>(std::index_sequence_for<T...>{}); }
-            iterator end() const { return end_impl<iterator>(std::index_sequence_for<T...>{}); }
-            const_iterator cbegin() const { return begin_impl<const_iterator>(std::index_sequence_for<T...>{}); }
-            const_iterator cend() const { return end_impl<const_iterator>(std::index_sequence_for<T...>{}); }
-            [[nodiscard]] std::size_t size() const { return size_impl(std::index_sequence_for<T...>{}); }
-            [[nodiscard]] bool empty() const { return begin() == end(); }
-            explicit operator bool() const { return !empty(); }
-            value_type front()
-            {
-                assert(!empty());
-                return *begin();
-            }
-            value_type front() const
-            {
-                assert(!empty());
-                return *begin();
-            }
-            value_type back()
-            {
-                assert(!empty());
-                return *std::prev(begin() + size());
-            }
-            value_type back() const
-            {
-                assert(!empty());
-                return *std::prev(begin() + size());
-            }
-            value_type operator[](const std::size_t offset) const
-            {
-                assert(offset < size());
-                return *std::next(begin(), offset);
-            }
-
-        private:
-            template <typename Iterator, std::size_t... I>
-            Iterator begin_impl(std::index_sequence<I...>) const
-            {
-                return Iterator{ std::get<I>(data_).begin()... };
-            }
-
-            template <typename Iterator, std::size_t... I>
-            Iterator end_impl(std::index_sequence<I...>) const
-            {
-                return std::next(Iterator{ std::get<I>(data_).begin()... }, size());
-            }
-
-            template <std::size_t... I>
-            std::size_t size_impl(std::index_sequence<I...>) const
-            {
-                return std::min({ std::distance(std::get<I>(data_).begin(), std::get<I>(data_).end())... });
-            }
-
-            std::tuple<T&...> data_;
-        };
-	
-    }
+	}
 }
