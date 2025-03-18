@@ -5,7 +5,7 @@ enable_testing()
 add_executable(compressed_image_benchmark ${MY_SOURCES})
 
 if(MSVC)
-    target_compile_options(compressed_image_benchmark PRIVATE /MP /utf-8)
+    target_compile_options(compressed_image_benchmark PRIVATE /MP /utf-8 /arch:AVX2 /O2)
 endif()
 target_link_libraries(compressed_image_benchmark PRIVATE compressed_image)
 target_link_libraries(compressed_image_benchmark PRIVATE benchmark::benchmark)

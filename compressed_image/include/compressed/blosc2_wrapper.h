@@ -257,8 +257,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			cparams.nthreads = nthreads;
 			cparams.schunk = schunk.get();
 			// Shuffle first, then bytedelta
-			cparams.filters[BLOSC2_MAX_FILTERS - 2] = BLOSC_SHUFFLE;
-			cparams.filters[BLOSC2_MAX_FILTERS - 1] = BLOSC_FILTER_BYTEDELTA;
+			//cparams.filters[BLOSC2_MAX_FILTERS - 2] = BLOSC_SHUFFLE;
+			//cparams.filters[BLOSC2_MAX_FILTERS - 1] = BLOSC_FILTER_BYTEDELTA;
 			// c-blosc2 documentation mentions that for the BYTEDELTA filter we need to ensure 
 			// we set the typesize in the filters_meta. In the tests though its says keeping it 
 			// at 0 (which is default) will set it the schunks typesize which is what we want.

@@ -149,17 +149,16 @@ void bench_image_iteration_compressed_zip(benchmark::State& state, const std::fi
 	auto image = compressed::image<T>::read(image_path);
 	bench_util::run_with_memory_sampling(state, [&]()
 		{
-			auto [channel_r, channel_g, channel_b, channel_a] = image.channels_ref(0, 1, 2, 3);
-			for (auto [chunk_r, chunk_g, chunk_b, chunk_a] : compressed::ranges::zip(channel_r, channel_g, channel_b, channel_a))
+			auto [channel_r, channel_g, channel_b] = image.channels_ref(0, 1, 2);
+			for (auto [chunk_r, chunk_g, chunk_b] : compressed::ranges::zip(channel_r, channel_g, channel_b))
 			{
-				auto gen = compressed::ranges::zip(chunk_r, chunk_g, chunk_b, chunk_a);
+				auto gen = compressed::ranges::zip(chunk_r, chunk_g, chunk_b);
 				std::for_each(std::execution::par_unseq, gen.begin(), gen.end(), [](auto pixels)
 					{
-						auto& [r, g, b, a] = pixels;
+						auto& [r, g, b] = pixels;
 						r = static_cast<T>(25);
 						g = static_cast<T>(25);
 						b = static_cast<T>(25);
-						a = static_cast<T>(25);
 					});
 			}
 			benchmark::ClobberMemory();
@@ -198,14 +197,14 @@ auto main(int argc, char** argv) -> int
 	for (const auto& image : get_images())
 	{
 		// Read benchmarks
-		benchmark::RegisterBenchmark(std::format("Read with OpenImageIO: {}", image.filename().string()), &bench_image_read_oiio<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
-		benchmark::RegisterBenchmark(std::format("Read with compressed::image: {}", image.filename().string()), &bench_image_read_compressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
+		benchmark::RegisterBenchmark(std::format("Read with OpenImageIO: {}", image.filename().string()), &bench_image_read_oiio<half>, image)->Unit(benchmark::kMillisecond)->Iterations(1);
+		benchmark::RegisterBenchmark(std::format("Read with compressed::image: {}", image.filename().string()), &bench_image_read_compressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(1);
 
 		// Iteration benchmarks
-		benchmark::RegisterBenchmark(std::format("Modify image normal: {}", image.filename().string()), &bench_image_iteration_normal<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
-		benchmark::RegisterBenchmark(std::format("Modify image compressed: {}", image.filename().string()), &bench_image_iteration_compressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
-		benchmark::RegisterBenchmark(std::format("Modify image compressed zip rgba: {}", image.filename().string()), &bench_image_iteration_compressed_zip<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
-		benchmark::RegisterBenchmark(std::format("Modify image get decompressed: {}", image.filename().string()), &bench_image_iteration_compressed_get_decompressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
+		benchmark::RegisterBenchmark(std::format("Modify image normal: {}", image.filename().string()), &bench_image_iteration_normal<half>, image)->Unit(benchmark::kMillisecond)->Iterations(1);
+		benchmark::RegisterBenchmark(std::format("Modify image compressed: {}", image.filename().string()), &bench_image_iteration_compressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(1);
+		benchmark::RegisterBenchmark(std::format("Modify image compressed zip rgb: {}", image.filename().string()), &bench_image_iteration_compressed_zip<half>, image)->Unit(benchmark::kMillisecond)->Iterations(1);
+		benchmark::RegisterBenchmark(std::format("Modify image get decompressed: {}", image.filename().string()), &bench_image_iteration_compressed_get_decompressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(1);
 	}
 
 	benchmark::Initialize(&argc, argv);

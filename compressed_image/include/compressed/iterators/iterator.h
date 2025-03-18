@@ -103,10 +103,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			// Compress the previously decompressed chunk if it has been modified.
-			std::optional<std::future<void>> compression_future = std::nullopt;
 			if (m_DecompressionBufferWasRefitted && m_ChunkIndex != 0)
 			{
-				compression_future = compress_and_update_chunk_async(m_CompressionContext, m_Schunk, m_ChunkIndex - 1);
+				compress_chunk(m_CompressionContext);
+				update_chunk(m_Schunk, m_ChunkIndex - 1);
 			}
 
 			// In most cases m_Decompressed.fitted_data should be identical to m_Decompressed.data. However, this is not true
@@ -122,12 +122,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 						sizeof(T), decompression_buffer_byte_size()
 					)
 				);
-			}
-
-			// If we decompressed before we block until the future is ready.
-			if (compression_future && compression_future.value().valid())
-			{
-				compression_future.value().wait();
 			}
 
 			std::span<T> item_span(reinterpret_cast<T*>(m_DecompressionBuffer.data()), m_DecompressionBufferSize / sizeof(T));
@@ -248,27 +242,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			m_DecompressionBufferSize = static_cast<size_t>(decompressed_size);
 			m_DecompressionBufferWasRefitted = true;
-		}
-
-		std::future<void> compress_and_update_chunk_async(blosc2::context_raw_ptr compression_context_ptr, blosc2::schunk_raw_ptr schunk, size_t chunk_index)
-		{
-			auto decompression_buffer_copy = std::vector<std::byte>(m_DecompressionBufferSize);
-			std::memcpy(decompression_buffer_copy.data(), m_DecompressionBuffer.data(), decompression_buffer_copy.size());
-			auto decompression_span = std::span<T>(reinterpret_cast<T*>(decompression_buffer_copy.data()), decompression_buffer_copy.size() / sizeof(T));
-
-			return std::async(std::launch::async, [&]()
-				{
-					_COMPRESSED_PROFILE_SCOPE("Async compression");
-					auto compressed_size = blosc2::compress(compression_context_ptr, decompression_span, m_CompressionBuffer);
-					m_CompressionBufferSize = compressed_size;
-					m_CompressionBufferWasRefitted = true;
-
-					int res = blosc2_schunk_update_chunk(schunk, chunk_index, reinterpret_cast<uint8_t*>(m_CompressionBuffer.data()), true);
-					if (res < 0)
-					{
-						throw std::runtime_error(std::format("Error code {} while updating the blosc2 chunk in the super-chunk", res));
-					}
-				});
 		}
 
 		/// Compress a chunk from the decompressed view into the compressed view
