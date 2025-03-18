@@ -52,6 +52,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
 	struct channel : public std::ranges::view_interface<channel<T, BlockSize, ChunkSize>>
 	{
+		using iterator = channel_iterator<T, ChunkSize>;
+		using const_iterator = channel_iterator<const T, ChunkSize>;
+
 		static constexpr size_t block_size = BlockSize;
 		static constexpr size_t chunk_size = ChunkSize;
 
@@ -148,17 +151,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Returns an iterator pointing to the beginning of the compressed data.
 		///
 		/// \return An iterator to the beginning of the compressed data.
-		iterator<T, ChunkSize> begin()
+		iterator begin()
 		{
-			return iterator<T, ChunkSize>(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), 0, m_Width, m_Height);
+			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), 0, m_Width, m_Height);
 		}
 
 		/// Returns an iterator pointing to the end of the compressed data.
 		///
 		/// \return An iterator to the end of the compressed data.
-		iterator<T, ChunkSize> end()
+		iterator end()
 		{
-			return iterator<T, ChunkSize>(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks, m_Width, m_Height);
+			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks, m_Width, m_Height);
 		}
 
 		/// Retrieve a view to the compression context. In most cases users will not have to modify this.

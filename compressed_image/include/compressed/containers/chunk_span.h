@@ -39,6 +39,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T, size_t ChunkSize = s_default_chunksize>
 		struct chunk_span : public std::ranges::view_interface<chunk_span<T, ChunkSize>>
 		{
+			using iterator = std::span<T>::iterator;
+			using const_iterator = std::span<const T>::iterator; // std::span<T>::const_iterator is C++23 only
+
 			/// The size of each chunk in bytes.
 			static constexpr size_t chunk_size = ChunkSize;
 

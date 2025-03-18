@@ -16,7 +16,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	// Image iterator, cannot be used in parallel as it iterates the chunks. Dereferencing it gives a span view over the current decompressed 
 	// context.
 	template <typename T, size_t ChunkSize = s_default_chunksize>
-	struct iterator
+	struct channel_iterator
 	{
 		static constexpr size_t chunk_size = ChunkSize;
 
@@ -27,7 +27,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		using pointer = value_type*;
 		using reference = value_type&;
 
-		iterator(
+		channel_iterator() = default;
+
+		channel_iterator(
 			blosc2::schunk_raw_ptr schunk,
 			blosc2::context_raw_ptr compression_context,
 			blosc2::context_raw_ptr decompression_context,
@@ -70,7 +72,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 		}
 
-		~iterator()
+		~channel_iterator()
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
 			// We need to ensure that the last chunk also gets compressed on destruction
@@ -101,9 +103,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			// Compress the previously decompressed chunk if it has been modified.
+			std::optional<std::future<void>> compression_future = std::nullopt;
 			if (m_DecompressionBufferWasRefitted && m_ChunkIndex != 0)
 			{
-				compress_and_update_chunk_async(m_CompressionContext, m_Schunk, m_ChunkIndex - 1);
+				compression_future = compress_and_update_chunk_async(m_CompressionContext, m_Schunk, m_ChunkIndex - 1);
 			}
 
 			// In most cases m_Decompressed.fitted_data should be identical to m_Decompressed.data. However, this is not true
@@ -122,9 +125,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			// If we decompressed before we block until the future is ready.
-			if (m_CompressionFuture.valid())
+			if (compression_future && compression_future.value().valid())
 			{
-				m_CompressionFuture.wait();
+				compression_future.value().wait();
 			}
 
 			std::span<T> item_span(reinterpret_cast<T*>(m_DecompressionBuffer.data()), m_DecompressionBufferSize / sizeof(T));
@@ -132,7 +135,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		// Pre-increment operator: move to the next chunk
-		iterator& operator++()
+		channel_iterator& operator++()
 		{
 			++m_ChunkIndex;
 			if (m_ChunkIndex > m_Schunk->nchunks)
@@ -142,19 +145,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return *this;
 		}
 
-		iterator& operator++(int)
+		channel_iterator& operator++(int)
 		{
-			iterator temp = *this;
+			channel_iterator temp = *this;
 			++(*this);
 			return temp;
 		}
 
-		bool operator==(const iterator& other) const noexcept
+		bool operator==(const channel_iterator& other) const noexcept
 		{
 			return m_ChunkIndex == other.m_ChunkIndex && m_Schunk == other.m_Schunk;
 		}
 
-		bool operator!=(const iterator& other) const noexcept
+		bool operator!=(const channel_iterator& other) const noexcept
 		{
 			return m_ChunkIndex != other.m_ChunkIndex || m_Schunk != other.m_Schunk;
 		}
@@ -182,8 +185,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		size_t	m_ChunkIndex = 0;
 		size_t  m_Width = 0;
 		size_t  m_Height = 0;
-
-		std::future<void> m_CompressionFuture{};
 
 	private:
 
@@ -249,13 +250,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_DecompressionBufferWasRefitted = true;
 		}
 
-		void compress_and_update_chunk_async(blosc2::context_raw_ptr compression_context_ptr, blosc2::schunk_raw_ptr schunk, size_t chunk_index)
+		std::future<void> compress_and_update_chunk_async(blosc2::context_raw_ptr compression_context_ptr, blosc2::schunk_raw_ptr schunk, size_t chunk_index)
 		{
 			auto decompression_buffer_copy = std::vector<std::byte>(m_DecompressionBufferSize);
 			std::memcpy(decompression_buffer_copy.data(), m_DecompressionBuffer.data(), decompression_buffer_copy.size());
 			auto decompression_span = std::span<T>(reinterpret_cast<T*>(decompression_buffer_copy.data()), decompression_buffer_copy.size() / sizeof(T));
 
-			m_CompressionFuture = std::async(std::launch::async, [&]()
+			return std::async(std::launch::async, [&]()
 				{
 					_COMPRESSED_PROFILE_SCOPE("Async compression");
 					auto compressed_size = blosc2::compress(compression_context_ptr, decompression_span, m_CompressionBuffer);
