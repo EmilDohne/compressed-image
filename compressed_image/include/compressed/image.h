@@ -228,10 +228,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			std::vector<T> interleaved_buffer(chunk_size_all / sizeof(T));
 			std::vector<std::vector<T>> deinterleaved_buffer(spec.nchannels);
-			for (auto& channel : deinterleaved_buffer)
-			{
-				channel.resize(ChunkSize / sizeof(T));
-			}
+			std::for_each(std::execution::par_unseq, deinterleaved_buffer.begin(), deinterleaved_buffer.end(), [](auto& buffer)
+				{
+					buffer.resize(ChunkSize / sizeof(T));
+				});
 
 			// Create and initialize all of our schunks and compression contexts.
 			std::vector<blosc2::schunk_ptr> schunks;
@@ -240,21 +240,26 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				schunks.push_back(blosc2::create_default_schunk());
 				contexts.push_back(blosc2::create_compression_context<T, BlockSize>(
-					schunks.back(), 
-					std::thread::hardware_concurrency(),
+					schunks.back(),
+					std::thread::hardware_concurrency() / 4,
 					compression_codec,
 					compression_level
 				));
 			}
 
 			// Buffer to hold a single chunk. We will reuse this quite frequently
-			std::vector<std::byte> chunk_buffer(blosc2::min_compressed_size<ChunkSize>());
+			std::vector<std::vector<std::byte>> chunk_buffers(spec.nchannels);
+			std::for_each(std::execution::par_unseq, chunk_buffers.begin(), chunk_buffers.end(), [](auto& buffer)
+				{
+					buffer = std::vector<std::byte>(blosc2::min_compressed_size<ChunkSize>());
+				});
 			size_t y = 0;
 
 			// Iterate all scanlines and read as many scanlines as possible in one go, compressing them on the fly 
 			// into all of the super-chunks. 
 			while (y < spec.height)
 			{
+				_COMPRESSED_PROFILE_SCOPE("Read Scanlines and compress");
 				size_t scanlines_to_read = std::min(scanlines_per_chunk, spec.height - y);
 				input_ptr->read_scanlines(
 					0, // subimage
@@ -275,19 +280,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				image_algo::deinterleave(std::span<const T>(interleaved_buffer.begin(), interleaved_buffer.end()), deinterleaved_buffer);
 
 				// Now start compressing the chunks and appending them into the super-chunks.
-				for (auto channel_idx : std::views::iota(0, spec.nchannels))
-				{
-					// How many elements we actually read per buffer
-					size_t read_elements = scanlines_to_read * spec.width;
+				auto gen = std::views::iota(0, spec.nchannels);
+				std::for_each(std::execution::par_unseq, gen.begin(), gen.end(), [&](size_t channel_idx)
+					{
+						// How many elements we actually read per buffer
+						size_t read_elements = scanlines_to_read * spec.width;
 
-					// Increment the schunks internal count. I think this could go into append_chunk? but blosc does
-					// it like this.
-					schunks[channel_idx]->current_nchunk = schunks[channel_idx]->nchunks;
+						// Increment the schunks internal count. I think this could go into append_chunk? but blosc does
+						// it like this.
+						schunks[channel_idx]->current_nchunk = schunks[channel_idx]->nchunks;
 
-					auto deinterleaved_fitted = std::span<T>(deinterleaved_buffer[channel_idx].data(), read_elements);
-					blosc2::compress<T>(contexts[channel_idx], deinterleaved_fitted, chunk_buffer);
-					blosc2::append_chunk(schunks[channel_idx], chunk_buffer);
-				}
+						auto deinterleaved_fitted = std::span<T>(deinterleaved_buffer[channel_idx].data(), read_elements);
+						blosc2::compress<T>(contexts[channel_idx], deinterleaved_fitted, chunk_buffers[channel_idx]);
+						blosc2::append_chunk(schunks[channel_idx], chunk_buffers[channel_idx]);
+					});
 
 				y += scanlines_to_read;
 			}

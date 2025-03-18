@@ -3,7 +3,9 @@
 #include <ranges>
 #include <vector>
 #include <span>
+#include <future>
 
+#include "compressed/detail/scoped_timer.h"
 #include "compressed/macros.h"
 #include "compressed/blosc2_wrapper.h"
 #include "compressed/containers/chunk_span.h"
@@ -70,6 +72,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 		~iterator()
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			// We need to ensure that the last chunk also gets compressed on destruction
 			// because of e.g. scope exit
 			if (m_DecompressionBufferWasRefitted)
@@ -91,6 +94,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// chunk. value_type is a view over the current buffers. Iterator going out of scope while value_type is accessed is UB.
 		value_type operator*()
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			if (!valid())
 			{
 				throw std::runtime_error("Invalid Iterator struct encountered, cannot dereference item");
@@ -99,8 +103,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// Compress the previously decompressed chunk if it has been modified.
 			if (m_DecompressionBufferWasRefitted && m_ChunkIndex != 0)
 			{
-				compress_chunk(m_CompressionContext);
-				update_chunk(m_Schunk, m_ChunkIndex - 1);
+				compress_and_update_chunk_async(m_CompressionContext, m_Schunk, m_ChunkIndex - 1);
 			}
 
 			// In most cases m_Decompressed.fitted_data should be identical to m_Decompressed.data. However, this is not true
@@ -117,6 +120,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					)
 				);
 			}
+
+			// If we decompressed before we block until the future is ready.
+			if (m_CompressionFuture.valid())
+			{
+				m_CompressionFuture.wait();
+			}
+
 			std::span<T> item_span(reinterpret_cast<T*>(m_DecompressionBuffer.data()), m_DecompressionBufferSize / sizeof(T));
 			return container::chunk_span<T, ChunkSize>(item_span, m_Width, m_Height, m_ChunkIndex);
 		}
@@ -173,6 +183,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		size_t  m_Width = 0;
 		size_t  m_Height = 0;
 
+		std::future<void> m_CompressionFuture{};
+
 	private:
 
 		size_t compression_buffer_byte_size() const noexcept
@@ -218,6 +230,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Decompress a chunk using the given context and chunk pointer. Decompressing into the buffer
 		void decompress_chunk(blosc2::context_raw_ptr decompression_context_ptr)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			auto chunk_span = std::span<std::byte>(reinterpret_cast<std::byte*>(m_Schunk->data[m_ChunkIndex]), 1);
 			auto buffer_span = std::span<T>(reinterpret_cast<T*>(m_DecompressionBuffer.data()), m_DecompressionBufferSize / sizeof(T));
 			auto decompressed_size = blosc2::decompress(decompression_context_ptr, buffer_span, chunk_span);
@@ -236,9 +249,31 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_DecompressionBufferWasRefitted = true;
 		}
 
+		void compress_and_update_chunk_async(blosc2::context_raw_ptr compression_context_ptr, blosc2::schunk_raw_ptr schunk, size_t chunk_index)
+		{
+			auto decompression_buffer_copy = std::vector<std::byte>(m_DecompressionBufferSize);
+			std::memcpy(decompression_buffer_copy.data(), m_DecompressionBuffer.data(), decompression_buffer_copy.size());
+			auto decompression_span = std::span<T>(reinterpret_cast<T*>(decompression_buffer_copy.data()), decompression_buffer_copy.size() / sizeof(T));
+
+			m_CompressionFuture = std::async(std::launch::async, [&]()
+				{
+					_COMPRESSED_PROFILE_SCOPE("Async compression");
+					auto compressed_size = blosc2::compress(compression_context_ptr, decompression_span, m_CompressionBuffer);
+					m_CompressionBufferSize = compressed_size;
+					m_CompressionBufferWasRefitted = true;
+
+					int res = blosc2_schunk_update_chunk(schunk, chunk_index, reinterpret_cast<uint8_t*>(m_CompressionBuffer.data()), true);
+					if (res < 0)
+					{
+						throw std::runtime_error(std::format("Error code {} while updating the blosc2 chunk in the super-chunk", res));
+					}
+				});
+		}
+
 		/// Compress a chunk from the decompressed view into the compressed view
 		void compress_chunk(blosc2::context_raw_ptr compression_context_ptr)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			std::span<T> fitted = { reinterpret_cast<T*>(m_DecompressionBuffer.data()), m_DecompressionBufferSize / sizeof(T) };
 			auto compressed_size = blosc2::compress(compression_context_ptr, fitted, m_CompressionBuffer);
 			
@@ -249,6 +284,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Update and replace the chunk inside of the superchunk at the given index.
 		void update_chunk(blosc2::schunk_raw_ptr schunk, size_t chunk_index)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			int res = blosc2_schunk_update_chunk(schunk, chunk_index, reinterpret_cast<uint8_t*>(m_CompressionBuffer.data()), true);
 			if (res < 0)
 			{

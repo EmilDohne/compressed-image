@@ -8,8 +8,13 @@
 #include <OpenImageIO/imageio.h>
 #include <OpenImageIO/half.h>
 
+// enable profiling code
+#define _COMPRESSED_PROFILE 1
+
 #include <compressed/enums.h>
 #include <compressed/image.h>
+#include <compressed/ranges.h>
+#include <compressed/detail/scoped_timer.h>
 
 #include "memory_sampling.h"
 
@@ -125,9 +130,9 @@ void bench_image_iteration_compressed(benchmark::State& state, const std::filesy
 		{
 			for (auto& channel : image.channels())
 			{
-				for (auto chunk : channel)
+				for (auto chunk_span : channel)
 				{
-					std::for_each(std::execution::par_unseq, chunk.begin(), chunk.end(), [](auto& pixel)
+					std::for_each(std::execution::par_unseq, chunk_span.begin(), chunk_span.end(), [](auto& pixel)
 						{
 							pixel = static_cast<T>(25);
 						});
@@ -136,6 +141,31 @@ void bench_image_iteration_compressed(benchmark::State& state, const std::filesy
 			benchmark::ClobberMemory();
 		});
 }
+
+
+template <typename T>
+void bench_image_iteration_compressed_zip(benchmark::State& state, const std::filesystem::path& image_path)
+{
+	auto image = compressed::image<T>::read(image_path);
+	bench_util::run_with_memory_sampling(state, [&]()
+		{
+			auto [channel_r, channel_g, channel_b, channel_a] = image.channels_ref(0, 1, 2, 3);
+			for (auto [chunk_r, chunk_g, chunk_b, chunk_a] : compressed::ranges::zip(channel_r, channel_g, channel_b, channel_a))
+			{
+				auto gen = compressed::ranges::zip(chunk_r, chunk_g, chunk_b, chunk_a);
+				std::for_each(std::execution::par_unseq, gen.begin(), gen.end(), [](auto pixels)
+					{
+						auto& [r, g, b, a] = pixels;
+						r = static_cast<T>(25);
+						g = static_cast<T>(25);
+						b = static_cast<T>(25);
+						a = static_cast<T>(25);
+					});
+			}
+			benchmark::ClobberMemory();
+		});
+}
+
 
 
 template <typename T>
@@ -160,6 +190,11 @@ void bench_image_iteration_compressed_get_decompressed(benchmark::State& state, 
 
 auto main(int argc, char** argv) -> int
 {
+
+
+
+	compressed::detail::Instrumentor::Get().BeginSession("Benchmarks");
+
 	for (const auto& image : get_images())
 	{
 		// Read benchmarks
@@ -169,9 +204,12 @@ auto main(int argc, char** argv) -> int
 		// Iteration benchmarks
 		benchmark::RegisterBenchmark(std::format("Modify image normal: {}", image.filename().string()), &bench_image_iteration_normal<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
 		benchmark::RegisterBenchmark(std::format("Modify image compressed: {}", image.filename().string()), &bench_image_iteration_compressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
+		benchmark::RegisterBenchmark(std::format("Modify image compressed zip rgba: {}", image.filename().string()), &bench_image_iteration_compressed_zip<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
 		benchmark::RegisterBenchmark(std::format("Modify image get decompressed: {}", image.filename().string()), &bench_image_iteration_compressed_get_decompressed<half>, image)->Unit(benchmark::kMillisecond)->Iterations(5);
 	}
 
 	benchmark::Initialize(&argc, argv);
 	benchmark::RunSpecifiedBenchmarks();
+
+	compressed::detail::Instrumentor::Get().EndSession();
 }

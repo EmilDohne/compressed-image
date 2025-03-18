@@ -1,6 +1,7 @@
 #pragma once
 
 #include "macros.h"
+#include "detail/scoped_timer.h"
 
 #include <algorithm>
 #include <span>
@@ -31,6 +32,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		void interleave(std::span<T> buffer, const std::vector<std::span<const T>>& spans)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			if (spans.empty())
 			{
 				throw std::invalid_argument("Interleave: No spans provided for interleaving.");
@@ -80,6 +82,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		void deinterleave(std::span<const T> interleaved, std::vector<std::span<T>>& channel_spans)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			// Ensure all spans have the same size
 			std::size_t size = channel_spans.front().size();
 			if (!std::all_of(channel_spans.begin(), channel_spans.end(), [size](const std::span<T>& span) { return span.size() == size; }))

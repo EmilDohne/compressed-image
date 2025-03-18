@@ -4,8 +4,11 @@
 
 #include "macros.h"
 #include "enums.h"
+#include "detail/scoped_timer.h"
 
 #include "blosc2.h"
+#include "blosc2/blosc2-common.h"
+#include "blosc2/blosc2-stdio.h"
 #include "blosc2/filters-registry.h"
 
 
@@ -14,6 +17,23 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 	namespace blosc2
 	{
+
+		namespace detail
+		{
+			static const inline bool g_filters_registered = false;
+
+			/// Initialize filters in c-blosc2. Since we don't have an explicit entry point this needs to be checked on every call to compress and decompress.
+			/// May be a no-op if detail::g_filters_registered is true.
+			inline void init_filters()
+			{
+				if (!detail::g_filters_registered)
+				{
+					register_filters();
+				}
+			}
+
+		}
+
 		// Custom deleter for blosc2 structs for use in a smart pointer
 		template <typename T>
 		struct deleter {};
@@ -45,6 +65,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		typedef blosc2_context*												context_raw_ptr;
 
 
+		
 		/// Maps a codec enum into its blosc2 representation.
 		///
 		/// \param compcode the compression codec to get
@@ -106,6 +127,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		size_t compress(context_raw_ptr context, std::span<T> data, std::span<std::byte> chunk)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
+			detail::init_filters();
 			const auto cbytes = blosc2_compress_ctx(
 				context,
 				static_cast<const void*>(data.data()),
@@ -155,6 +178,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		size_t decompress(context_raw_ptr context, std::span<T> buffer, std::span<std::byte> chunk)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
+			detail::init_filters();
 			int decompressed_size = blosc2_decompress_ctx(
 				context,
 				static_cast<void*>(chunk.data()),
@@ -192,6 +217,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// size since c-blosc will read the size from its header bytes.
 		inline size_t append_chunk(schunk_ptr& schunk, std::span<std::byte> chunk)
 		{
+			detail::init_filters();
 			// We don't expose the copy parameter as internally in c-blosc if the chunk was compressed at all (i.e. compressed size < 
 			// uncompressed size) the chunk gets realloc'd anyways effectively copying it.
 			auto nchunks = blosc2_schunk_append_chunk(
@@ -211,6 +237,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Create a default schunk with BLOSC2_CPARAMS_DEFAULTS and BLOSC2_DPARAMS_DEFAULTS
 		inline blosc2::schunk_ptr create_default_schunk()
 		{
+			detail::init_filters();
 			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
 			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
 			blosc2_storage storage = { .cparams = &cparams, .dparams = &dparams };
@@ -221,6 +248,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T, size_t BlockSize>
 		blosc2_cparams create_blosc2_cparams(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level)
 		{
+			detail::init_filters();
 			blosc2_cparams cparams = BLOSC2_CPARAMS_DEFAULTS;
 			cparams.blocksize = BlockSize;
 			cparams.typesize = sizeof(T);
@@ -229,8 +257,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			cparams.nthreads = nthreads;
 			cparams.schunk = schunk.get();
 			// Shuffle first, then bytedelta
-			// cparams.filters[BLOSC2_MAX_FILTERS - 2] = BLOSC_SHUFFLE;
-			// cparams.filters[BLOSC2_MAX_FILTERS - 1] = BLOSC_FILTER_BYTEDELTA;
+			cparams.filters[BLOSC2_MAX_FILTERS - 2] = BLOSC_SHUFFLE;
+			cparams.filters[BLOSC2_MAX_FILTERS - 1] = BLOSC_FILTER_BYTEDELTA;
 			// c-blosc2 documentation mentions that for the BYTEDELTA filter we need to ensure 
 			// we set the typesize in the filters_meta. In the tests though its says keeping it 
 			// at 0 (which is default) will set it the schunks typesize which is what we want.
@@ -243,6 +271,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T, size_t BlockSize>
 		blosc2::context_ptr create_compression_context(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level)
 		{
+			detail::init_filters();
 			auto cparams = create_blosc2_cparams<T, BlockSize>(schunk, nthreads, codec, compression_level);
 			return blosc2::context_ptr(blosc2_create_cctx(cparams));
 		}
@@ -251,6 +280,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Create a blosc2 decompression context with the given number of threads.
 		inline blosc2::context_ptr create_decompression_context(schunk_ptr& schunk, size_t nthreads)
 		{
+			detail::init_filters();
 			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
 			dparams.schunk = schunk.get();
 			dparams.nthreads = nthreads;
