@@ -85,6 +85,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				return static_cast<uint8_t>(BLOSC_LZ4HC);
 			}
+			else if (compcode == enums::codec::zstd)
+			{
+				return static_cast<uint8_t>(BLOSC_ZSTD);
+			}
 			return BLOSC_BLOSCLZ;
 		}
 
@@ -106,6 +110,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			else if (compcode == BLOSC_LZ4HC)
 			{
 				return enums::codec::lz4hc;
+			}
+			else if (compcode == BLOSC_ZSTD)
+			{
+				return enums::codec::zstd;
 			}
 			return enums::codec::blosclz;
 		}
@@ -256,12 +264,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			cparams.clevel = compression_level;
 			cparams.nthreads = nthreads;
 			cparams.schunk = schunk.get();
-			// Shuffle first, then bytedelta
-			//cparams.filters[BLOSC2_MAX_FILTERS - 2] = BLOSC_SHUFFLE;
-			//cparams.filters[BLOSC2_MAX_FILTERS - 1] = BLOSC_FILTER_BYTEDELTA;
-			// c-blosc2 documentation mentions that for the BYTEDELTA filter we need to ensure 
-			// we set the typesize in the filters_meta. In the tests though its says keeping it 
-			// at 0 (which is default) will set it the schunks typesize which is what we want.
 			cparams.compcode = codec_to_blosc2(codec);
 
 			return cparams;

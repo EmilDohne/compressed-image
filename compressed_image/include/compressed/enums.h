@@ -20,6 +20,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			blosclz, ///< BloscLZ: Lightweight, fast compression optimized for high-speed decompression.
 			lz4,     ///< LZ4: Extremely fast compression and decompression with moderate compression ratio.
 			lz4hc,   ///< LZ4HC: High-compression variant of LZ4 with slower compression but similar fast decompression.
+			zstd,	 ///
 		};
 
 
