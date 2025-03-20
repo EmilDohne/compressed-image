@@ -26,29 +26,29 @@ jobs:
              os: ubuntu-24.04
              compiler: gcc-13
              compilercxx: g++-13
-             cflags: "-fsanitize=address,leak,undefined"
-             cxxflags: "-fsanitize=address,leak,undefined"
+             cflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
+             cxxflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
              multiline-separator: \
            - name: Ubuntu Clang
              os: ubuntu-24.04
              compiler: clang
              compilercxx: clang++
-             cflags: "-fsanitize=address,leak,undefined"
-             cxxflags: "-fsanitize=address,leak,undefined"
+             cflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
+             cxxflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
              multiline-separator: \
            - name: Windows MSVC
              os: windows-latest
              compiler: msvc
              compilercxx: msvc
-             cflags: ""
-             cxxflags: ""
+             cflags: "/W4 /WX /w44062 /w44464 /w45264"
+             cxxflags: "/W4 /WX /w44062 /w44464 /w45264"
              multiline-separator: "`"
            - name: MacOS ARM GCC
              os: macos-latest
              compiler: gcc-13
              compilercxx: g++-13
-             cflags: ""
-             cxxflags: ""
+             cflags: "-Wall -Werror -Wextra"
+             cxxflags: "-Wall -Werror -Wextra"
              multiline-separator: \
 
     steps:
@@ -101,11 +101,7 @@ jobs:
       if: runner.os == 'Windows'
       working-directory: ${{github.workspace}}/build/test
       run: xcopy ".\\${{env.BUILD_TYPE}}\\images" ".\\images" /E /I
-
-
-    - name: Something
-      working-directory: ${{github.workspace}}
-      run: tree
+      
 
     - name: Test  ${{ matrix.os }}-${{ matrix.compilercxx }}
       working-directory: ${{github.workspace}}/build/test
