@@ -13,9 +13,9 @@ target_link_libraries(compressed_image_benchmark PRIVATE benchmark::benchmark)
 
 
 # Copy the images/ folder to the build dir to run the tests
-add_custom_command(TARGET compressed_image_benchmark POST_BUILD
-                   COMMAND ${CMAKE_COMMAND} -E copy_directory
-                       ${CMAKE_CURRENT_SOURCE_DIR}/images/ $<TARGET_FILE_DIR:compressed_image_benchmark>/images)
-add_custom_command(TARGET compressed_image_benchmark POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E echo 
-                    "Finished copying test files to output directory $<TARGET_FILE_DIR:compressed_image_benchmark>/images")
+# add_custom_command(TARGET compressed_image_benchmark POST_BUILD
+#                    COMMAND ${CMAKE_COMMAND} -E copy_directory
+#                        ${CMAKE_CURRENT_SOURCE_DIR}/images/ $<TARGET_FILE_DIR:compressed_image_benchmark>/images)
+# add_custom_command(TARGET compressed_image_benchmark POST_BUILD
+#                     COMMAND ${CMAKE_COMMAND} -E echo 
+#                     "Finished copying test files to output directory $<TARGET_FILE_DIR:compressed_image_benchmark>/images")
