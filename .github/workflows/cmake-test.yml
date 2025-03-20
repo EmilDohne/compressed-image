@@ -99,9 +99,9 @@ jobs:
     # for the copied test files
     - name: Copy Testfiles on Windows
       if: runner.os == 'Windows'
-      working-directory: ${{github.workspace}}/build/CompressedImage
+      working-directory: ${{github.workspace}}/build/test
       run: xcopy ".\\${{env.BUILD_TYPE}}\\images" ".\\images" /E /I
 
     - name: Test  ${{ matrix.os }}-${{ matrix.compilercxx }}
-      working-directory: ${{github.workspace}}/build/CompressedImage
+      working-directory: ${{github.workspace}}/build/test
       run: ctest -C ${{env.BUILD_TYPE}} --extra-verbose --stop-on-failure --output-on-failure
