@@ -102,6 +102,11 @@ jobs:
       working-directory: ${{github.workspace}}/build/test
       run: xcopy ".\\${{env.BUILD_TYPE}}\\images" ".\\images" /E /I
 
+
+    - name: Something
+      working-directory: ${{github.workspace}}
+      run: tree
+
     - name: Test  ${{ matrix.os }}-${{ matrix.compilercxx }}
       working-directory: ${{github.workspace}}/build/test
       run: ctest -C ${{env.BUILD_TYPE}} --extra-verbose --stop-on-failure --output-on-failure
