@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Macros.h"
+#include "macros.h"
 
 #ifdef COMPRESSED_IMAGE_OIIO_AVAILABLE
 #include <OpenImageIO/imageio.h>
