@@ -1,4 +1,4 @@
-name: Build
+name: Test with asan/leaksan/ubsan
 
 on:
   workflow_dispatch:
