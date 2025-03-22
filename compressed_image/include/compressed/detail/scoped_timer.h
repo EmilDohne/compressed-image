@@ -21,16 +21,6 @@
 #include <mutex>
 #include <thread>
 
-
-#pragma warning (push)
-#pragma warning (disable : 4117)
-// Alias __FUNCSIG__ for non Windows platforms as well
-#ifdef __FUNCSIG__
-#define __FUNCSIG__ __PRETTY_FUNCTION__
-#endif
-#pragma warning (pop)
-
-
 #ifdef _COMPRESSED_PROFILE
 #define _COMPRESSED_PROFILE_SCOPE(name) NAMESPACE_COMPRESSED_IMAGE::detail::InstrumentationTimer timer##__LINE__(name)
 #define _COMPRESSED_PROFILE_FUNCTION()  NAMESPACE_COMPRESSED_IMAGE::detail::InstrumentationTimer timer##__FUNCTION__##__LINE__(__FUNCTION__)
