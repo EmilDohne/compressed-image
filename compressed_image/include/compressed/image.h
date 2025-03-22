@@ -294,7 +294,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					schunks[channel_idx]->current_nchunk = schunks[channel_idx]->nchunks;
 
 					auto deinterleaved_fitted = std::span<T>(deinterleaved_buffer[channel_idx].data(), read_elements);
-					std::cout << deinterleaved_fitted.size() << std::endl;
 					blosc2::compress<T>(contexts[channel_idx], deinterleaved_fitted, chunk_buffer);
 					blosc2::append_chunk(schunks[channel_idx], chunk_buffer);
 				}
