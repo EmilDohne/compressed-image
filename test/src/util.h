@@ -36,7 +36,7 @@ namespace test_util
 		const OIIO::ImageSpec& spec = input_ptr->spec();
 		std::vector<T> pixels(static_cast<size_t>(spec.width) * spec.height * spec.nchannels);
 		std::vector<std::vector<T>> channels;
-		for (auto _ : std::views::iota(0, spec.nchannels))
+		for ([[maybe_unused]] auto _ : std::views::iota(0, spec.nchannels))
 		{
 			channels.push_back(std::vector<T>(static_cast<size_t>(spec.width) * spec.height));
 		}

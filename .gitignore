@@ -3,8 +3,18 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
-# benchmark images
-benchmark/images
+# Ignore all image files in benchmark/images/
+benchmark/images/*.png
+benchmark/images/*.jpg
+benchmark/images/*.jpeg
+benchmark/images/*.exr
+benchmark/images/*.bmp
+benchmark/images/*.gif
+benchmark/images/*.tiff
+benchmark/images/*.tif
+benchmark/images/*.webp
+benchmark/images/*.hdr
+benchmark/images/*.tga
 
 # Release artifacts
 release/

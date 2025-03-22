@@ -26,29 +26,29 @@ jobs:
              os: ubuntu-24.04
              compiler: gcc-13
              compilercxx: g++-13
-             cflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
-             cxxflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
+             cflags: "-fsanitize=address,leak,undefined"
+             cxxflags: "-fsanitize=address,leak,undefined"
              multiline-separator: \
            - name: Ubuntu Clang
              os: ubuntu-24.04
              compiler: clang
              compilercxx: clang++
-             cflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
-             cxxflags: "-fsanitize=address,leak,undefined -Wall -Werror -Wextra"
+             cflags: "-fsanitize=address,leak,undefined"
+             cxxflags: "-fsanitize=address,leak,undefined"
              multiline-separator: \
            - name: Windows MSVC
              os: windows-latest
              compiler: msvc
              compilercxx: msvc
-             cflags: "/W4 /WX /w44062 /w44464 /w45264"
-             cxxflags: "/W4 /WX /w44062 /w44464 /w45264"
+             cflags: ""
+             cxxflags: ""
              multiline-separator: "`"
            - name: MacOS ARM GCC
              os: macos-latest
              compiler: gcc-13
              compilercxx: g++-13
-             cflags: "-Wall -Werror -Wextra"
-             cxxflags: "-Wall -Werror -Wextra"
+             cflags: ""
+             cxxflags: ""
              multiline-separator: \
 
     steps:

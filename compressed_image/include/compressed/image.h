@@ -89,9 +89,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t height,
 			std::vector<std::string> channel_names = {},
 			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 5
+			size_t compression_level = 9
 		) : m_Width(width), m_Height(height), m_ChannelNames(channel_names)
 		{
+			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
+
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
 			static_assert(BlockSize < ChunkSize);
@@ -117,7 +119,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 						width,
 						height,
 						compression_codec,
-						compression_level
+						comp_level_adjusted
 					));
 				}
 				catch (const std::exception& e)
@@ -153,9 +155,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::vector<channel<T, BlockSize, ChunkSize>> channels,
 			size_t width,
 			size_t height,
-			std::vector<std::string> channel_names = {},
-			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 5
+			std::vector<std::string> channel_names = {}
 		) : m_Width(width), m_Height(height), m_ChannelNames(channel_names)
 		{
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
@@ -202,10 +202,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		static image read(
 			std::filesystem::path filepath,
 			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 5
+			size_t compression_level = 9
 		)
 		{
 			static_assert(ChunkSize % sizeof(T) == 0);
+			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
+
 
 			// Initialize the OIIO primitives
 			auto input_ptr = OIIO::ImageInput::open(filepath);
@@ -236,14 +238,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// Create and initialize all of our schunks and compression contexts.
 			std::vector<blosc2::schunk_ptr> schunks;
 			std::vector<blosc2::context_ptr> contexts;
-			for (auto _ : std::views::iota(0, spec.nchannels))
+			for ([[maybe_unused]] auto _ : std::views::iota(0, spec.nchannels))
 			{
 				schunks.push_back(blosc2::create_default_schunk());
 				contexts.push_back(blosc2::create_compression_context<T, BlockSize>(
 					schunks.back(),
 					std::thread::hardware_concurrency() / 4,
 					compression_codec,
-					compression_level
+					comp_level_adjusted
 				));
 			}
 
@@ -253,14 +255,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				{
 					buffer = std::vector<std::byte>(blosc2::min_compressed_size<ChunkSize>());
 				});
-			size_t y = 0;
 
 			// Iterate all scanlines and read as many scanlines as possible in one go, compressing them on the fly 
 			// into all of the super-chunks. 
+			int y = 0;
 			while (y < spec.height)
 			{
 				_COMPRESSED_PROFILE_SCOPE("Read Scanlines and compress");
-				size_t scanlines_to_read = std::min(scanlines_per_chunk, spec.height - y);
+				int scanlines_to_read = static_cast<int>(std::min<size_t>(scanlines_per_chunk, spec.height - y));
 				input_ptr->read_scanlines(
 					0, // subimage
 					0, // miplevel
@@ -307,11 +309,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					spec.width, 
 					spec.height, 
 					compression_codec, 
-					compression_level)
+					comp_level_adjusted)
 				);
 			}
 
-			return compressed::image<T, BlockSize, ChunkSize>(std::move(channels), spec.width, spec.height, spec.channelnames, compression_codec, compression_level);
+			return compressed::image<T, BlockSize, ChunkSize>(std::move(channels), spec.width, spec.height, spec.channelnames);
 		}
 
 #endif

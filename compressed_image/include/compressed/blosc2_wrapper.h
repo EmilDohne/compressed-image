@@ -188,12 +188,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
 			detail::init_filters();
+			if (buffer.size() * sizeof(T) > std::numeric_limits<int32_t>::max())
+			{
+				throw std::out_of_range(std::format("Blosc2 chunk size may not exceed numeric limit of int32_t, got {:L} which would exceed that", buffer.size() * sizeof(T)));
+			}
+
 			int decompressed_size = blosc2_decompress_ctx(
 				context,
 				static_cast<void*>(chunk.data()),
-				std::numeric_limits<int>::max(),
+				std::numeric_limits<int32_t>::max(),
 				buffer.data(),
-				buffer.size() * sizeof(T)
+				static_cast<int32_t>(buffer.size() * sizeof(T))
 			);
 
 			if (decompressed_size < 0)
@@ -256,13 +261,18 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T, size_t BlockSize>
 		blosc2_cparams create_blosc2_cparams(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level)
 		{
+			if (nthreads > std::numeric_limits<int16_t>::max())
+			{
+				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
+			}
+
 			detail::init_filters();
 			blosc2_cparams cparams = BLOSC2_CPARAMS_DEFAULTS;
 			cparams.blocksize = BlockSize;
 			cparams.typesize = sizeof(T);
 			cparams.splitmode = BLOSC_AUTO_SPLIT;
 			cparams.clevel = compression_level;
-			cparams.nthreads = nthreads;
+			cparams.nthreads = static_cast<int16_t>(nthreads);
 			cparams.schunk = schunk.get();
 			cparams.compcode = codec_to_blosc2(codec);
 
@@ -282,10 +292,15 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Create a blosc2 decompression context with the given number of threads.
 		inline blosc2::context_ptr create_decompression_context(schunk_ptr& schunk, size_t nthreads)
 		{
+			if (nthreads > std::numeric_limits<int16_t>::max())
+			{
+				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
+			}
+
 			detail::init_filters();
 			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
 			dparams.schunk = schunk.get();
-			dparams.nthreads = nthreads;
+			dparams.nthreads = static_cast<int16_t>(nthreads);
 
 			return blosc2::context_ptr(blosc2_create_dctx(dparams));
 		}

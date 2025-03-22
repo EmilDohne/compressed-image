@@ -16,14 +16,14 @@ template <typename Func>
 void benchmark(Func func, const std::string& label) 
 {
 	// Warm-up phase (not timed)
-	for (auto _ : std::views::iota(0, WARMUP_RUNS)) 
+	for ([[maybe_unused]] auto _ : std::views::iota(0, WARMUP_RUNS))
 	{
 		func();
 	}
 
 	// Timed runs
 	std::vector<double> timings;
-	for (auto _ : std::views::iota(0, TIMED_RUNS))
+	for ([[maybe_unused]] auto _ : std::views::iota(0, TIMED_RUNS))
 	{
 		auto start = std::chrono::high_resolution_clock::now();
 		func();

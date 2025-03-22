@@ -51,7 +51,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				return OIIO::TypeDesc::HALF;
 			}
-			return OIIO::TypeDesc::UNKNOWN;
+			else
+			{
+				return OIIO::TypeDesc::UNKNOWN;
+			}
 		}
 
 #endif

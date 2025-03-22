@@ -48,7 +48,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			static_assert(ChunkSize % sizeof(T) == 0);
 
 			// Check that we are not out of range, throw if we are
-			if (m_ChunkIndex > m_Schunk->nchunks)
+			if (static_cast<int64_t>(m_ChunkIndex) > m_Schunk->nchunks)
 			{
 				throw std::out_of_range(std::format(
 					"chunk_index is out of range for total number of chunks in blosc2_schunk. Max chunk number is {} but received {}",
@@ -84,7 +84,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				// chunk index == nchunks but the last chunk was not yet compressed. In this case
 				// we have to ensure we set the index back to compress again.
 				auto chunk_idx = m_ChunkIndex;
-				if (m_ChunkIndex == m_Schunk->nchunks)
+				if (static_cast<int64_t>(m_ChunkIndex) == m_Schunk->nchunks)
 				{
 					chunk_idx = chunk_idx - 1;
 				}
@@ -132,7 +132,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		channel_iterator& operator++()
 		{
 			++m_ChunkIndex;
-			if (m_ChunkIndex > m_Schunk->nchunks)
+			if (static_cast<int64_t>(m_ChunkIndex) > m_Schunk->nchunks)
 			{
 				throw std::out_of_range("Iterator: count exceeds number of chunks");
 			}
@@ -215,7 +215,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			bool compression_size_valid = m_CompressionBufferSize <= m_CompressionBuffer.size();
 			bool decompression_size_valid = m_DecompressionBufferSize <= m_DecompressionBuffer.size();
 
-			bool idx_valid = m_ChunkIndex < m_Schunk->nchunks;
+			bool idx_valid = static_cast<int64_t>(m_ChunkIndex) < m_Schunk->nchunks;
 			bool compressed_data_valid = compression_buffer_max_byte_size() >= blosc2::min_compressed_size<ChunkSize>();
 			bool decompressed_data_valid = decompression_buffer_max_byte_size() >= blosc2::min_decompressed_size<ChunkSize>();
 
@@ -259,7 +259,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		void update_chunk(blosc2::schunk_raw_ptr schunk, size_t chunk_index)
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
-			int res = blosc2_schunk_update_chunk(schunk, chunk_index, reinterpret_cast<uint8_t*>(m_CompressionBuffer.data()), true);
+			int64_t res = blosc2_schunk_update_chunk(schunk, chunk_index, reinterpret_cast<uint8_t*>(m_CompressionBuffer.data()), true);
 			if (res < 0)
 			{
 				throw std::runtime_error(std::format("Error code {} while updating the blosc2 chunk in the super-chunk", res));

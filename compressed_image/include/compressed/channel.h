@@ -16,6 +16,7 @@
 #include "fwd.h"
 #include "blosc2_wrapper.h"
 #include "constants.h"
+#include "util.h"
 
 #include "iterators/iterator.h"
 
@@ -77,9 +78,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t width,
 			size_t height,
 			enums::codec compression_codec = enums::codec::lz4,
-			uint8_t compression_level = 5
-		) : m_Width(width), m_Height(height), m_Codec(compression_codec), m_CompressionLevel(compression_level)
+			uint8_t compression_level = 9
+		) : m_Width(width), m_Height(height), m_Codec(compression_codec)
 		{
+			m_CompressionLevel = util::ensure_compression_level(compression_level);
 			if (data.size() != width * height)
 			{
 				throw std::runtime_error(
@@ -103,7 +105,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			auto raw_schunk = blosc2_schunk_new(&storage);
 			m_Schunk = blosc2::schunk_ptr(raw_schunk);
 
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(m_Schunk, std::thread::hardware_concurrency(), compression_codec, compression_level);
+			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(m_Schunk, std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
 			m_DecompressionContext = blosc2::create_decompression_context(m_Schunk, std::thread::hardware_concurrency());
 
 			auto compression_span = std::span<const std::byte>(reinterpret_cast<const std::byte*>(data.data()), data.size() * sizeof(T));
@@ -123,14 +125,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t width,
 			size_t height,
 			enums::codec compression_codec = enums::codec::lz4,
-			uint8_t compression_level = 5
-		) : m_Codec(compression_codec), m_CompressionLevel(compression_level)
+			uint8_t compression_level = 9
+		) : m_Codec(compression_codec)
 		{
+			m_CompressionLevel = util::ensure_compression_level(compression_level);
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
 			static_assert(BlockSize < ChunkSize);
+			if (schunk->nbytes < 0)
+			{
+				throw std::runtime_error(std::format("Invalid super-chunk passed to channel ctor, negative number of bytes are not supported. Got {}", schunk->nbytes));
+			}
 
-			if (schunk->nbytes != width * height * sizeof(T))
+			if (static_cast<size_t>(schunk->nbytes) != width * height * sizeof(T))
 			{
 				throw std::invalid_argument(
 					std::format("Invalid schunk passed to compressed::channel constructor. Expected a size of {:L} but instead got {:L}",
@@ -143,7 +150,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_Width = width;
 			m_Height = height;
 
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(m_Schunk, std::thread::hardware_concurrency(), compression_codec, compression_level);
+			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(m_Schunk, std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
 			m_DecompressionContext = blosc2::create_decompression_context(m_Schunk, std::thread::hardware_concurrency());
 
 		}
@@ -252,7 +259,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		blosc2::context_ptr m_DecompressionContext = nullptr;
 
 		/// Compression level.
-		size_t m_CompressionLevel = 5;
+		uint8_t m_CompressionLevel = 5;
 
 		/// The width and height of the channel.
 		size_t m_Width = 1;
@@ -266,13 +273,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		void compress(const std::span<const std::byte> data)
 		{
 			size_t orig_byte_size = data.size();
-			size_t _num_chunks = std::ceil(static_cast<double>(orig_byte_size) / ChunkSize);
+			size_t _num_chunks = static_cast<size_t>(std::ceil(static_cast<double>(orig_byte_size) / ChunkSize));
 
 			// Allocate the chunk once for all of our compression routines.
 			std::vector<std::byte> chunk(blosc2::min_compressed_size<ChunkSize>());
 			
 			size_t base_offset = 0;
-			for (auto index : std::views::iota(static_cast<size_t>(0), _num_chunks))
+			for ([[maybe_unused]] auto _ : std::views::iota(static_cast<size_t>(0), _num_chunks))
 			{
 				// Get the size of the section to compress. If this is the last section
 				// it may not align directly to the chunk boundary so we must compress less

@@ -70,7 +70,7 @@ struct FailureReporter : public doctest::ConsoleReporter
 
 	void subcase_end() override {}
 
-	void log_assert(const doctest::AssertData& in) override {}
+	void log_assert([[maybe_unused]] const doctest::AssertData& in) override {}
 
 	void log_message(const doctest::MessageData& /*in*/) override {}
 
