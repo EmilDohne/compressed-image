@@ -65,9 +65,9 @@ jobs:
       
     - name: Run Valgrind
       if: matrix.os == 'ubuntu-24.04'
-      working-directory: ${{github.workspace}}/build
+      working-directory: ${{github.workspace}}/build/test
       run: |
         sudo apt-get update
         sudo apt-get install -y valgrind
-        valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./test
+        valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./compressed_image_test
       continue-on-error: false
