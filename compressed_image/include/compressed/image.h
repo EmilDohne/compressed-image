@@ -159,8 +159,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t width,
 			size_t height,
 			std::vector<std::string> channel_names = {}
-		) : m_Width(width), m_Height(height), m_ChannelNames(channel_names)
+		)
 		{
+			m_Width = width;
+			m_Height = height;
+			m_ChannelNames = channel_names;
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
 			static_assert(BlockSize < ChunkSize);

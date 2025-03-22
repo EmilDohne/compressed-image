@@ -104,7 +104,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// The cparams and dparams don't matter as we use the verbose blosc2_schunk_append_chunk and blosc2_decompress_ctx
 			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
 			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
-			blosc2_storage storage = { .cparams = &cparams, .dparams = &dparams };
+			blosc2_storage storage = BLOSC2_STORAGE_DEFAULTS;
+			storage.cparams = &cparams;
+			storage.dparams = &dparams;
 			auto raw_schunk = blosc2_schunk_new(&storage);
 			m_Schunk = blosc2::schunk_ptr(raw_schunk);
 

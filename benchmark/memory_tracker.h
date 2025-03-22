@@ -5,7 +5,6 @@
 namespace bench_util
 {
 
-
 	// Track total system ram across linux and windows
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -24,7 +23,7 @@ namespace bench_util
 		return 0;
 	}
 
-#elif defined(__unix__) || defined(__unix) || defined(__APPLE__)
+#elif defined(__unix__) || defined(__unix)
 #include <unistd.h>
 #include <sys/sysinfo.h>
 
@@ -42,6 +41,23 @@ namespace bench_util
 		}
 		fclose(fp);
 		return (size_t)rss * (size_t)sysconf(_SC_PAGESIZE);
+	}
+
+#elif defined(__APPLE__)
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <mach/mach.h>
+
+	inline size_t get_memory_used_by_current_process()
+	{
+		struct task_basic_info info;
+		mach_msg_type_number_t count = TASK_BASIC_INFO_COUNT;
+		kern_return_t ret = task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &count);
+		if (ret != KERN_SUCCESS) {
+			return 0;
+		}
+		return (size_t)info.resident_size;
 	}
 
 #else
