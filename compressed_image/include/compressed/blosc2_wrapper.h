@@ -267,6 +267,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
 			}
+			nthreads = std::min(nthreads, static_cast<size_t>(1));
 
 			detail::init_filters();
 			blosc2_cparams cparams = BLOSC2_CPARAMS_DEFAULTS;
@@ -298,6 +299,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
 			}
+			nthreads = std::min(nthreads, static_cast<size_t>(1));
 
 			detail::init_filters();
 			auto dparams = BLOSC2_DPARAMS_DEFAULTS;

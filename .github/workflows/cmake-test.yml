@@ -61,7 +61,6 @@ jobs:
     - name: Setup MacOS dependencies
       if: matrix.os == 'macos-latest'
       run: |
-          brew install ninja
           brew install autoconf
           brew install libtool
           brew install automake

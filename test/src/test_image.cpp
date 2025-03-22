@@ -18,7 +18,6 @@ TEST_CASE("Read compressed file smaller than one chunk")
 {
 	std::string name = "uv_grid_2048x2048.jpg";
 	auto path = std::filesystem::current_path() / "images" / name;
-	std::cout << path << std::endl;
 
 	auto image = compressed::image<uint8_t, compressed::s_default_blocksize, compressed::s_default_chunksize * 2>::read(path);
 	auto image_data = image.get_decompressed();
