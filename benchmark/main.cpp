@@ -51,7 +51,7 @@ void bench_image_read_oiio(benchmark::State& state, const std::filesystem::path&
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 			std::vector<T> pixels(spec.width * spec.height * spec.nchannels);
 			std::vector<std::vector<T>> channels;
-			for (size_t i = 0; i < spec.nchannels; ++i)
+			for (int i = 0; i < spec.nchannels; ++i)
 			{
 				channels.push_back(std::vector<T>(spec.width * spec.height));
 			}
@@ -97,7 +97,7 @@ void bench_image_iteration_normal(benchmark::State& state, const std::filesystem
 	const OIIO::ImageSpec& spec = input_ptr->spec();
 	std::vector<T> pixels(spec.width * spec.height * spec.nchannels);
 	std::vector<std::vector<T>> channels;
-	for (size_t i = 0; i < spec.nchannels; ++i)
+	for (int i = 0; i < spec.nchannels; ++i)
 	{
 		channels.push_back(std::vector<T>(spec.width * spec.height));
 	}
