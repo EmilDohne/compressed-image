@@ -74,7 +74,6 @@ endif()
 
 if (COMPRESSED_IMAGE_BUILD_EXAMPLES)
     add_subdirectory(examples/initialize_from_file)
-    add_subdirectory(examples/tmp)
 endif()
 
 if (COMPRESSED_IMAGE_BUILD_BENCHMARKS)

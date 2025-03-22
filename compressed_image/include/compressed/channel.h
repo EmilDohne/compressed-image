@@ -79,8 +79,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t height,
 			enums::codec compression_codec = enums::codec::lz4,
 			uint8_t compression_level = 9
-		) : m_Width(width), m_Height(height), m_Codec(compression_codec)
+		)
 		{
+			m_Width = width;
+			m_Height = height;
+			m_Codec = compression_codec;
 			m_CompressionLevel = util::ensure_compression_level(compression_level);
 			if (data.size() != width * height)
 			{
@@ -126,8 +129,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t height,
 			enums::codec compression_codec = enums::codec::lz4,
 			uint8_t compression_level = 9
-		) : m_Codec(compression_codec)
+		)
 		{
+			m_Codec = compression_codec;
 			m_CompressionLevel = util::ensure_compression_level(compression_level);
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());

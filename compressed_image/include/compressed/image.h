@@ -90,8 +90,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::vector<std::string> channel_names = {},
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9
-		) : m_Width(width), m_Height(height), m_ChannelNames(channel_names)
+		)
 		{
+			m_Width = width;
+			m_Height = height;
+			m_ChannelNames = channel_names;
 			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
 
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.

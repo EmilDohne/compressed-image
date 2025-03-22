@@ -253,7 +253,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			detail::init_filters();
 			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
 			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
-			blosc2_storage storage = { .cparams = &cparams, .dparams = &dparams };
+			blosc2_storage storage = BLOSC2_STORAGE_DEFAULTS;
+			storage.cparams = &cparams;
+			storage.dparams = &dparams;
 			return blosc2::schunk_ptr(blosc2_schunk_new(&storage));
 		}
 
