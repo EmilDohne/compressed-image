@@ -55,11 +55,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					m_Schunk->nchunks, m_ChunkIndex));
 			}
 
-			m_CompressionBuffer.resize(blosc2::min_compressed_size<ChunkSize>());
-			m_CompressionBufferSize = m_CompressionBuffer.size();
-			m_DecompressionBuffer.resize(blosc2::min_decompressed_size<ChunkSize>());
-			m_DecompressionBufferSize = m_DecompressionBuffer.size();
-
 			// Check that we don't pass zero width or height as e.g. the x() and y() functions of chunk_span require division by these dimensions
 			if (m_Width == 0 || m_Height == 0)
 			{
@@ -97,6 +92,18 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		value_type operator*()
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
+
+			// Initialize the data, this allows the base iterator to be copied over
+			// quite cheaply
+			if (!m_Initialized)
+			{
+				m_CompressionBuffer.resize(blosc2::min_compressed_size<ChunkSize>());
+				m_CompressionBufferSize = m_CompressionBuffer.size();
+				m_DecompressionBuffer.resize(blosc2::min_decompressed_size<ChunkSize>());
+				m_DecompressionBufferSize = m_DecompressionBuffer.size();
+				m_Initialized = true;
+			}
+
 			if (!valid())
 			{
 				throw std::runtime_error("Invalid Iterator struct encountered, cannot dereference item");
@@ -179,6 +186,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		size_t	m_ChunkIndex = 0;
 		size_t  m_Width = 0;
 		size_t  m_Height = 0;
+
+		/// this is set in the dereference operator to only initialize on first access
+		/// not on setup.
+		bool m_Initialized = false;
 
 	private:
 

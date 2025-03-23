@@ -28,7 +28,19 @@ std::vector<std::filesystem::path> get_images()
 	std::vector<std::filesystem::path> result{};
 	for (const auto& entry : std::filesystem::directory_iterator(s_images_path))
 	{
-		if (std::filesystem::is_regular_file(entry))
+		if (std::filesystem::is_regular_file(entry) && 
+			(
+				entry.path().extension() == ".exr" ||
+				entry.path().extension() == ".jpg" ||
+				entry.path().extension() == ".png" ||
+				entry.path().extension() == ".tiff" ||
+				entry.path().extension() == ".tif" ||
+				entry.path().extension() == ".bmp" ||
+				entry.path().extension() == ".webp" ||
+				entry.path().extension() == ".tga" ||
+				entry.path().extension() == ".hdr"
+				)
+			)
 		{
 			result.push_back(entry.path());
 		}

@@ -11,6 +11,7 @@
 #include "blosc2/blosc2-stdio.h"
 #include "blosc2/filters-registry.h"
 
+#include <span>
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
