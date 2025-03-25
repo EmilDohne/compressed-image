@@ -64,8 +64,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		typedef void*														chunk_raw_ptr;
 		typedef std::unique_ptr<blosc2_context, deleter<blosc2_context>>	context_ptr;
 		typedef blosc2_context*												context_raw_ptr;
-
-
 		
 		/// Maps a codec enum into its blosc2 representation.
 		///
