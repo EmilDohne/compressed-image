@@ -1,5 +1,10 @@
 #pragma once
 
+#include <span>
+#include <vector>
+#include <byte>
+#include <variant>
+
 #include "macros.h"
 #include "blosc2_wrapper.h"
 
@@ -50,21 +55,47 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// be done once all the data is computed to minimize the overhead. 
 		schunk_ptr to_schunk()
 		{
-			std::vector<T> lazy_buff;
+			_COMPRESSED_PROFILE_FUNCTION();
+			// Initialize the chunks, either appending the byte array directly to the schunk 
+			blosc2::schunk_ptr schunk = create_default_schunk();
 
-			schunk_ptr schunk = create_default_schunk();
+			// Allocate and compress the lazy buff 
+			std::vector<std::byte> lazy_compressed_data;
+			if (this->has_lazy_chunk())
+			{
+				auto lazy_buff = std::vector<T>(this->get_T_buffer_size(this->chunk_size, this->lazy_chunk_value()));
+				lazy_compressed_data = std::vector<std::byte>(blosc2::min_compressed_size<chunk_size>());
+
+				auto context = blosc2::create_compression_context(schunk, std::thread::hardware_concurrency(), enums::codec::lz4, 9);
+				blosc2::compress(context, std::span<T>(lazy_buff), std::span<std::byte>(lazy_compressed_data));
+			}
+
+			// Iterate all the chunks, if lazy add the compressed lazy buffer, else add the compressed data.
 			for (auto& chunk : m_Chunks)
 			{
 				if (std::holds_alternative<std::vector<std::byte>>(chunk.value))
 				{
 					auto& data = std::get<std::vector<std::byte>>(chunk.value);
+					blosc2_schunk_append_chunk(
+						schunk.get(),
+						reinterpret_cast<uint8_t*>(data.data()),
+						true // copy
+					);
 				}
 				else
 				{
-					auto data = std::get<T>(chunk.value);
-					std::vector<T> vec(data, chunk.uncompressed_size);
+					assert(lazy_compressed_data.size() >= BLOSC2_MAX_OVERHEAD);
+					// we already initialized the buffer to the lazychunk value above
+					blosc2_schunk_append_chunk(
+						schunk.get(),
+						reinterpret_cast<uint8_t*>(lazy_compressed_data.data()),
+						true // copy
+					);
+
 				}
 			}
+
+			return std::move(schunk);
 		}
 
 
@@ -102,6 +133,38 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				}
 			}
 			return false;
+		}
+
+		/// Get the value of the first encountered lazy chunk, since we only create lazy chunks with a single value
+		/// this is a valid way of accessing this value. if no lazy chunk exists we simply return T{}
+		T lazy_chunk_value() const noexcept
+		{
+			for (const auto& chunk : m_Chunks)
+			{
+				if (std::holds_alternative<T>(chunk.value))
+				{
+					return std::get<T>(chunk.value);
+				}
+			}
+			return T{};
+
+		}
+
+		/// Get the buffer size for T for the given byte size. Checks that the buffer
+		/// can be divided
+		size_t get_T_buffer_size(size_t byte_size)
+		{
+			if (byte_size % sizeof(T) != 0)
+			{
+				throw std::runtime_error(
+					std::format(
+						"Cannot get buffer size for type T of size {} because it is not evenly divisible for buffer size {:L}",
+						sizeof(T),
+						byte_size
+					)
+				);
+			}
+			return byte_size / sizeof(T);
 		}
 	};
 

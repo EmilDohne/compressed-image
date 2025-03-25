@@ -13,3 +13,6 @@
 [submodule "thirdparty/benchmark"]
 	path = thirdparty/benchmark
 	url = https://github.com/google/benchmark
+[submodule "thirdparty/c-blosc2"]
+	path = thirdparty/c-blosc2
+	url = https://github.com/Blosc/c-blosc2
