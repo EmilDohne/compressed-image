@@ -9,7 +9,7 @@
 #include <compressed/image.h>
 #include <compressed/ranges.h>
 #include <compressed/util.h>
-#include <compressed/blosc2_wrapper.h>
+#include <compressed/blosc2/wrapper.h>
 
 #include "util.h"
 

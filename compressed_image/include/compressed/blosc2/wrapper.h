@@ -2,9 +2,10 @@
 
 #include <memory>
 
-#include "macros.h"
-#include "enums.h"
-#include "detail/scoped_timer.h"
+#include "compressed/macros.h"
+#include "compressed/enums.h"
+#include "compressed/blosc2/util.h"
+#include "compressed/detail/scoped_timer.h"
 
 #include "blosc2.h"
 #include "blosc2/blosc2-common.h"
@@ -56,7 +57,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				blosc2_free_ctx(context);
 			}
 		};
-
 
 		/// Typedef the blosc2 primitives into both smart pointers and as raw ptrs
 		typedef std::unique_ptr<blosc2_schunk, deleter<blosc2_schunk>>		schunk_ptr;
@@ -116,8 +116,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 			return enums::codec::blosclz;
 		}
-
-		
+	
 		/// Compress the `data` into `chunk` using the provided `context`. 
 		/// 
 		/// This function applies Blosc2 compression to the input `data` and stores the compressed 
@@ -183,7 +182,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \returns The decompressed byte size of the buffer.
 		/// \throws std::runtime_error if decompression fails, with the Blosc2 error code.
 		template <typename T>
-		size_t decompress(context_raw_ptr context, std::span<T> buffer, std::span<std::byte> chunk)
+		size_t decompress(context_raw_ptr context, std::span<T> buffer, std::span<const std::byte> chunk)
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
 			detail::init_filters();
@@ -194,7 +193,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			int decompressed_size = blosc2_decompress_ctx(
 				context,
-				static_cast<void*>(chunk.data()),
+				static_cast<const void*>(chunk.data()),
 				std::numeric_limits<int32_t>::max(),
 				buffer.data(),
 				static_cast<int32_t>(buffer.size() * sizeof(T))
@@ -220,7 +219,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \returns The decompressed byte size of the buffer.
 		/// \throws std::runtime_error if decompression fails, with the Blosc2 error code.
 		template <typename T>
-		size_t decompress(context_ptr& context, std::span<T> buffer, std::span<std::byte> chunk)
+		size_t decompress(context_ptr& context, std::span<T> buffer, std::span<const std::byte> chunk)
 		{
 			return decompress(context.get(), buffer, chunk);
 		}
@@ -281,6 +280,28 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return cparams;
 		}
 
+		/// Create blosc2 compression parameters for the given input.
+		template <typename T, size_t BlockSize>
+		blosc2_cparams create_blosc2_cparams(size_t nthreads, enums::codec codec, uint8_t compression_level)
+		{
+			if (nthreads > std::numeric_limits<int16_t>::max())
+			{
+				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
+			}
+			nthreads = std::min(nthreads, static_cast<size_t>(1));
+
+			detail::init_filters();
+			blosc2_cparams cparams = BLOSC2_CPARAMS_DEFAULTS;
+			cparams.blocksize = BlockSize;
+			cparams.typesize = sizeof(T);
+			cparams.splitmode = BLOSC_AUTO_SPLIT;
+			cparams.clevel = compression_level;
+			cparams.nthreads = static_cast<int16_t>(nthreads);
+			cparams.compcode = codec_to_blosc2(codec);
+
+			return cparams;
+		}
+
 		/// Create a blosc2 compression context with the given number of threads.
 		template <typename T, size_t BlockSize>
 		blosc2::context_ptr create_compression_context(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level)
@@ -290,7 +311,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return blosc2::context_ptr(blosc2_create_cctx(cparams));
 		}
 
-		
+		template <typename T, size_t BlockSize>
+		blosc2::context_ptr create_compression_context(size_t nthreads, enums::codec codec, uint8_t compression_level)
+		{
+			detail::init_filters();
+			auto cparams = create_blosc2_cparams<T, BlockSize>(nthreads, codec, compression_level);
+			return blosc2::context_ptr(blosc2_create_cctx(cparams));
+		}
+
 		/// Create a blosc2 decompression context with the given number of threads.
 		inline blosc2::context_ptr create_decompression_context(schunk_ptr& schunk, size_t nthreads)
 		{
@@ -308,6 +336,22 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return blosc2::context_ptr(blosc2_create_dctx(dparams));
 		}
 
+		/// Create a blosc2 decompression context with the given number of threads.
+		inline blosc2::context_ptr create_decompression_context(size_t nthreads)
+		{
+			if (nthreads > std::numeric_limits<int16_t>::max())
+			{
+				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
+			}
+			nthreads = std::min(nthreads, static_cast<size_t>(1));
+
+			detail::init_filters();
+			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
+			dparams.nthreads = static_cast<int16_t>(nthreads);
+
+			return blosc2::context_ptr(blosc2_create_dctx(dparams));
+		}
+
 		/// Get the minimum size needed to store the compressed data.
 		template <size_t ChunkSize>
 		constexpr size_t min_compressed_size()
@@ -315,11 +359,52 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return ChunkSize + BLOSC2_MAX_OVERHEAD;
 		}
 
+		/// Get the minimum size needed to store the compressed data.
+		inline constexpr size_t min_compressed_size(size_t chunk_size)
+		{
+			return chunk_size + BLOSC2_MAX_OVERHEAD;
+		}
+
 		/// Get the minimum size needed to store the decompressed data.
 		template <size_t ChunkSize>
 		constexpr size_t min_decompressed_size()
 		{
 			return ChunkSize;
+		}
+
+		/// Get the minimum size needed to store the decompressed data.
+		inline constexpr size_t min_decompressed_size(size_t chunk_size)
+		{
+			return chunk_size;
+		}
+
+		/// Get the number of elements of the uncompressed chunk.
+		///
+		/// \tparam T the type to check against
+		/// \param chunk the compressed chunk to query
+		/// 
+		/// \throws std::runtime_error if we encounter a blosc2 error.
+		template <typename T>
+		size_t chunk_num_elements(const std::vector<std::byte>& chunk)
+		{
+			int32_t nbytes{};
+			int32_t cbytes{};
+			int32_t blocksize{};
+			auto res = blosc2_cbuffer_sizes(
+				static_cast<const void*>(chunk.data()),
+				&nbytes,
+				&cbytes,
+				&blocksize
+			);
+			if (res < 0)
+			{
+				throw std::runtime_error(std::format("Unable to find buffer sizes due to blosc2 error: {}", map_error_code(res)));
+			}
+
+			assert(nbytes > 0);
+			assert(nbytes % sizeof(T) == 0);
+
+			return static_cast<size_t>(nbytes) / sizeof(T);
 		}
 
 	} // namespace blosc2

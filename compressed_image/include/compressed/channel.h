@@ -14,7 +14,10 @@
 #include "macros.h"
 #include "enums.h"
 #include "fwd.h"
-#include "blosc2_wrapper.h"
+#include "blosc2/wrapper.h"
+#include "blosc2/typedefs.h"
+#include "blosc2/schunk.h"
+#include "blosc2/lazyschunk.h"
 #include "constants.h"
 #include "util.h"
 
@@ -53,18 +56,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
 	struct channel : public std::ranges::view_interface<channel<T, BlockSize, ChunkSize>>
 	{
-		using iterator = channel_iterator<T, ChunkSize>;
-		using const_iterator = channel_iterator<const T, ChunkSize>;
+		using iterator = channel_iterator<T>;
+		using const_iterator = channel_iterator<const T>;
 
 		static constexpr size_t block_size = BlockSize;
 		static constexpr size_t chunk_size = ChunkSize;
 
 		channel() = default;
-		~channel() = default;
-		channel(const channel&) = delete;					// Delete copy constructor
-		channel& operator=(const channel&) = delete;		// Delete copy assignment
-		channel(channel&&) noexcept = default;				// Move constructor
-		channel& operator=(channel&&) noexcept = default;	// Move assignment
 
 		/// Initialize the channel with the given data.
 		/// 
@@ -100,21 +98,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
 			static_assert(BlockSize < ChunkSize);
 
-			// Initialize our Super-Chunk first as that is required for the compression and decompression contexts. 
-			// The cparams and dparams don't matter as we use the verbose blosc2_schunk_append_chunk and blosc2_decompress_ctx
-			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
-			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
-			blosc2_storage storage = BLOSC2_STORAGE_DEFAULTS;
-			storage.cparams = &cparams;
-			storage.dparams = &dparams;
-			auto raw_schunk = blosc2_schunk_new(&storage);
-			m_Schunk = blosc2::schunk_ptr(raw_schunk);
+			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
+			m_DecompressionContext = blosc2::create_decompression_context(std::thread::hardware_concurrency());
 
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(m_Schunk, std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
-			m_DecompressionContext = blosc2::create_decompression_context(m_Schunk, std::thread::hardware_concurrency());
-
-			auto compression_span = std::span<const std::byte>(reinterpret_cast<const std::byte*>(data.data()), data.size() * sizeof(T));
-			this->compress(compression_span);
+			// Align the chunks to the scanlines, makes our lifes a lot easier on read/write.
+			auto chunk_size = util::align_chunk_to_scanlines<T, ChunkSize>(m_Width);
+			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(blosc2::schunk<T>(data, chunk_size, m_CompressionContext));
 		}
 
 
@@ -126,7 +115,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param compression_codec The compression codec to be used.
 		/// \param compression_level The compression level (default is 5).
 		channel(
-			blosc2::schunk_ptr schunk,
+			blosc2::schunk_var<T> schunk,
 			size_t width,
 			size_t height,
 			enums::codec compression_codec = enums::codec::lz4,
@@ -138,27 +127,40 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
 			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
 			static_assert(BlockSize < ChunkSize);
-			if (schunk->nbytes < 0)
+
+			if (std::holds_alternative<blosc2::schunk<T>>(schunk))
 			{
-				throw std::runtime_error(std::format("Invalid super-chunk passed to channel ctor, negative number of bytes are not supported. Got {}", schunk->nbytes));
+				if (std::get<blosc2::schunk<T>>(schunk).size() != width * height)
+				{
+					throw std::invalid_argument(
+						std::format(
+							"Invalid schunk passed to compressed::channel constructor. Expected a size of {:L} but instead got {:L}",
+							width * height,
+							std::get<blosc2::schunk<T>>(schunk).size()
+						)
+					);
+				}
+			}
+			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(schunk))
+			{
+				if (std::get<blosc2::lazy_schunk<T>>(schunk).size() != width * height)
+				{
+					throw std::invalid_argument(
+						std::format(
+							"Invalid schunk passed to compressed::channel constructor. Expected a size of {:L} but instead got {:L}",
+							width * height,
+							std::get<blosc2::schunk<T>>(schunk).size()
+						)
+					);
+				}
 			}
 
-			if (static_cast<size_t>(schunk->nbytes) != width * height * sizeof(T))
-			{
-				throw std::invalid_argument(
-					std::format("Invalid schunk passed to compressed::channel constructor. Expected a size of {:L} but instead got {:L}",
-						width * height * sizeof(T),
-						schunk->nbytes)
-				);
-			}
-
-			m_Schunk = std::move(schunk);
+			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(std::move(schunk));
 			m_Width = width;
 			m_Height = height;
 
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(m_Schunk, std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
-			m_DecompressionContext = blosc2::create_decompression_context(m_Schunk, std::thread::hardware_concurrency());
-
+			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
+			m_DecompressionContext = blosc2::create_decompression_context(std::thread::hardware_concurrency());
 		}
 
 		/// Returns an iterator pointing to the beginning of the compressed data.
@@ -166,7 +168,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \return An iterator to the beginning of the compressed data.
 		iterator begin()
 		{
-			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), 0, m_Width, m_Height);
+			return iterator(m_Schunk, m_CompressionContext.get(), m_DecompressionContext.get(), 0, m_Width, m_Height);
 		}
 
 		/// Returns an iterator pointing to the end of the compressed data.
@@ -174,7 +176,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \return An iterator to the end of the compressed data.
 		iterator end()
 		{
-			return iterator(m_Schunk.get(), m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks, m_Width, m_Height);
+			return iterator(m_Schunk, m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks, m_Width, m_Height);
 		}
 
 		/// Retrieve a view to the compression context. In most cases users will not have to modify this.
@@ -192,8 +194,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param nthreads The number of threads to use for compression and decompression.
 		void update_nthreads(size_t nthreads)
 		{
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(m_Schunk, nthreads, m_Codec, m_CompressionLevel);
-			m_DecompressionContext = blosc2::create_decompression_context(m_Schunk, nthreads);
+			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(nthreads, m_Codec, m_CompressionLevel);
+			m_DecompressionContext = blosc2::create_decompression_context(nthreads);
 		}
 
 		/// The channel width.
@@ -213,39 +215,86 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 		/// Retrieve the compressed data size.
 		///
-		/// \return The size of the compressed data.
-		size_t compressed_size() const noexcept { return m_Schunk->cbytes; }
+		/// \return The size of the compressed data in bytes.
+		size_t compressed_size() const noexcept 
+		{
+			if (!m_Schunk)
+			{
+				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
+			}
+
+			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
+			{
+				return std::get<blosc2::schunk<T>>(*m_Schunk).csize();
+			}
+			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(*m_Schunk))
+			{
+				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).csize();
+			}
+			return {};
+		}
 		
 		/// Retrieve the uncompressed data size.
 		///
-		/// \return The size of the uncompressed data.
-		size_t uncompressed_size() const noexcept{ return m_Schunk->nbytes; }
+		/// \return The size of the uncompressed data in elements.
+		size_t uncompressed_size() const noexcept
+		{
+			if (!m_Schunk)
+			{
+				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
+			}
+
+			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
+			{
+				return std::get<blosc2::schunk<T>>(*m_Schunk).size();
+			}
+			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(*m_Schunk))
+			{
+				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).size();
+			}
+			return {};
+		}
 		
 		/// Retrieve the total number of chunks the channel stores.
 		///
 		/// \return The number of chunks.
-		size_t num_chunks() const noexcept { return m_Schunk->nchunks; }
+		size_t num_chunks() const noexcept 
+		{ 
+			if (!m_Schunk)
+			{
+				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
+			}
+
+			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
+			{
+				return std::get<blosc2::schunk<T>>(*m_Schunk).num_chunks();
+			}
+			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(*m_Schunk))
+			{
+				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).num_chunks();
+			}
+			return {};
+		}
 
 		/// Get the decompressed data as a vector.
 		///
 		/// \return A vector containing the decompressed data.
 		std::vector<T> get_decompressed()
 		{
-			auto result = std::vector<T>(uncompressed_size() / sizeof(T));
-			size_t offset = 0;
-
-			for (auto chunk_index : std::views::iota(0, m_Schunk->nchunks))
+			if (!m_Schunk)
 			{
-				auto buffer_size = std::min(ChunkSize / sizeof(T), result.size() - offset);
-				auto sub_span = std::span<T>(result.data() + offset, buffer_size);
-				// This span is a bit fake as we don't know the actual size of it but c-blosc will figure it out for us
-				auto chunk_span = std::span<std::byte>(reinterpret_cast<std::byte*>(m_Schunk->data[chunk_index]), blosc2::min_compressed_size<ChunkSize>());
-
-				auto decompressed_size = blosc2::decompress(m_DecompressionContext, sub_span, chunk_span);
-
-				offset += decompressed_size / sizeof(T);
+				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
 			}
-			return result;
+
+			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
+			{
+				return std::get<blosc2::schunk<T>>(*m_Schunk).to_uncompressed(m_DecompressionContext);
+			}
+			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(m_Schunk))
+			{
+				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).to_uncompressed(m_DecompressionContext);
+			}
+			return {};
 		}
 
 		/// Equality operators, compares pointers to check for equality
@@ -256,7 +305,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 	private:
 		/// The storage for the internal data, stored contiguously in a compressed data format
-		blosc2::schunk_ptr m_Schunk = nullptr;
+		blosc2::schunk_var_ptr<T> m_Schunk = nullptr;
 		enums::codec m_Codec = enums::codec::lz4;
 
 		/// We store a compression and decompression context here to allow us to reuse them rather than having
@@ -265,51 +314,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		blosc2::context_ptr m_DecompressionContext = nullptr;
 
 		/// Compression level.
-		uint8_t m_CompressionLevel = 5;
+		uint8_t m_CompressionLevel = 9;
 
 		/// The width and height of the channel.
 		size_t m_Width = 1;
 		size_t m_Height = 1;
-	private:
-
-		/// Compress the image data into m_Schunk. Has to be called after initialization of m_Schunk
-		/// as well as after the construction of m_CompressionContext.
-		///
-		/// \param data The span of data to compress.
-		void compress(const std::span<const std::byte> data)
-		{
-			size_t orig_byte_size = data.size();
-			size_t _num_chunks = static_cast<size_t>(std::ceil(static_cast<double>(orig_byte_size) / ChunkSize));
-
-			// Allocate the chunk once for all of our compression routines.
-			std::vector<std::byte> chunk(blosc2::min_compressed_size<ChunkSize>());
-			
-			size_t base_offset = 0;
-			for ([[maybe_unused]] auto _ : std::views::iota(static_cast<size_t>(0), _num_chunks))
-			{
-				// Get the size of the section to compress. If this is the last section
-				// it may not align directly to the chunk boundary so we must compress less
-				size_t section_size = ChunkSize;
-				if (base_offset + section_size > orig_byte_size)
-				{
-					section_size = orig_byte_size - base_offset;
-				}
-
-				// Get a subspan of the current chunk to compress
-				std::span<const std::byte> subspan(data.data() + base_offset, section_size);
-
-				// We need to tell c-blosc2 that we want to insert at the end
-				m_Schunk->current_nchunk = m_Schunk->nchunks;
-				// Compress the context into a chunk which we then insert into blosc2
-				// we check in the constructor that our chunk size does not exceed int32_t max.
-
-				blosc2::compress(m_CompressionContext, subspan, chunk);
-				blosc2::append_chunk(m_Schunk, chunk);
-
-				// Increment our base offset to move onto the next chunk
-				base_offset += section_size;
-			}
-		}
 	};
 
 } // NAMESPACE_COMPRESSED_IMAGE

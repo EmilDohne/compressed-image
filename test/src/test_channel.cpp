@@ -9,7 +9,7 @@
 #include <OpenImageIO/half.h>
 
 #include <compressed/channel.h>
-#include <compressed/blosc2_wrapper.h>
+#include <compressed/blosc2/wrapper.h>
 
 #include "util.h"
 
@@ -21,7 +21,7 @@ TEST_CASE("Initialize channel from incorrect schunk"
 	* doctest::should_fail(true)
 )
 {
-	auto schunk = compressed::blosc2::create_default_schunk();
+	auto schunk = compressed::blosc2::schunk<uint8_t>();
 	auto channel = compressed::channel<uint8_t>(std::move(schunk), 1, 1);
 }
 

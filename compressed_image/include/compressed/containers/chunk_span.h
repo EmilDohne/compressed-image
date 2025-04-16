@@ -36,14 +36,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// 
 		/// \tparam T The data type stored in the chunk (e.g., pixel values).
 		/// \tparam ChunkSize The fixed size of each chunk, defaulting to `s_default_chunksize`.
-		template <typename T, size_t ChunkSize = s_default_chunksize>
-		struct chunk_span : public std::ranges::view_interface<chunk_span<T, ChunkSize>>
+		template <typename T>
+		struct chunk_span : public std::ranges::view_interface<chunk_span<T>>
 		{
 			using iterator = std::span<T>::iterator;
 			using const_iterator = std::span<const T>::iterator; // std::span<T>::const_iterator is C++23 only
-
-			/// The size of each chunk in bytes.
-			static constexpr size_t chunk_size = ChunkSize;
 
 			chunk_span() = default;
 
@@ -53,8 +50,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \param width The total width of the full image.
 			/// \param height The total height of the full image.
 			/// \param chunk_index The index of this chunk in the overall compressed image sequence.
-			chunk_span(std::span<T> data, size_t width, size_t height, size_t chunk_index)
-				: m_Data(data), m_Width(width), m_Height(height), m_ChunkIndex(chunk_index) {};
+			chunk_span(std::span<T> data, size_t width, size_t height, size_t chunk_index, size_t chunk_size)
+				: m_Data(data), m_Width(width), m_Height(height), m_ChunkIndex(chunk_index), m_ChunkSize(chunk_size) {};
 
 			/// Computes the X coordinate of a given index within this chunk, relative to the full image.
 			///
@@ -99,6 +96,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 		private:
 			std::span<T> m_Data{};  ///< The span of data representing this chunk.
+			size_t m_ChunkSize = s_default_chunksize; ///< The chunk size of all but the last chunks.
 			size_t m_Width = 1;     ///< The full image width.
 			size_t m_Height = 1;    ///< The full image height.
 			size_t m_ChunkIndex = 0;///< The index of this chunk in the image sequence.
@@ -112,7 +110,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \returns The global index within the full image.
 			size_t get_global_index(size_t _index) const noexcept
 			{
-				const size_t base_offset = m_ChunkIndex * chunk_size;
+				const size_t base_offset = m_ChunkIndex * m_ChunkSize;
 				return base_offset + _index;
 			}
 

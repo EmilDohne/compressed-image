@@ -1,6 +1,7 @@
 #pragma once
 
 #include "macros.h"
+#include "util.h"
 #include "detail/scoped_timer.h"
 
 #include <algorithm>
@@ -125,9 +126,36 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \tparam T The data type to deinterleave.
 		///
 		/// \param interleaved The input buffer containing the interleaved data.
-		/// \param channel_spans The spans to deinterleave into.
+		/// \param channel_vecs The vecs to deinterleave into.
 		template <typename T>
 		void deinterleave(std::span<const T> interleaved, std::vector<std::vector<T>>& channel_vecs)
+		{
+			std::vector<std::span<T>> spans{};
+			for (auto& vec : channel_vecs)
+			{
+				spans.push_back(std::span<T>(vec.begin(), vec.end()));
+			}
+			deinterleave<T>(interleaved, spans);
+		}
+
+		/// Deinterleave a unified buffer into multiple channels, using the preallocated buffers.
+		///
+		/// Could be called like this, for example:
+		///
+		/// \code{.cpp}
+		///
+		/// std::vector<T> interleaved = ...; // Previously interleaved data
+		/// std::vector<std::vector<T>> channels = ...; // The channels to deinterleave into
+		/// auto deinterleaved = Render::deinterleave(interleaved, channels);
+		/// 
+		/// \endcode
+		/// 
+		/// \tparam T The data type to deinterleave.
+		///
+		/// \param interleaved The input buffer containing the interleaved data.
+		/// \param channel_vecs The vecs to deinterleave into.
+		template <typename T>
+		void deinterleave(std::span<const T> interleaved, std::vector<util::default_init_vector<T>>& channel_vecs)
 		{
 			std::vector<std::span<T>> spans{};
 			for (auto& vec : channel_vecs)
