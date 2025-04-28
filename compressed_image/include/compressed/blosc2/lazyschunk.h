@@ -66,7 +66,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				size_t remainder_bytes = num_bytes - (this->m_ChunkSize * num_full_chunks);
 
 				// Initialize lazy chunks with the provided value of T
-				for (auto idx : std::views::iota(size_t{ 0 }, num_full_chunks))
+				for ([[maybe_unused]] auto idx : std::views::iota(size_t{ 0 }, num_full_chunks))
 				{
 					detail::lazy_chunk<T> chunk = { value, this->m_ChunkSize / sizeof(T) };
 					this->m_Chunks.push_back(std::move(chunk));

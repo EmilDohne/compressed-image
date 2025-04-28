@@ -92,7 +92,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					);
 				}
 
-				return std::move(schunk);
+				return schunk;
 			}
 
 			std::vector<T> to_uncompressed(blosc2::context_ptr& decompression_ctx) const override
