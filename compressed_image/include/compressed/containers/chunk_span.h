@@ -51,7 +51,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \param height The total height of the full image.
 			/// \param chunk_index The index of this chunk in the overall compressed image sequence.
 			chunk_span(std::span<T> data, size_t width, size_t height, size_t chunk_index, size_t chunk_size)
-				: m_Data(data), m_Width(width), m_Height(height), m_ChunkIndex(chunk_index), m_ChunkSize(chunk_size) {};
+				: m_Data(data), m_ChunkSize(chunk_size), m_Width(width), m_Height(height), m_ChunkIndex(chunk_index) {};
 
 			/// Computes the X coordinate of a given index within this chunk, relative to the full image.
 			///

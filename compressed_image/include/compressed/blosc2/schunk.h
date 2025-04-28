@@ -46,7 +46,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				// Compression buffer we will continuously overwrite in our compression, the chunk data is then copied out
 				// of this on initialization.
 				util::default_init_vector<std::byte> compression_buffer(blosc2::min_compressed_size(chunk_size));
-				auto compression_span = std::span<std::byte>(compression_buffer.begin(), compression_buffer.end());
+				auto compression_span = std::span<std::byte>(compression_buffer);
 
 				size_t num_elements = data.size();
 				size_t num_bytes = num_elements * sizeof(T);
@@ -57,7 +57,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 				size_t data_offset = 0;
 				// Initialize the chunks by compressing them.
-				for (auto idx : std::views::iota(size_t{ 0 }, num_full_chunks))
+				for ([[maybe_unused]] auto idx : std::views::iota(size_t{ 0 }, num_full_chunks))
 				{
 					auto subspan = std::span<const T>(data.data() + data_offset, this->chunk_elements());
 					auto csize = blosc2::compress<T>(compression_ctx, subspan, compression_span);

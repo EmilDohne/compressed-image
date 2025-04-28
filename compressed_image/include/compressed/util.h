@@ -3,6 +3,7 @@
 #include <vector>
 #include <span>
 #include <iostream>
+#include <format>
 
 #include "macros.h"
 

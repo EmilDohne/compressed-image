@@ -6,6 +6,7 @@
 
 #include "compressed/macros.h"
 #include "wrapper.h"
+#include "compressed/constants.h"
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
@@ -203,8 +204,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				/// ensures that the chunks 
 				void validate_chunk_sizes() const
 				{
-					auto expected_chunk_size = this->chunk_bytes();
-
 					// Check that all chunks barring the last one are equal to m_ChunkSize
 					for (auto i : std::views::iota(size_t{ 0 }, this->num_chunks() - 1))
 					{

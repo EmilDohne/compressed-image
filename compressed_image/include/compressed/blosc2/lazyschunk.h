@@ -66,7 +66,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				size_t remainder_bytes = num_bytes - (this->m_ChunkSize * num_full_chunks);
 
 				// Initialize lazy chunks with the provided value of T
-				for (auto idx : std::views::iota(0, num_full_chunks))
+				for (auto idx : std::views::iota(size_t{ 0 }, num_full_chunks))
 				{
 					detail::lazy_chunk<T> chunk = { value, this->m_ChunkSize / sizeof(T) };
 					this->m_Chunks.push_back(std::move(chunk));
@@ -136,7 +136,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					}
 				}
 
-				return std::move(schunk);
+				return schunk;
 			}
 
 			/// Generate an uncompressed vector from the chunks, using the decompression context
@@ -298,7 +298,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t size() const noexcept override
 			{
 				size_t _size = 0;
-				for (const auto chunk : this->m_Chunks)
+				for (const auto& chunk : this->m_Chunks)
 				{
 					_size += chunk.num_elements;
 				}

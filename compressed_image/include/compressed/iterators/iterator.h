@@ -83,7 +83,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				auto chunk_idx = m_ChunkIndex;
 				std::visit([&](auto& schunk)
 					{
-						if (static_cast<int64_t>(m_ChunkIndex) == schunk.num_chunks())
+						if (m_ChunkIndex == schunk.num_chunks())
 						{
 							chunk_idx = chunk_idx - 1;
 						}
@@ -258,7 +258,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					bool compression_size_valid = m_CompressionBufferSize <= m_CompressionBuffer.size();
 					bool decompression_size_valid = m_DecompressionBufferSize <= m_DecompressionBuffer.size();
 
-					bool idx_valid = static_cast<int64_t>(m_ChunkIndex) < schunk.num_chunks();
+					bool idx_valid = m_ChunkIndex < schunk.num_chunks();
 					bool compressed_data_valid = compression_buffer_max_byte_size() >= blosc2::min_compressed_size(this->chunk_bytes());
 					bool decompressed_data_valid = decompression_buffer_max_byte_size() >= blosc2::min_decompressed_size(this->chunk_bytes());
 
