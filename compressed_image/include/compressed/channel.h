@@ -102,7 +102,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_DecompressionContext = blosc2::create_decompression_context(std::thread::hardware_concurrency());
 
 			// Align the chunks to the scanlines, makes our lifes a lot easier on read/write.
-			auto chunk_size = util::align_chunk_to_scanlines<T, ChunkSize>(m_Width);
+			auto chunk_size = util::align_chunk_to_scanlines_bytes<T, ChunkSize>(m_Width);
 			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(blosc2::schunk<T>(data, chunk_size, m_CompressionContext));
 		}
 
@@ -176,7 +176,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \return An iterator to the end of the compressed data.
 		iterator end()
 		{
-			return iterator(m_Schunk, m_CompressionContext.get(), m_DecompressionContext.get(), m_Schunk->nchunks, m_Width, m_Height);
+			if (m_Schunk)
+			{
+				return std::visit([&](auto& schunk)
+					{
+						return iterator(m_Schunk, m_CompressionContext.get(), m_DecompressionContext.get(), schunk.num_chunks(), m_Width, m_Height);
+					}, *m_Schunk);
+			}
+			throw std::runtime_error("Internal Error: Unable to create end iterator as m_Schunk is uninitialized.");
 		}
 
 		/// Retrieve a view to the compression context. In most cases users will not have to modify this.
@@ -216,7 +223,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Retrieve the compressed data size.
 		///
 		/// \return The size of the compressed data in bytes.
-		size_t compressed_size() const noexcept 
+		size_t compressed_size() const 
 		{
 			if (!m_Schunk)
 			{
@@ -237,7 +244,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Retrieve the uncompressed data size.
 		///
 		/// \return The size of the uncompressed data in elements.
-		size_t uncompressed_size() const noexcept
+		size_t uncompressed_size() const
 		{
 			if (!m_Schunk)
 			{
@@ -258,7 +265,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Retrieve the total number of chunks the channel stores.
 		///
 		/// \return The number of chunks.
-		size_t num_chunks() const noexcept 
+		size_t num_chunks() const 
 		{ 
 			if (!m_Schunk)
 			{
@@ -281,20 +288,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \return A vector containing the decompressed data.
 		std::vector<T> get_decompressed()
 		{
-			if (!m_Schunk)
+			if (m_Schunk)
 			{
-				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
+				return std::visit([&](auto& schunk)
+					{
+						return schunk.to_uncompressed(m_DecompressionContext);
+					}, *m_Schunk);
 			}
-
-			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
-			{
-				return std::get<blosc2::schunk<T>>(*m_Schunk).to_uncompressed(m_DecompressionContext);
-			}
-			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(m_Schunk))
-			{
-				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).to_uncompressed(m_DecompressionContext);
-			}
-			return {};
+			throw std::runtime_error("Internal Error: Channel instance is not properly initialized, unable to get decompressed data");
 		}
 
 		/// Equality operators, compares pointers to check for equality

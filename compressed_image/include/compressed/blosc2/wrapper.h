@@ -157,6 +157,39 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// corresponding Blosc2 error code.
 		/// 
 		/// \tparam T The data type of the input buffer.
+		/// \param context A raw pointer to the Blosc2 compression context.
+		/// \param data The input data to be compressed, provided as a `std::span<T>`.
+		/// \param chunk The output chunk where compressed data will be stored, provided as a `std::span<std::byte>`.
+		/// \returns The compressed byte size of the chunk. This size includes a header with metadata, 
+		///          which Blosc2 internally uses.
+		/// \throws std::runtime_error if compression fails, with the Blosc2 error code.
+		template <typename T>
+		size_t compress(context_raw_ptr context, std::span<const T> data, std::span<std::byte> chunk)
+		{
+			_COMPRESSED_PROFILE_FUNCTION();
+			detail::init_filters();
+			const auto cbytes = blosc2_compress_ctx(
+				context,
+				static_cast<const void*>(data.data()),
+				static_cast<int32_t>(data.size() * sizeof(T)),
+				static_cast<void*>(chunk.data()),
+				static_cast<int32_t>(chunk.size())
+			);
+			if (cbytes < 0)
+			{
+				throw std::runtime_error(std::format("Unable to compress context using Blosc2 with error code {}", cbytes));
+			}
+
+			return cbytes;
+		}
+
+		/// Compress the `data` into `chunk` using the provided `context`. 
+		/// 
+		/// This function applies Blosc2 compression to the input `data` and stores the compressed 
+		/// result in `chunk`. If compression fails, it throws a `std::runtime_error` with the 
+		/// corresponding Blosc2 error code.
+		/// 
+		/// \tparam T The data type of the input buffer.
 		/// \param context A unique pointer to the Blosc2 compression context.
 		/// \param data The input data to be compressed, provided as a `std::span<T>`.
 		/// \param chunk The output chunk where compressed data will be stored, provided as a `std::span<std::byte>`.
@@ -169,6 +202,24 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return compress(context.get(), data, chunk);
 		}
 
+		/// Compress the `data` into `chunk` using the provided `context`. 
+		/// 
+		/// This function applies Blosc2 compression to the input `data` and stores the compressed 
+		/// result in `chunk`. If compression fails, it throws a `std::runtime_error` with the 
+		/// corresponding Blosc2 error code.
+		/// 
+		/// \tparam T The data type of the input buffer.
+		/// \param context A unique pointer to the Blosc2 compression context.
+		/// \param data The input data to be compressed, provided as a `std::span<T>`.
+		/// \param chunk The output chunk where compressed data will be stored, provided as a `std::span<std::byte>`.
+		/// \returns The compressed byte size of the chunk. This size includes a header with metadata, 
+		///          which Blosc2 internally uses.
+		/// \throws std::runtime_error if compression fails, with the Blosc2 error code.
+		template <typename T>
+		size_t compress(context_ptr& context, std::span<const T> data, std::span<std::byte> chunk)
+		{
+			return compress(context.get(), data, chunk);
+		}
 
 		/// Decompress a Blosc2 `chunk` into `buffer` using the provided `context`. 
 		/// 

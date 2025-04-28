@@ -112,7 +112,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \tparam ChunkSize the size of a single chunk (in bytes)
 		/// \param width the width of a single scanline (in elements)
 		template <typename T, size_t ChunkSize>
-		size_t align_chunk_to_scanlines(size_t width)
+		size_t align_chunk_to_scanlines_elems(size_t width)
 		{
 			// The flooring here is intentional, we want to exclude any partial scanlines.
 			size_t num_scanlines = ChunkSize / sizeof(T) / width;
@@ -127,6 +127,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				);
 			}
 			return num_scanlines * width;
+		}
+
+		template <typename T, size_t ChunkSize>
+		size_t align_chunk_to_scanlines_bytes(size_t width)
+		{
+			return align_chunk_to_scanlines_elems<T, ChunkSize>(width) * sizeof(T);
 		}
 
 		/// Checks if the given `sz` is aligned to a multiple of the scanline size.

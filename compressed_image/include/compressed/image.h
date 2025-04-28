@@ -227,7 +227,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			// Align the chunk size to the scanlines, this makes our life considerably easier and allows
 			// us to not deal with partial scanlines.
-			const size_t chunk_size_aligned = util::align_chunk_to_scanlines<T, ChunkSize>(spec.width);
+			const size_t chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T, ChunkSize>(spec.width);
 			const size_t bytes_per_scanline = static_cast<size_t>(spec.width) * spec.nchannels * sizeof(T);
 			
 			const size_t chunk_size_all = chunk_size_aligned * spec.nchannels;
@@ -237,9 +237,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// or compressed from.
 			util::default_init_vector<T> interleaved_buffer(chunk_size_all / sizeof(T));
 			std::vector<util::default_init_vector<T>> deinterleaved_buffer(spec.nchannels);
-			std::for_each(std::execution::par_unseq, deinterleaved_buffer.begin(), deinterleaved_buffer.end(), [](auto& buffer)
+			std::for_each(std::execution::par_unseq, deinterleaved_buffer.begin(), deinterleaved_buffer.end(), [&](auto& buffer)
 				{
-					buffer.resize(ChunkSize / sizeof(T));
+					buffer.resize(chunk_size_aligned / sizeof(T));
 				});
 
 			// Create and initialize all of our compression contexts and schunks.

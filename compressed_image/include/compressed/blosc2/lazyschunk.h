@@ -19,6 +19,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 		namespace detail
 		{
+
 			/// Wrapper representing a lazy chunk holding either an initialized (and compressed) chunk
 			/// in the form of a byte array or just a single T representing a lazy state
 			template <typename T>
@@ -37,12 +38,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					return std::holds_alternative<T>(this->value);
 				}
 			};
-		}
+
+		} // detail
 
 
 		template <typename T>
 		struct lazy_schunk final : public detail::schunk_mixin<T, detail::lazy_chunk<T>>
 		{
+			using detail::schunk_mixin<T, detail::lazy_chunk<T>>::chunk_bytes;
 
 			/// Initialize a lazy super-chunk from the given value, has a near-zero
 			/// cost with the chunks only being initialized on read/modify.
@@ -54,18 +57,18 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			lazy_schunk(T value, size_t num_elements, const size_t chunk_size)
 			{
 				util::validate_chunk_size<T>(chunk_size, "lazy_schunk");
-				m_ChunkSize = chunk_size;
+				this->m_ChunkSize = chunk_size;
 
 				size_t num_bytes = num_elements * sizeof(T);
 
 				// Calculate all 'full' chunks and the final remainder (if any).
-				size_t num_full_chunks = num_bytes / m_ChunkSize;
-				size_t remainder_bytes = num_bytes - (m_ChunkSize * num_full_chunks);
+				size_t num_full_chunks = num_bytes / this->m_ChunkSize;
+				size_t remainder_bytes = num_bytes - (this->m_ChunkSize * num_full_chunks);
 
 				// Initialize lazy chunks with the provided value of T
-				for (auto idx : std::views::iota(num_full_chunks))
+				for (auto idx : std::views::iota(0, num_full_chunks))
 				{
-					detail::lazy_chunk<T> chunk = { value, m_ChunkSize / sizeof(T) };
+					detail::lazy_chunk<T> chunk = { value, this->m_ChunkSize / sizeof(T) };
 					this->m_Chunks.push_back(std::move(chunk));
 				}
 				if (remainder_bytes > 0)
@@ -73,6 +76,18 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					detail::lazy_chunk<T> chunk = { value, remainder_bytes / sizeof(T) };
 					this->m_Chunks.push_back(std::move(chunk));
 				}
+			}
+
+			size_t chunk_bytes(size_t index) const override
+			{
+				if (index > this->m_Chunks.size() - 1)
+				{
+					throw std::out_of_range(
+						std::format("Cannot access index {} in lazy-schunk. Total amount of chunks is {}", index, this->m_Chunks.size())
+					);
+				}
+
+				return this->m_Chunks[index].num_elements * sizeof(T);
 			}
 
 			/// convert the lazy schunk into a super-chunk, generating any 
@@ -90,10 +105,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				util::default_init_vector<std::byte> lazy_compressed_data;
 				if (this->has_lazy_chunk())
 				{
-					auto lazy_buff = std::vector<T>(this->get_T_buffer_size(this->chunk_size, this->lazy_chunk_value()));
-					lazy_compressed_data.resize(blosc2::min_compressed_size<chunk_size>());
+					auto lazy_buff = std::vector<T>(this->chunk_elements(), this->lazy_chunk_value());
+					lazy_compressed_data.resize(blosc2::min_compressed_size(this->m_ChunkSize));
 
-					auto context = blosc2::create_compression_context(schunk, std::thread::hardware_concurrency(), enums::codec::lz4, 9);
+					auto context = blosc2::create_compression_context<T, s_default_blocksize>(schunk, std::thread::hardware_concurrency(), enums::codec::lz4, 9);
 					blosc2::compress(context, std::span<T>(lazy_buff), std::span<std::byte>(lazy_compressed_data));
 				}
 
@@ -133,14 +148,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				size_t offset = 0; // element offset
 				for (const auto& chunk : this->m_Chunks)
 				{
-					if (std::holds_alternative<std::vector<std::byte>>(chunk.data))
+					if (std::holds_alternative<std::vector<std::byte>>(chunk.value))
 					{
-						auto subspan = std::span<T>(uncompressed.data() + offset, chunk.uncompressed_size);
-						blosc2::decompress(decompression_ctx, subspan, std::get<std::vector<std::byte>>(chunk.data));
+						auto subspan = std::span<T>(uncompressed.data() + offset, chunk.num_elements);
+						blosc2::decompress(decompression_ctx, subspan, std::get<std::vector<std::byte>>(chunk.value));
 					}
 					// Since we already initialized the uncompressed data to the lazy chunks' value we don't need
 					// to do any filling here.
-					offset += chunk.uncompressed_size;
+					offset += chunk.num_elements;
 				}
 
 				return uncompressed;
@@ -162,11 +177,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 				if (std::holds_alternative<std::vector<std::byte>>(this->m_Chunks[index].value))
 				{
-					std::vector<T> uncompressed(this->chunk_size(index), 0);
+					std::vector<T> uncompressed(this->chunk_elements(index), 0);
 					this->chunk(decompression_ctx, std::span<T>(uncompressed), index);
 					return uncompressed;
 				}
-				return std::vector<T>(this->chunk_size(index), std::get<T>(this->m_Chunks[index].value));
+				return std::vector<T>(this->chunk_elements(index), std::get<T>(this->m_Chunks[index].value));
 			}
 
 			void chunk(blosc2::context_ptr& decompression_ctx, std::span<T> buffer, size_t index) const override
@@ -184,13 +199,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				}
 
 				// Either decompress from the compressed data or fill with the lazy chunks value
-				if (std::holds_alternative<std::vector<std::byte>>(chunk.value))
+				if (std::holds_alternative<std::vector<std::byte>>(this->m_Chunks.at(index).value))
 				{
-					auto& compressed = std::get<std::vector<std::byte>>(this->m_Chunks[index]);
+					auto& compressed = std::get<std::vector<std::byte>>(this->m_Chunks.at(index).value);
 					blosc2::decompress(
 						decompression_ctx,
 						buffer,
-						std::span<std::byte>(compressed)
+						std::span<const std::byte>(compressed)
 					);
 				}
 				else
@@ -204,31 +219,60 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				}
 			}
 
-			/// Set the chunk at `index` to the compressed data.
 			void set_chunk(std::vector<std::byte> compressed, size_t index) override
 			{
+				this->validate_chunk_index(index);
 				this->m_Chunks[index].value = std::move(compressed);
+				this->validate_chunk_sizes();
 			}
 
-			/// Retrieve the number of elements (uncompressed) that the chunk at index `index` stores.
-			///
-			/// \param index The chunk index, must be valid.
-			/// \throws std::out_of_range if the `index` is invalid
-			size_t chunk_size(size_t index) const override
+			void set_chunk(std::span<const std::byte> compressed, size_t index) override
 			{
-				if (index > this->m_Chunks.size() - 1)
-				{
-					throw std::out_of_range(
-						std::format("Cannot access index {} in lazy-schunk. Total amount of chunks is {}", index, this->m_Chunks.size())
-					);
-				}
-
-				return this->m_Chunks[index].uncompressed_size;
+				this->validate_chunk_index(index);
+				this->m_Chunks[index].value = std::vector<std::byte>(compressed.begin(), compressed.end());
+				this->validate_chunk_sizes();
 			}
 
-			size_t chunk_size() const noexcept
+			void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) override
 			{
-				return m_ChunkSize;
+				this->validate_chunk_index(index);
+
+				util::default_init_vector<std::byte> compression_buffer(blosc2::min_compressed_size(this->m_ChunkSize));
+				std::span<std::byte> compression_span(compression_buffer);
+
+				auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_span);
+
+				// copy over a new vector containing all the elements from the compression span.
+				this->m_Chunks[index].value = std::vector<std::byte>(compression_span.begin(), compression_span.begin() + csize);
+				this->m_Chunks[index].num_elements = uncompressed.size();
+				this->validate_chunk_sizes();
+			}
+
+			void append_chunk(std::vector<std::byte> compressed) override
+			{
+				auto num_elements = blosc2::chunk_num_elements<T>(compressed);
+				auto chunk = detail::lazy_chunk<T>{ .value = std::move(compressed), .num_elements = num_elements };
+				this->m_Chunks.push_back(std::move(chunk));
+				this->validate_chunk_sizes();
+			}
+
+			void append_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed) override
+			{
+				util::default_init_vector<std::byte> compression_buffer(blosc2::min_compressed_size(this->chunk_bytes()));
+				std::span<std::byte> compression_span(compression_buffer);
+				this->append_chunk(compression_ctx, uncompressed, compression_span);
+				this->validate_chunk_sizes();
+			};
+
+			void append_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, std::span<std::byte> compression_buff) override
+			{
+				auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_buff);
+				auto chunk = detail::lazy_chunk<T>{
+					.value = std::vector<std::byte>(compression_buff.begin(), compression_buff.begin() + csize),
+					.num_elements = uncompressed.size()
+				};
+				this->m_Chunks.push_back(std::move(chunk));
+				this->validate_chunk_sizes();
 			}
 
 			/// Retrieve the total compressed size of the lazy-schunk.
@@ -256,15 +300,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				size_t _size = 0;
 				for (const auto chunk : this->m_Chunks)
 				{
-					size += chunk.uncompressed_size;
+					_size += chunk.num_elements;
 				}
 				return _size;
 			}
 
 		private:
-			/// The maximum size a chunk is constrained to, in bytes. This will dictate the size of all chunks from
-			///  0 - (this->m_Chunks.size() - 1). The last chunk may be any other size smaller than or equal to this value.
-			size_t m_ChunkSize = 0;
 
 			/// Check whether this->m_Chunks contain any still-lazy chunks.
 			bool has_lazy_chunk() const noexcept
@@ -294,22 +335,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			}
 
-			/// Get the buffer size for T for the given byte size. Checks that the buffer
-			/// can be divided cleanly by sizeof(T).
-			size_t get_T_buffer_size(size_t byte_size)
-			{
-				if (byte_size % sizeof(T) != 0)
-				{
-					throw std::runtime_error(
-						std::format(
-							"Cannot get buffer size for type T of size {} because it is not evenly divisible for buffer size {:L}",
-							sizeof(T),
-							byte_size
-						)
-					);
-				}
-				return byte_size / sizeof(T);
-			}
 		};
 
 	} // blosc2

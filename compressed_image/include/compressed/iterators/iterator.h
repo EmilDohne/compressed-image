@@ -102,9 +102,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// quite cheaply
 			if (!m_Initialized)
 			{
-				m_CompressionBuffer.resize(blosc2::min_compressed_size(this->chunk_size()));
+				m_CompressionBuffer.resize(blosc2::min_compressed_size(this->chunk_bytes()));
 				m_CompressionBufferSize = m_CompressionBuffer.size();
-				m_DecompressionBuffer.resize(blosc2::min_decompressed_size(this->chunk_size()));
+				m_DecompressionBuffer.resize(blosc2::min_decompressed_size(this->chunk_bytes()));
 				m_DecompressionBufferSize = m_DecompressionBuffer.size();
 				m_Initialized = true;
 			}
@@ -118,7 +118,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			if (m_DecompressionBufferWasRefitted && m_ChunkIndex != 0)
 			{
 				this->compress_chunk(m_CompressionContext);
-				this->update_chunk(m_Schunk, m_ChunkIndex - 1);
+				this->update_chunk(m_ChunkIndex - 1);
 			}
 
 			// In most cases m_Decompressed.fitted_data should be identical to m_Decompressed.data. However, this is not true
@@ -137,17 +137,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			std::span<T> item_span(reinterpret_cast<T*>(m_DecompressionBuffer.data()), m_DecompressionBufferSize / sizeof(T));
-			return container::chunk_span<T>(item_span, m_Width, m_Height, m_ChunkIndex, this->chunk_size());
+			return container::chunk_span<T>(item_span, m_Width, m_Height, m_ChunkIndex, this->chunk_bytes());
 		}
 
 		// Pre-increment operator: move to the next chunk
 		channel_iterator& operator++()
 		{
 			++m_ChunkIndex;
-			if (static_cast<int64_t>(m_ChunkIndex) > m_Schunk->nchunks)
-			{
-				throw std::out_of_range("Iterator: count exceeds number of chunks");
-			}
+			std::visit([&](auto& schunk)
+				{
+					if (m_ChunkIndex > schunk.num_chunks())
+					{
+						throw std::out_of_range("Iterator: count exceeds number of chunks");
+					};
+				}, *m_Schunk);
 			return *this;
 		}
 
@@ -172,11 +175,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		size_t chunk_index() const noexcept { return m_ChunkIndex; }
 
 		/// Return the chunk size of all but the last chunk.
-		size_t chunk_size() const noexcept
+		size_t chunk_elements() const noexcept
 		{
 			return std::visit([&](auto& schunk) -> size_t
 				{
-					return schunk.chunk_size();
+					return schunk.chunk_elements();
+				}, *m_Schunk);
+		}
+
+		/// Return the chunk size of all but the last chunk.
+		size_t chunk_bytes() const noexcept
+		{
+			return std::visit([&](auto& schunk) -> size_t
+				{
+					return schunk.chunk_bytes();
 				}, *m_Schunk);
 		}
 
@@ -230,21 +242,28 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Check for validity of this struct.
 		bool valid() const
 		{
-			// Check that the schunk, compression and decompression ptrs are not null
-			bool ptrs_valid = m_Schunk && m_CompressionContext && m_DecompressionContext;
-			if (!ptrs_valid)
+			if (!m_Schunk)
 			{
 				return false;
 			}
+			return std::visit([&](auto& schunk)
+				{
+					// Check that the schunk, compression and decompression ptrs are not null
+					bool ptrs_valid = m_Schunk && m_CompressionContext && m_DecompressionContext;
+					if (!ptrs_valid)
+					{
+						return false;
+					}
 
-			bool compression_size_valid = m_CompressionBufferSize <= m_CompressionBuffer.size();
-			bool decompression_size_valid = m_DecompressionBufferSize <= m_DecompressionBuffer.size();
+					bool compression_size_valid = m_CompressionBufferSize <= m_CompressionBuffer.size();
+					bool decompression_size_valid = m_DecompressionBufferSize <= m_DecompressionBuffer.size();
 
-			bool idx_valid = static_cast<int64_t>(m_ChunkIndex) < m_Schunk->nchunks;
-			bool compressed_data_valid = compression_buffer_max_byte_size() >= blosc2::min_compressed_size(this->chunk_size());
-			bool decompressed_data_valid = decompression_buffer_max_byte_size() >= blosc2::min_decompressed_size(this->chunk_size());
+					bool idx_valid = static_cast<int64_t>(m_ChunkIndex) < schunk.num_chunks();
+					bool compressed_data_valid = compression_buffer_max_byte_size() >= blosc2::min_compressed_size(this->chunk_bytes());
+					bool decompressed_data_valid = decompression_buffer_max_byte_size() >= blosc2::min_decompressed_size(this->chunk_bytes());
 
-			return idx_valid && compressed_data_valid && decompressed_data_valid && compression_size_valid && decompression_size_valid;
+					return idx_valid && compressed_data_valid && decompressed_data_valid && compression_size_valid && decompression_size_valid;
+				}, *m_Schunk);
 		}
 
 		/// Decompress a chunk using the given context and chunk pointer. Decompressing into the buffer
@@ -252,17 +271,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
 			auto buffer_span = std::span<T>(reinterpret_cast<T*>(m_DecompressionBuffer.data()), m_DecompressionBufferSize / sizeof(T));
-			size_t decompressed_size = 0;
-
+			
 			// apply the decompression.
 			std::visit([&](auto& schunk) 
 				{
 					schunk.chunk(decompression_context_ptr, buffer_span, m_ChunkIndex);
-					decompressed_size = schunk.chunk_size(m_ChunkIndex);
+					m_DecompressionBufferSize = schunk.chunk_bytes(m_ChunkIndex);
+					m_DecompressionBufferWasRefitted = true;
 				}, *m_Schunk);
-
-			m_DecompressionBufferSize = decompressed_size * sizeof(T);
-			m_DecompressionBufferWasRefitted = true;
 		}
 
 		/// Compress a chunk from the decompressed view into the compressed view

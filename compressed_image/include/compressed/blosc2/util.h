@@ -13,7 +13,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	{
 
 		/// Maps a BLOSC2_ERROR_* into a std::string for use in debug logging.
-		std::string map_error_code(int error_code)
+		inline std::string map_error_code(int error_code)
 		{
 			return std::string(print_error(error_code));
 		}
