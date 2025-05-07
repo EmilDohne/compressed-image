@@ -19,7 +19,13 @@ TEST_CASE("Read compressed file smaller than one chunk")
 	std::string name = "uv_grid_2048x2048.jpg";
 	auto path = std::filesystem::current_path() / "images" / name;
 
-	auto image = compressed::image<uint8_t, compressed::s_default_blocksize, compressed::s_default_chunksize * 2>::read(path);
+	auto image = compressed::image<uint8_t>::read(
+		path, 
+		compressed::enums::codec::lz4, 
+		9,
+		compressed::s_default_blocksize, 
+		compressed::s_default_chunksize * 2
+	);
 	auto image_data = image.get_decompressed();
 	auto image_ref = test_util::read_oiio<uint8_t>(path);
 
@@ -47,7 +53,13 @@ TEST_CASE("Read compressed file larger than one chunk")
 	std::string name = "multilayer_2560x1440.exr";
 	auto path = std::filesystem::current_path() / "images" / name;
 
-	auto image = compressed::image<float, compressed::s_default_blocksize, compressed::s_default_chunksize / 2>::read(path);
+	auto image = compressed::image<float>::read(
+		path, 
+		compressed::enums::codec::lz4, 
+		9, 
+		compressed::s_default_blocksize, 
+		compressed::s_default_chunksize / 2
+	);
 	auto image_data = image.get_decompressed();
 	auto image_ref = test_util::read_oiio<float>(path);
 
@@ -147,10 +159,15 @@ TEST_CASE("Zip image channels equal to chunk size parametrized")
 			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
 			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
 
-			auto image = compressed::image<decltype(type), 256, 1024>(
+			auto image = compressed::image<decltype(type)>(
 				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
-				16
+				16,
+				{},
+				compressed::enums::codec::lz4,
+				9,
+				256, 
+				1024
 			);
 
 			auto [r, g, b] = image.channels_ref(0, 1, 2);
@@ -180,10 +197,15 @@ TEST_CASE("Zip image channels larger to chunk size parametrized")
 			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
 			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
 
-			auto image = compressed::image<decltype(type), 256, 768>(
+			auto image = compressed::image<decltype(type)>(
 				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
-				16
+				16,
+				{},
+				compressed::enums::codec::lz4,
+				9,
+				256, 
+				768
 			);
 
 			auto [r, g, b] = image.channels_ref(0, 1, 2);
@@ -256,10 +278,15 @@ TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
 			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
 
-			auto image = compressed::image<decltype(type), 256, 1024>(
+			auto image = compressed::image<decltype(type)>(
 				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
-				16
+				16,
+				{},
+				compressed::enums::codec::lz4,
+				9,
+				256,
+				1024
 			);
 
 			auto [r, g, b] = image.channels_ref(0, 1, 2);
@@ -299,10 +326,15 @@ TEST_CASE("Zip modify image channels larger to chunk size parametrized")
 			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
 			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
 
-			auto image = compressed::image<decltype(type), 256, 768>(
+			auto image = compressed::image<decltype(type)>(
 				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
-				16
+				16,
+				{},
+				compressed::enums::codec::lz4,
+				9,
+				256,
+				768
 			);
 
 			auto [r, g, b] = image.channels_ref(0, 1, 2);

@@ -183,11 +183,22 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					return size() * sizeof(T);
 				}
 
+				size_t max_chunk_size()
+				{
+					return m_ChunkSize;
+				}
+
+				size_t max_block_size()
+				{
+					return m_BlockSize;
+				}
+
 			protected:
 				std::vector<ContainerType> m_Chunks{};
 				/// The maximum size a chunk is constrained to, in bytes. This will dictate the size of all chunks from
 				///  0 - (this->m_Chunks.size() - 1). The last chunk may be any other size smaller than or equal to this value.
 				size_t m_ChunkSize = s_default_chunksize;
+				size_t m_BlockSize = s_default_blocksize;
 
 				/// Validate the chunk index throwing a std::out_of_range if the index is not valid.
 				void validate_chunk_index(size_t index) const

@@ -52,11 +52,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// 
 			/// \param value The initial value to fill.
 			/// \param num_elements The size to initialize the data with.
+			/// \param block_size The requested chunk size. It is up to the caller to ensure
+			///                   this is appropriately sized
 			/// \param chunk_size The requested chunk size. It is up to the caller to ensure
 			///                   this is appropriately sized (i.e. by using util::align_chunk_to_scanlines)
-			lazy_schunk(T value, size_t num_elements, const size_t chunk_size)
+			lazy_schunk(T value, size_t num_elements, size_t block_size, size_t chunk_size)
 			{
 				util::validate_chunk_size<T>(chunk_size, "lazy_schunk");
+				this->m_BlockSize = block_size;
 				this->m_ChunkSize = chunk_size;
 
 				size_t num_bytes = num_elements * sizeof(T);
@@ -108,7 +111,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					auto lazy_buff = std::vector<T>(this->chunk_elements(), this->lazy_chunk_value());
 					lazy_compressed_data.resize(blosc2::min_compressed_size(this->m_ChunkSize));
 
-					auto context = blosc2::create_compression_context<T, s_default_blocksize>(schunk, std::thread::hardware_concurrency(), enums::codec::lz4, 9);
+					auto context = blosc2::create_compression_context<T>(
+						schunk, 
+						std::thread::hardware_concurrency(), 
+						enums::codec::lz4, 
+						9, 
+						this->m_BlockSize
+					);
 					blosc2::compress(context, std::span<T>(lazy_buff), std::span<std::byte>(lazy_compressed_data));
 				}
 

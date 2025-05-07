@@ -6,7 +6,7 @@
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
 
-	template <typename T, size_t BlockSize, size_t ChunkSize>
+	template <typename T>
 	struct image;
 
 } // NAMESPACE_COMPRESSED_IMAGE

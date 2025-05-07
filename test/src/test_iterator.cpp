@@ -49,7 +49,13 @@ TEST_CASE("Iterator: comparison")
 {
 	std::string name = "uv_grid_2048x2048.jpg";
 	auto path = std::filesystem::current_path() / "images" / name;
-	auto image = compressed::image<uint8_t, 4096, 16384>::read(path);
+	auto image = compressed::image<uint8_t>::read(
+		path,
+		compressed::enums::codec::lz4,
+		9,
+		4096, 
+		16384
+	);
 
 	auto& r = image.channel_ref(0);
 	auto it = r.begin();
@@ -60,7 +66,13 @@ TEST_CASE("Iterator: comparison")
 	CHECK(it != it_2);
 
 	// Different image, iterator should not match
-	auto image_2 = compressed::image<uint8_t, 4096, 16384>::read(path);
+	auto image_2 = compressed::image<uint8_t>::read(
+		path,
+		compressed::enums::codec::lz4,
+		9,
+		4096,
+		16384
+	);
 	auto& r_2 = image_2.channel_ref(0);
 	auto it_other = r_2.begin();
 

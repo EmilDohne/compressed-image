@@ -44,23 +44,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	///		}
 	/// }
 	/// \endcode
-	/// 
-	/// \tparam _Block_Size 
-	///		The size of the blocks stored inside the chunks, defaults to 32KB which is enough to comfortably fit into the L1 cache
-	///		of most modern CPUs. If you know your cpu can handle larger blocks feel free to up this number.
-	/// 
-	/// \tparam _Chunk_Size 
-	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
-	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
-	///		upped which might give better compression ratios.
-	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
-	struct channel : public std::ranges::view_interface<channel<T, BlockSize, ChunkSize>>
+	template <typename T>
+	struct channel : public std::ranges::view_interface<channel<T>>
 	{
 		using iterator = channel_iterator<T>;
 		using const_iterator = channel_iterator<const T>;
-
-		static constexpr size_t block_size = BlockSize;
-		static constexpr size_t chunk_size = ChunkSize;
 
 		channel() = default;
 
@@ -71,12 +59,21 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param height The height of the image channel.
 		/// \param compression_codec The compression codec to be used.
 		/// \param compression_level The compression level (default is 5).
+		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
+		///					  comfortably fit into the L1 cache of most modern CPUs. If you know your cpu can handle 
+		///					  larger blocks feel free to up this number.
+		/// \param chunk_size The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. 
+		///					  This should be tweaked to be no larger than the size of the usual images you are expecting  
+		///					  to compress for optimal performance but this could be upped which might give better compression
+		///					  ratios. Must be a multiple of sizeof(T).
 		channel(
 			const std::span<const T> data,
 			size_t width,
 			size_t height,
 			enums::codec compression_codec = enums::codec::lz4,
-			uint8_t compression_level = 9
+			uint8_t compression_level = 9,
+			size_t block_size = s_default_blocksize,
+			size_t chunk_size = s_default_chunksize
 		)
 		{
 			m_Width = width;
@@ -95,15 +92,15 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
-			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
-			static_assert(BlockSize < ChunkSize);
+			assert(chunk_size < std::numeric_limits<int32_t>::max());
+			assert(block_size < chunk_size);
 
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
+			m_CompressionContext = blosc2::create_compression_context<T>(std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel, block_size);
 			m_DecompressionContext = blosc2::create_decompression_context(std::thread::hardware_concurrency());
 
 			// Align the chunks to the scanlines, makes our lifes a lot easier on read/write.
-			auto chunk_size = util::align_chunk_to_scanlines_bytes<T, ChunkSize>(m_Width);
-			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(blosc2::schunk<T>(data, chunk_size, m_CompressionContext));
+			auto chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(m_Width, chunk_size);
+			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(blosc2::schunk<T>(data, block_size, chunk_size_aligned, m_CompressionContext));
 		}
 
 
@@ -114,6 +111,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param height The height of the image channel.
 		/// \param compression_codec The compression codec to be used.
 		/// \param compression_level The compression level (default is 5).
+		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
+		///					  comfortably fit into the L1 cache of most modern CPUs. If you know your cpu can handle 
+		///					  larger blocks feel free to up this number.
+		/// \param chunk_size The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. 
+		///					  This should be tweaked to be no larger than the size of the usual images you are expecting  
+		///					  to compress for optimal performance but this could be upped which might give better compression
+		///					  ratios. Must be a multiple of sizeof(T).
 		channel(
 			blosc2::schunk_var<T> schunk,
 			size_t width,
@@ -124,9 +128,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			m_Codec = compression_codec;
 			m_CompressionLevel = util::ensure_compression_level(compression_level);
-			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
-			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
-			static_assert(BlockSize < ChunkSize);
 
 			if (std::holds_alternative<blosc2::schunk<T>>(schunk))
 			{
@@ -159,8 +160,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_Width = width;
 			m_Height = height;
 
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel);
-			m_DecompressionContext = blosc2::create_decompression_context(std::thread::hardware_concurrency());
+			// Store the compression and decompression contexts, retrieving the block size from the underlying schunk
+			// wrapper
+			std::visit([&](auto& schunk)
+				{
+					m_CompressionContext = blosc2::create_compression_context<T>(std::thread::hardware_concurrency(), m_Codec, m_CompressionLevel, schunk.max_block_size());
+					m_DecompressionContext = blosc2::create_decompression_context(std::thread::hardware_concurrency());
+				}, *m_Schunk);
+			
 		}
 
 		/// Returns an iterator pointing to the beginning of the compressed data.
@@ -199,9 +206,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Update the number of threads used internally by c-blosc2 for compression and decompression.
 		/// 
 		/// \param nthreads The number of threads to use for compression and decompression.
-		void update_nthreads(size_t nthreads)
+		/// \param block_size The block size to compress to
+		void update_nthreads(size_t nthreads, size_t block_size = s_default_blocksize)
 		{
-			m_CompressionContext = blosc2::create_compression_context<T, BlockSize>(nthreads, m_Codec, m_CompressionLevel);
+			m_CompressionContext = blosc2::create_compression_context<T>(nthreads, m_Codec, m_CompressionLevel);
 			m_DecompressionContext = blosc2::create_decompression_context(nthreads);
 		}
 
@@ -299,7 +307,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		/// Equality operators, compares pointers to check for equality
-		bool operator==(const channel<T, BlockSize, ChunkSize>& other) const noexcept
+		bool operator==(const channel<T>& other) const noexcept
 		{
 			return this == &other;
 		}

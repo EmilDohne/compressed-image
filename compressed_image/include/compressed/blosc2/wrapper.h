@@ -309,8 +309,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		/// Create blosc2 compression parameters for the given input.
-		template <typename T, size_t BlockSize>
-		blosc2_cparams create_blosc2_cparams(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level)
+		template <typename T>
+		blosc2_cparams create_blosc2_cparams(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level, size_t block_size)
 		{
 			if (nthreads > std::numeric_limits<int16_t>::max())
 			{
@@ -318,9 +318,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 			nthreads = std::min(nthreads, static_cast<size_t>(1));
 
+			assert(std::numeric_limits<int32_t>::max() > block_size);
+
 			detail::init_filters();
 			blosc2_cparams cparams = BLOSC2_CPARAMS_DEFAULTS;
-			cparams.blocksize = BlockSize;
+			cparams.blocksize = static_cast<int32_t>(block_size);;
 			cparams.typesize = sizeof(T);
 			cparams.splitmode = BLOSC_AUTO_SPLIT;
 			cparams.clevel = compression_level;
@@ -332,8 +334,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		/// Create blosc2 compression parameters for the given input.
-		template <typename T, size_t BlockSize>
-		blosc2_cparams create_blosc2_cparams(size_t nthreads, enums::codec codec, uint8_t compression_level)
+		template <typename T>
+		blosc2_cparams create_blosc2_cparams(size_t nthreads, enums::codec codec, uint8_t compression_level, size_t block_size)
 		{
 			if (nthreads > std::numeric_limits<int16_t>::max())
 			{
@@ -341,9 +343,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 			nthreads = std::min(nthreads, static_cast<size_t>(1));
 
+			assert(std::numeric_limits<int32_t>::max() > block_size);
+
 			detail::init_filters();
 			blosc2_cparams cparams = BLOSC2_CPARAMS_DEFAULTS;
-			cparams.blocksize = BlockSize;
+			cparams.blocksize = static_cast<int32_t>(block_size);
 			cparams.typesize = sizeof(T);
 			cparams.splitmode = BLOSC_AUTO_SPLIT;
 			cparams.clevel = compression_level;
@@ -354,19 +358,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		/// Create a blosc2 compression context with the given number of threads.
-		template <typename T, size_t BlockSize>
-		blosc2::context_ptr create_compression_context(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level)
+		template <typename T>
+		blosc2::context_ptr create_compression_context(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level, size_t block_size)
 		{
 			detail::init_filters();
-			auto cparams = create_blosc2_cparams<T, BlockSize>(schunk, nthreads, codec, compression_level);
+			auto cparams = create_blosc2_cparams<T>(schunk, nthreads, codec, compression_level, block_size);
 			return blosc2::context_ptr(blosc2_create_cctx(cparams));
 		}
 
-		template <typename T, size_t BlockSize>
-		blosc2::context_ptr create_compression_context(size_t nthreads, enums::codec codec, uint8_t compression_level)
+		template <typename T>
+		blosc2::context_ptr create_compression_context(size_t nthreads, enums::codec codec, uint8_t compression_level, size_t block_size)
 		{
 			detail::init_filters();
-			auto cparams = create_blosc2_cparams<T, BlockSize>(nthreads, codec, compression_level);
+			auto cparams = create_blosc2_cparams<T>(nthreads, codec, compression_level, block_size);
 			return blosc2::context_ptr(blosc2_create_cctx(cparams));
 		}
 

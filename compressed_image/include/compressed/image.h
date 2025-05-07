@@ -53,19 +53,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
 	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
 	///		upped which might give better compression ratios. Must be a multiple of sizeof(T).
-	template <typename T, size_t BlockSize = s_default_blocksize, size_t ChunkSize = s_default_chunksize>
-	struct image : public std::ranges::view_interface<image<T, BlockSize, ChunkSize>>
+	template <typename T>
+	struct image : public std::ranges::view_interface<image<T>>
 	{
-		static constexpr size_t block_size = BlockSize;
-		static constexpr size_t chunk_size = ChunkSize;
 
 		image() = default;
 		~image() = default;
 
 		/// Constructs an image object with the specified channels, dimensions, and optional compression parameters.
 		/// 
-		/// This constructor creates an image from a given set of channels
-		/// The channel names can optionally be specified. The image is then compressed using the provided codec and compression level.
+		/// This constructor creates an image from a given set of channels. The channel names can optionally be specified. 
+		/// The image is then compressed using the provided codec and compression level.
 		/// 
 		/// Example:
 		/// \code{.cpp}
@@ -76,9 +74,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param channels A vector of vectors containing the image channels (each channel is a 2D array of pixel data).
 		/// \param width The width of the image in pixels.
 		/// \param height The height of the image in pixels.
-		/// \param channel_names (Optional) A list of channel names, must match the number of channels provided. If omitted or incorrect, channel names are ignored.
+		/// \param channel_names (Optional) A list of channel names, must match the number of channels provided. 
+		///					     If omitted or incorrect, channel names are ignored.
 		/// \param compression_codec (Optional) The codec used for compression, default is `codec::lz4`.
 		/// \param compression_level (Optional) The compression level, default is `5`.
+		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
+		///					  comfortably fit into the L1 cache of most modern CPUs. If you know your cpu can handle 
+		///					  larger blocks feel free to up this number.
+		/// \param chunk_size The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. 
+		///					  This should be tweaked to be no larger than the size of the usual images you are expecting  
+		///					  to compress for optimal performance but this could be upped which might give better compression
+		///					  ratios. Must be a multiple of sizeof(T).
 		/// \throws std::runtime_error if a channel fails to be inserted.
 		image(
 			std::vector<std::vector<T>> channels,
@@ -86,7 +92,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t height,
 			std::vector<std::string> channel_names = {},
 			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 9
+			size_t compression_level = 9,
+			size_t block_size = s_default_blocksize,
+			size_t chunk_size = s_default_chunksize
 		)
 		{
 			m_Width = width;
@@ -95,8 +103,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
 
 			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
-			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
-			static_assert(BlockSize < ChunkSize);
+			assert(chunk_size < std::numeric_limits<int32_t>::max());
+			assert(block_size < chunk_size);
 			if (channel_names.size() != channels.size() && channel_names.size() != 0)
 			{
 				std::cout << std::format(
@@ -114,7 +122,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				try
 				{
 					// Generate the channel and append it.
-					m_Channels.push_back(compressed::channel<T, BlockSize, ChunkSize>(
+					m_Channels.push_back(compressed::channel<T>(
 						std::span<const T>(_channel.begin(), _channel.end()),
 						width,
 						height,
@@ -152,7 +160,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 
 		image(
-			std::vector<channel<T, BlockSize, ChunkSize>> channels,
+			std::vector<channel<T>> channels,
 			size_t width,
 			size_t height,
 			std::vector<std::string> channel_names = {}
@@ -161,9 +169,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_Width = width;
 			m_Height = height;
 			m_ChannelNames = channel_names;
-			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
-			static_assert(ChunkSize < std::numeric_limits<int32_t>::max());
-			static_assert(BlockSize < ChunkSize);
 
 			if (channel_names.size() != channels.size() && channel_names.size() != 0)
 			{
@@ -205,10 +210,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		static image read(
 			std::filesystem::path filepath,
 			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 9
+			size_t compression_level = 9,
+			size_t block_size = s_default_blocksize,
+			size_t chunk_size = s_default_chunksize
 		)
 		{
-			static_assert(ChunkSize % sizeof(T) == 0);
+			assert(chunk_size % sizeof(T) == 0);
 			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
 
 			// Initialize the OIIO primitives
@@ -227,7 +234,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			// Align the chunk size to the scanlines, this makes our life considerably easier and allows
 			// us to not deal with partial scanlines.
-			const size_t chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T, ChunkSize>(spec.width);
+			const size_t chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(spec.width, chunk_size);
 			const size_t bytes_per_scanline = static_cast<size_t>(spec.width) * spec.nchannels * sizeof(T);
 			
 			const size_t chunk_size_all = chunk_size_aligned * spec.nchannels;
@@ -247,11 +254,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::vector<blosc2::schunk<T>> schunks;
 			for ([[maybe_unused]] auto _ : std::views::iota(0, spec.nchannels))
 			{
-				schunks.push_back(blosc2::schunk<T>(chunk_size_aligned));
-				contexts.push_back(blosc2::create_compression_context<T, BlockSize>(
+				schunks.push_back(blosc2::schunk<T>(block_size, chunk_size_aligned));
+				contexts.push_back(blosc2::create_compression_context<T>(
 					std::thread::hardware_concurrency(),
 					compression_codec,
-					comp_level_adjusted
+					comp_level_adjusted,
+					block_size
 				));
 			}
 
@@ -264,7 +272,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			while (y < spec.height)
 			{
 				_COMPRESSED_PROFILE_SCOPE("Read Scanlines and compress");
-				int scanlines_to_read = static_cast<int>(std::min<size_t>(scanlines_per_chunk, spec.height - y));
+				int scanlines_to_read = static_cast<int>(std::min<size_t>(scanlines_per_chunk, static_cast<size_t>(spec.height - y)));
 				input_ptr->read_scanlines(
 					0, // subimage
 					0, // miplevel
@@ -287,7 +295,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				for (auto channel_idx : std::views::iota(0, spec.nchannels))
 				{
 					// How many elements we actually read per buffer
-					size_t read_elements = scanlines_to_read * spec.width;
+					size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;
 
 					auto deinterleaved_fitted = std::span<T>(deinterleaved_buffer[channel_idx].data(), read_elements);
 					schunks[channel_idx].append_chunk(
@@ -300,19 +308,21 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			// Finally create the channels from the schunk and create the image instance
-			std::vector<compressed::channel<T, BlockSize, ChunkSize>> channels;
+			std::vector<compressed::channel<T>> channels;
 			for (const auto channel_idx : std::views::iota(0, spec.nchannels))
 			{
-				channels.push_back(compressed::channel<T, BlockSize, ChunkSize>(
-					std::move(schunks[channel_idx]), 
-					spec.width, 
-					spec.height, 
-					compression_codec, 
-					comp_level_adjusted)
+				channels.push_back(
+					compressed::channel<T>(
+						std::move(schunks[channel_idx]), 
+						spec.width, 
+						spec.height, 
+						compression_codec, 
+						comp_level_adjusted
+					)
 				);
 			}
 
-			return compressed::image<T, BlockSize, ChunkSize>(std::move(channels), spec.width, spec.height, spec.channelnames);
+			return compressed::image<T>(std::move(channels), spec.width, spec.height, spec.channelnames);
 		}
 
 #endif
@@ -329,7 +339,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// 
 		/// \param _channel The channel to be added to the image.
 		/// \param name (Optional) Channel name of the channel to be inserted. If no channel names are set this argument is ignored.
-		void add_channel(compressed::channel<T, BlockSize, ChunkSize> _channel, std::optional<std::string> name = std::nullopt)
+		void add_channel(compressed::channel<T> _channel, std::optional<std::string> name = std::nullopt)
 		{
 			m_Channels.push_back(std::move(_channel));
 			if (m_ChannelNames.size() > 0)
@@ -469,7 +479,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param index The index of the channel to retrieve.
 		/// \return A reference to the requested channel.
 		/// \throws std::out_of_range if the index is out of bounds.
-		compressed::channel<T, BlockSize, ChunkSize>& channel_ref(size_t index)
+		compressed::channel<T>& channel_ref(size_t index)
 		{
 			if (index >= m_Channels.size())
 			{
@@ -483,7 +493,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param name The name of the channel to retrieve.
 		/// \return A reference to the requested channel.
 		/// \throws std::out_of_range if the channel name is invalid.
-		compressed::channel<T, BlockSize, ChunkSize>& channel_ref(const std::string_view name)
+		compressed::channel<T>& channel_ref(const std::string_view name)
 		{
 			size_t index = get_channel_offset(name);
 			return m_Channels[index];
@@ -538,9 +548,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param channel_names A vector of channel names.
 		/// \return A vector containing references to the requested channels.
 		/// \throws std::out_of_range if any channel name is invalid.
-		std::vector<compressed::channel<T, BlockSize, ChunkSize>&> channels_ref(const std::vector<std::string> channel_names)
+		std::vector<compressed::channel<T>&> channels_ref(const std::vector<std::string> channel_names)
 		{
-			std::vector<compressed::channel<T, BlockSize, ChunkSize>> result{};
+			std::vector<compressed::channel<T>> result{};
 			for (const auto& name : channel_names)
 			{
 				result.append(this->channel(name));
@@ -551,7 +561,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Retrieves references to all of the channels in the image
 		/// 
 		/// \return A vector containing references to the all the channels.
-		std::vector<compressed::channel<T, BlockSize, ChunkSize>>& channels()
+		std::vector<compressed::channel<T>>& channels()
 		{
 			return m_Channels;
 		}
@@ -559,7 +569,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Retrieves const references to all of the channels in the image
 		/// 
 		/// \return A vector containing references to the all the channels.
-		const std::vector<compressed::channel<T, BlockSize, ChunkSize>>& channels() const
+		const std::vector<compressed::channel<T>>& channels() const
 		{
 			return m_Channels;
 		}
@@ -672,7 +682,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 	private:
 		/// All the channels, each holding their own decompression and compression context.
-		std::vector<channel<T, BlockSize, ChunkSize>> m_Channels{};
+		std::vector<channel<T>> m_Channels{};
 
 		/// Arbitrary user metadata, not authored or managed by us, it's up to the caller to handle what goes in and comes out
 		json_ordered m_Metadata{};

@@ -26,21 +26,25 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			/// Initialize an empty schunk with just a schunk size. The data can then later
 			/// be filled with append_chunk for example.
-			schunk(const size_t chunk_size)
+			schunk(size_t block_size, size_t chunk_size)
 			{
 				util::validate_chunk_size<T>(chunk_size, "schunk");
 				this->m_ChunkSize = chunk_size;
+				this->m_BlockSize = block_size;
 			}
 
 			/// Initialize a super-chunk from the given vector, compressing it
 			/// 
 			/// \param data The data to store
+			/// \param block_size The requested block size. It is up to the caller to ensure
+			///                   this is appropriately sized
 			/// \param chunk_size The requested chunk size. It is up to the caller to ensure
 			///                   this is appropriately sized (i.e. by using util::align_chunk_to_scanlines)
 			/// \param compression_ctx The compression context to be used for compressing the data.
-			schunk(std::span<const T> data, const size_t chunk_size, blosc2::context_ptr& compression_ctx)
+			schunk(std::span<const T> data, size_t block_size, size_t chunk_size, blosc2::context_ptr& compression_ctx)
 			{
 				util::validate_chunk_size<T>(chunk_size, "schunk");
+				this->m_BlockSize = block_size;
 				this->m_ChunkSize = chunk_size;
 
 				// Compression buffer we will continuously overwrite in our compression, the chunk data is then copied out

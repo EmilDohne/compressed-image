@@ -28,11 +28,11 @@ if (COMPRESSED_IMAGE_EXTENDED_WARNINGS)
 	target_compile_options(
 		compressed_image 
 		INTERFACE 
-		# /W4 
-		# /WX 
-		# /w44062 
-		# /w44464 
-		# /w45264
+		/W4 
+		/WX 
+		/w44062 
+		/w44464 
+		/w45264
 	)
 	endif()
 endif()

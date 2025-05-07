@@ -54,7 +54,7 @@ TEST_CASE("Roundtrip channel creation larger than chunksize")
 	auto vec = std::vector<uint8_t>(8192);
 	std::iota(vec.begin(), vec.end(), 0);
 
-	auto channel = compressed::channel<uint8_t, 128, 4096>(std::span<uint8_t>(vec), 128, 64);
+	auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 128, 64, compressed::enums::codec::lz4, 9, 128, 4096);
 	auto roundtripped = channel.get_decompressed();
 
 	CHECK(vec == roundtripped);
