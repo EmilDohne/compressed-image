@@ -74,8 +74,6 @@ jobs:
       env:
         CC: ${{ matrix.compiler }}
         CXX: ${{ matrix.compilercxx }}
-        CFLAGS: ${{ matrix.cflags }}
-        CXXFLAGS: ${{ matrix.cxxflags }}
       run: |
         cmake -B ${{github.workspace}}/build        ${{ matrix.multiline-separator}}
             -DCMAKE_OSX_ARCHITECTURES="arm64"       ${{ matrix.multiline-separator}}
