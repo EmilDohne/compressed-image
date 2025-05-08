@@ -127,7 +127,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 						width,
 						height,
 						compression_codec,
-						comp_level_adjusted
+						comp_level_adjusted,
+						block_size,
+						chunk_size
 					));
 				}
 				catch (const std::exception& e)
