@@ -209,7 +209,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param block_size The block size to compress to
 		void update_nthreads(size_t nthreads, size_t block_size = s_default_blocksize)
 		{
-			m_CompressionContext = blosc2::create_compression_context<T>(nthreads, m_Codec, m_CompressionLevel);
+			m_CompressionContext = blosc2::create_compression_context<T>(nthreads, m_Codec, m_CompressionLevel, block_size);
 			m_DecompressionContext = blosc2::create_decompression_context(nthreads);
 		}
 
