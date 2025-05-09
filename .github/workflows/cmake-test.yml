@@ -26,29 +26,21 @@ jobs:
              os: ubuntu-24.04
              compiler: gcc-13
              compilercxx: g++-13
-             cflags: "-fsanitize=address,leak,undefined"
-             cxxflags: "-fsanitize=address,leak,undefined"
              multiline-separator: \
            - name: Ubuntu Clang
              os: ubuntu-24.04
              compiler: clang
              compilercxx: clang++
-             cflags: "-fsanitize=address,leak,undefined"
-             cxxflags: "-fsanitize=address,leak,undefined"
              multiline-separator: \
            - name: Windows MSVC
              os: windows-latest
              compiler: msvc
              compilercxx: msvc
-             cflags: ""
-             cxxflags: ""
              multiline-separator: "`"
            - name: MacOS ARM GCC
              os: macos-latest
              compiler: gcc-13
              compilercxx: g++-13
-             cflags: ""
-             cxxflags: ""
              multiline-separator: \
 
     steps:
@@ -78,7 +70,8 @@ jobs:
         cmake -B ${{github.workspace}}/build        ${{ matrix.multiline-separator}}
             -DCMAKE_OSX_ARCHITECTURES="arm64"       ${{ matrix.multiline-separator}}
             -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}  ${{ matrix.multiline-separator}}
-            -DCOMPRESSED_IMAGE_BUILD_DOCS=OFF
+            -DCOMPRESSED_IMAGE_BUILD_DOCS=OFF       ${{ matrix.multiline-separator}}
+            -D_COMPRESSED_IMAGE_SANITIZE_FLAGS=ON
 
     - name: Build ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:

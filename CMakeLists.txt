@@ -19,6 +19,7 @@ if (MAIN_PROJECT)
 endif()
 
 
+option(_COMPRESSED_IMAGE_SANITIZE_FLAGS OFF)
 option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." OFF)
 option(COMPRESSED_IMAGE_EXTENDED_WARNINGS OFF)
 option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
