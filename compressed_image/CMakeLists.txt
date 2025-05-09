@@ -37,14 +37,11 @@ if (COMPRESSED_IMAGE_EXTENDED_WARNINGS)
 	endif()
 endif()
 
-# Enable sanitizers unless on macOS (not supported). These are for our CI runs only
-# and should be ignored by users.
+# Enable sanitizers unless on macOS (not supported) or Windows (github runners run out of memory). 
+# These are for our CI runs only and should be ignored by users.
 if (_COMPRESSED_IMAGE_SANITIZE_FLAGS AND NOT APPLE)
 	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 		target_compile_options(compressed_image INTERFACE -fsanitize=address,leak,undefined)
 		target_link_options(compressed_image INTERFACE -fsanitize=address,leak,undefined)
-	elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-		target_compile_options(compressed_image INTERFACE /fsanitize=address)
-		target_link_options(compressed_image INTERFACE /fsanitize=address)
 	endif()
 endif()
