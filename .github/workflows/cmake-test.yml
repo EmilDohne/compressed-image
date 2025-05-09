@@ -13,7 +13,7 @@ on:
       - published
 
 env:
-  BUILD_TYPE: Debug
+  BUILD_TYPE: Release
 
 jobs:
   test:
