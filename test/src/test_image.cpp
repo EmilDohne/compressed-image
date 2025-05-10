@@ -14,6 +14,8 @@
 #include "util.h"
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file smaller than one chunk")
 {
 	std::string name = "uv_grid_2048x2048.jpg";
@@ -48,6 +50,8 @@ TEST_CASE("Read compressed file exactly than one chunk")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file larger than one chunk")
 {
 	std::string name = "multilayer_2560x1440.exr";
@@ -68,6 +72,220 @@ TEST_CASE("Read compressed file larger than one chunk")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file, subset of channel indices")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ 0, 1, 2, 3 },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{"R", "G", "B", "A"});
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file, non contiguous channel indices")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ 0, 2, 3, 11 },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{ "R", "B", "A", "VRayCryptomatte00.R"});
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file, non contiguous channel indices, out of order")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ 11, 0, 2, 3 },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			// Despite us specifying "VRayCryptomatte00.R" first, since it appears later in the channels this should
+			// have the same ordering as the file
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{ "R", "B", "A", "VRayCryptomatte00.R"});
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE(
+	"Read compressed file, invalid channel index"
+	* doctest::no_breaks(true)
+	* doctest::no_output(true)
+	* doctest::should_fail(true)
+)
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			// this should fail as this file does not have a 64th channel
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ 0, 1, 64 },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file, subset of channel names")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ "R", "G", "B", "A" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{"R", "G", "B", "A"});
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file, non contiguous channel names")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ "R", "B", "A", "VRayCryptomatte00.R" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{ "R", "B", "A", "VRayCryptomatte00.R"});
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file, non contiguous channel names, out of order")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ "VRayCryptomatte00.R", "R", "B", "A" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			// Despite us specifying "VRayCryptomatte00.R" first, since it appears later in the channels this should
+			// have the same ordering as the file
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{ "R", "B", "A", "VRayCryptomatte00.R"});
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE(
+	"Read compressed file, invalid channel name"
+	* doctest::no_breaks(true)
+	* doctest::no_output(true)
+	* doctest::should_fail(true)
+)
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			// this should fail as this file does not have a z channel
+			auto image = compressed::image<decltype(type)>::read(
+				std::move(input_ptr),
+				{ "R", "G", "Z" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Initialize image and iterate parametrized")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -82,7 +300,7 @@ TEST_CASE("Initialize image and iterate parametrized")
 
 			SUBCASE("Read")
 			{
-				auto& r_ref = image.channel_ref(0);
+				auto& r_ref = image.channel(0);
 				for (auto chunk : r_ref)
 				{
 					for (auto& pixel : chunk)
@@ -94,7 +312,7 @@ TEST_CASE("Initialize image and iterate parametrized")
 
 			SUBCASE("Modify")
 			{
-				auto& r_ref = image.channel_ref(0);
+				auto& r_ref = image.channel(0);
 				for (auto chunk : r_ref)
 				{
 					for (auto& pixel : chunk)
@@ -103,7 +321,7 @@ TEST_CASE("Initialize image and iterate parametrized")
 					}
 				}
 
-				auto& r_ref_2 = image.channel_ref(0);
+				auto& r_ref_2 = image.channel(0);
 				for (auto chunk_ : r_ref_2)
 				{
 					for (auto& pixel : chunk_)
@@ -118,6 +336,8 @@ TEST_CASE("Initialize image and iterate parametrized")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Zip image channels parametrized")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -132,10 +352,10 @@ TEST_CASE("Zip image channels parametrized")
 				8
 			);
 
-			auto [r, g, b] = image.channels_ref(0, 1, 2);
-			CHECK(r == image.channel_ref(0));
-			CHECK(g == image.channel_ref(1));
-			CHECK(b == image.channel_ref(2));
+			auto [r, g, b] = image.channels(0, 1, 2);
+			CHECK(r == image.channel(0));
+			CHECK(g == image.channel(1));
+			CHECK(b == image.channel(2));
 
 			for (auto [r_chunk, g_chunk, b_chunk] : compressed::ranges::zip(r, g, b))
 			{
@@ -151,6 +371,8 @@ TEST_CASE("Zip image channels parametrized")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Zip image channels equal to chunk size parametrized")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -170,10 +392,10 @@ TEST_CASE("Zip image channels equal to chunk size parametrized")
 				1024
 			);
 
-			auto [r, g, b] = image.channels_ref(0, 1, 2);
-			CHECK(r == image.channel_ref(0));
-			CHECK(g == image.channel_ref(1));
-			CHECK(b == image.channel_ref(2));
+			auto [r, g, b] = image.channels(0, 1, 2);
+			CHECK(r == image.channel(0));
+			CHECK(g == image.channel(1));
+			CHECK(b == image.channel(2));
 
 			for (auto [r_chunk, g_chunk, b_chunk] : compressed::ranges::zip(r, g, b))
 			{
@@ -189,6 +411,8 @@ TEST_CASE("Zip image channels equal to chunk size parametrized")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Zip image channels larger to chunk size parametrized")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -208,10 +432,10 @@ TEST_CASE("Zip image channels larger to chunk size parametrized")
 				768
 			);
 
-			auto [r, g, b] = image.channels_ref(0, 1, 2);
-			CHECK(r == image.channel_ref(0));
-			CHECK(g == image.channel_ref(1));
-			CHECK(b == image.channel_ref(2));
+			auto [r, g, b] = image.channels(0, 1, 2);
+			CHECK(r == image.channel(0));
+			CHECK(g == image.channel(1));
+			CHECK(b == image.channel(2));
 
 			for (auto [r_chunk, g_chunk, b_chunk] : compressed::ranges::zip(r, g, b))
 			{
@@ -227,6 +451,8 @@ TEST_CASE("Zip image channels larger to chunk size parametrized")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Zip modify image channels parametrized")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -241,10 +467,10 @@ TEST_CASE("Zip modify image channels parametrized")
 				8
 			);
 
-			auto [r, g, b] = image.channels_ref(0, 1, 2);
-			CHECK(r == image.channel_ref(0));
-			CHECK(g == image.channel_ref(1));
-			CHECK(b == image.channel_ref(2));
+			auto [r, g, b] = image.channels(0, 1, 2);
+			CHECK(r == image.channel(0));
+			CHECK(g == image.channel(1));
+			CHECK(b == image.channel(2));
 
 			for (auto [r_chunk, g_chunk, b_chunk] : compressed::ranges::zip(r, g, b))
 			{
@@ -270,6 +496,8 @@ TEST_CASE("Zip modify image channels parametrized")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -289,10 +517,10 @@ TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 				1024
 			);
 
-			auto [r, g, b] = image.channels_ref(0, 1, 2);
-			CHECK(r == image.channel_ref(0));
-			CHECK(g == image.channel_ref(1));
-			CHECK(b == image.channel_ref(2));
+			auto [r, g, b] = image.channels(0, 1, 2);
+			CHECK(r == image.channel(0));
+			CHECK(g == image.channel(1));
+			CHECK(b == image.channel(2));
 
 			for (auto [r_chunk, g_chunk, b_chunk] : compressed::ranges::zip(r, g, b))
 			{
@@ -318,6 +546,8 @@ TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Zip modify image channels larger to chunk size parametrized")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -337,10 +567,10 @@ TEST_CASE("Zip modify image channels larger to chunk size parametrized")
 				768
 			);
 
-			auto [r, g, b] = image.channels_ref(0, 1, 2);
-			CHECK(r == image.channel_ref(0));
-			CHECK(g == image.channel_ref(1));
-			CHECK(b == image.channel_ref(2));
+			auto [r, g, b] = image.channels(0, 1, 2);
+			CHECK(r == image.channel(0));
+			CHECK(g == image.channel(1));
+			CHECK(b == image.channel(2));
 
 			for (auto [r_chunk, g_chunk, b_chunk] : compressed::ranges::zip(r, g, b))
 			{

@@ -11,6 +11,8 @@
 #include "util.h"
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip sequenced loops")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -30,6 +32,8 @@ TEST_CASE("compressed::ranges::zip sequenced loops")
 		});
 }
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip parallel loops")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -51,6 +55,8 @@ TEST_CASE("compressed::ranges::zip parallel loops")
 
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip regular for loop")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -69,6 +75,8 @@ TEST_CASE("compressed::ranges::zip regular for loop")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip serial mismatched sizes")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -91,6 +99,8 @@ TEST_CASE("compressed::ranges::zip serial mismatched sizes")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip parallel mismatched sizes")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -113,6 +123,8 @@ TEST_CASE("compressed::ranges::zip parallel mismatched sizes")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip regular for loop mismatched sizes")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -135,6 +147,8 @@ TEST_CASE("compressed::ranges::zip regular for loop mismatched sizes")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip parallel mismatched sizes modify")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -170,6 +184,8 @@ TEST_CASE("compressed::ranges::zip parallel mismatched sizes modify")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip serial mismatched sizes modify")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -205,7 +221,9 @@ TEST_CASE("compressed::ranges::zip serial mismatched sizes modify")
 }
 
 
-TEST_CASE("compressed::ranges::zip regular for loop mismatched sizes  modify")
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("compressed::ranges::zip regular for loop mismatched sizes modify")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
 		{

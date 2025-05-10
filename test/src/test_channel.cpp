@@ -15,6 +15,8 @@
 
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Initialize channel from incorrect schunk"
 	* doctest::no_breaks(true)
 	* doctest::no_output(true)
@@ -26,6 +28,8 @@ TEST_CASE("Initialize channel from incorrect schunk"
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Initialize channel from incorrect span"
 	* doctest::no_breaks(true)
 	* doctest::no_output(true)
@@ -37,6 +41,8 @@ TEST_CASE("Initialize channel from incorrect span"
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Roundtrip channel creation")
 {
 	auto vec = std::vector<uint8_t>(50);
@@ -49,6 +55,8 @@ TEST_CASE("Roundtrip channel creation")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Roundtrip channel creation larger than chunksize")
 {
 	auto vec = std::vector<uint8_t>(8192);
@@ -61,6 +69,8 @@ TEST_CASE("Roundtrip channel creation larger than chunksize")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Channel get attributes"
 )
 {
@@ -77,6 +87,8 @@ TEST_CASE("Channel get attributes"
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Channel iterate")
 {
 	auto vec = std::vector<uint16_t>(128, 255);

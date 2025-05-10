@@ -57,7 +57,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 		}
 
-#endif
+#endif // COMPRESSED_IMAGE_OIIO_AVAILABLE
 
 	} // namespace enums
 

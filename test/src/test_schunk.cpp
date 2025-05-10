@@ -14,6 +14,8 @@
 #include "util.h"
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Schunk: initialize with chunk size")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
@@ -33,6 +35,8 @@ TEST_CASE("Schunk: initialize with chunk size")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Schunk: initialize with data")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)

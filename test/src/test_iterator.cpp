@@ -18,7 +18,7 @@ TEST_CASE("Iterator: serial access")
 	auto path = std::filesystem::current_path() / "images" / name;
 	auto image = compressed::image<uint8_t>::read(path);
 
-	auto& r = image.channel_ref(0);
+	auto& r = image.channel(0);
 	size_t count = 0;
 	for (const auto& chunk : r)
 	{
@@ -37,7 +37,7 @@ TEST_CASE("Iterator: iterate out of bounds"
 	auto path = std::filesystem::current_path() / "images" / name;
 	auto image = compressed::image<uint8_t>::read(path);
 
-	auto& r = image.channel_ref(0);
+	auto& r = image.channel(0);
 	auto it = r.begin();
 	++it;
 	++it;
@@ -57,7 +57,7 @@ TEST_CASE("Iterator: comparison")
 		16384
 	);
 
-	auto& r = image.channel_ref(0);
+	auto& r = image.channel(0);
 	auto it = r.begin();
 	auto it_2 = r.begin();
 
@@ -73,7 +73,7 @@ TEST_CASE("Iterator: comparison")
 		4096,
 		16384
 	);
-	auto& r_2 = image_2.channel_ref(0);
+	auto& r_2 = image_2.channel(0);
 	auto it_other = r_2.begin();
 
 	CHECK(it_other != it);
