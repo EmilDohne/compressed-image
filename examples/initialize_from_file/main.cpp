@@ -18,7 +18,7 @@ auto main() -> int
 	auto image = compressed::image<uint8_t>::read(path);
 
 	// Get references to the channels as std::tuple<compressed::channel ...>
-	auto [r, g, b] = image.channels_ref("R", "G", "B");
+	auto [r, g, b] = image.channels("R", "G", "B");
 
 	// Now iterate all of them together, first by their chunks, then by their pixels within the chunks.
 	// If not all channels are the same size we will iterate to the lowest common denominator!

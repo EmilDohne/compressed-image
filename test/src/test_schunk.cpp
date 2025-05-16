@@ -18,9 +18,8 @@
 // -----------------------------------------------------------------------------------
 TEST_CASE("Schunk: initialize with chunk size")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			using T = std::decay_t<decltype(type)>;
 			compressed::blosc2::schunk<T> super_chunk(128, 4096);
 
 			auto ctx = compressed::blosc2::create_decompression_context(std::thread::hardware_concurrency());
@@ -39,10 +38,8 @@ TEST_CASE("Schunk: initialize with chunk size")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Schunk: initialize with data")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			using T = std::decay_t<decltype(type)>;
-
 			std::vector<T> data(4096);
 			std::iota(data.begin(), data.end(), T{ 0 });
 

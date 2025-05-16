@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 #include <ranges>
 
 
@@ -75,6 +76,175 @@ namespace NAMESPACE_COMPRESSED_IMAGE
             result.emplace_back(range_start, previous + 1);
 
             return result;
+        }
+
+
+
+        // Utilities related to OIIO ParamValue (the internal metadata type) helping us convert them into json-able
+        // types
+        namespace param_value
+        {
+
+            /// \brief JSON-like types that we can store 
+            enum class _JSONType
+            {
+                _int,
+                _float,
+                _string
+            };
+
+            inline _JSONType to_json_type(const OIIO::ParamValue& pvalue)
+            {
+                auto type = pvalue.type();
+
+
+                if (type == OIIO::TypeDesc::STRING || type == OIIO::TypeDesc::USTRINGHASH)
+                {
+                    return _JSONType::_string;
+                }
+
+                if (
+                    type == OIIO::TypeDesc::UINT8 ||
+                    type == OIIO::TypeDesc::UCHAR ||
+                    type == OIIO::TypeDesc::INT8 ||
+                    type == OIIO::TypeDesc::CHAR ||
+                    type == OIIO::TypeDesc::UINT16 ||
+                    type == OIIO::TypeDesc::USHORT ||
+                    type == OIIO::TypeDesc::INT16 ||
+                    type == OIIO::TypeDesc::SHORT ||
+                    type == OIIO::TypeDesc::UINT32 ||
+                    type == OIIO::TypeDesc::UINT ||
+                    type == OIIO::TypeDesc::INT32 ||
+                    type == OIIO::TypeDesc::INT ||
+                    type == OIIO::TypeDesc::UINT64 ||
+                    type == OIIO::TypeDesc::ULONGLONG ||
+                    type == OIIO::TypeDesc::INT64 ||
+                    type == OIIO::TypeDesc::LONGLONG
+                    )
+                {
+                    return _JSONType::_int;
+                }
+
+                if (
+                    type == OIIO::TypeDesc::HALF ||
+                    type == OIIO::TypeDesc::FLOAT ||
+                    type == OIIO::TypeDesc::DOUBLE
+                    )
+                {
+                    return _JSONType::_float;
+                }
+
+                throw std::invalid_argument(
+                    std::format(
+                        "Unknown json type for param value: {}", pvalue.name().string()
+                    )
+                );
+            }
+
+            inline bool is_array(const OIIO::ParamValue& pvalue)
+            {
+                return pvalue.nvalues() > 1;
+            }
+
+            template <typename T>
+                requires std::is_same_v<T, std::string> || std::is_same_v<T, int> || std::is_same_v<T, float>
+            T decode(const OIIO::ParamValue& pvalue)
+            {
+                if constexpr (std::is_same_v<T, std::string>)
+                {
+                    return pvalue.get_string();
+                }
+                else if constexpr (std::is_same_v<T, int>)
+                {
+                    return pvalue.get_int();
+                }
+                else
+                {
+                    return pvalue.get_float();
+                }
+            }
+
+
+            template <typename T>
+                requires std::is_same_v<T, std::string> || std::is_same_v<T, int> || std::is_same_v<T, float>
+            std::vector<T> decode_array(const OIIO::ParamValue& pvalue)
+            {
+                std::vector<T> out{};
+                for (auto i : std::views::iota(0, pvalue.nvalues()))
+                {
+                    if constexpr (std::is_same_v<T, std::string>)
+                    {
+                        out.push_back(pvalue.get_string_indexed(i));
+                    }
+                    else if constexpr (std::is_same_v<T, int>)
+                    {
+                        out.push_back(pvalue.get_int_indexed(i));
+                    }
+                    else
+                    {
+                        out.push_back(pvalue.get_float_indexed(i));
+                    }
+                }
+                return out;
+            }
+
+
+            inline json_ordered to_json(const OIIO::ParamValueList& list)
+            {
+                json_ordered out{};
+
+                for (const auto& pvalue : list)
+                {
+                    const auto& name = pvalue.name().string();
+                    _JSONType json_type = _JSONType::_string;
+                    try
+                    {
+                        json_type = param_value::to_json_type(pvalue);
+                    }
+                    catch ([[maybe_unused]] const std::invalid_argument& e)
+                    {
+                        continue;
+                    }
+                    auto is_p_array = param_value::is_array(pvalue);
+
+
+                    if (json_type == _JSONType::_string)
+                    {
+                        if (is_p_array)
+                        {
+                            out[name] = param_value::decode_array<std::string>(pvalue);
+                        }
+                        else
+                        {
+                            out[name] = param_value::decode<std::string>(pvalue);
+                        }
+                    }
+                    else if (json_type == _JSONType::_int)
+                    {
+                        if (is_p_array)
+                        {
+                            out[name] = param_value::decode_array<int>(pvalue);
+                        }
+                        else
+                        {
+                            out[name] = param_value::decode<int>(pvalue);
+                        }
+                    }
+                    else if (json_type == _JSONType::_float)
+                    {
+                        if (is_p_array)
+                        {
+                            out[name] = param_value::decode_array<float>(pvalue);
+                        }
+                        else
+                        {
+                            out[name] = param_value::decode<float>(pvalue);
+                        }
+                    }
+                }
+
+                return out;
+            }
         }
 
     } // detail

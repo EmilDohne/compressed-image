@@ -15,19 +15,19 @@
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip sequenced loops")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			std::vector<decltype(type)> data_a(25, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(25, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(25, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(25, static_cast<T>(75));
 
 			auto gen = compressed::ranges::zip(data_a, data_b, data_c);
 			std::for_each(std::execution::seq, gen.begin(), gen.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(25));
-					CHECK(b == static_cast<decltype(type)>(50));
-					CHECK(c == static_cast<decltype(type)>(75));
+					CHECK(a == static_cast<T>(25));
+					CHECK(b == static_cast<T>(50));
+					CHECK(c == static_cast<T>(75));
 				});
 		});
 }
@@ -36,19 +36,19 @@ TEST_CASE("compressed::ranges::zip sequenced loops")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip parallel loops")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			std::vector<decltype(type)> data_a(25, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(25, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(25, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(25, static_cast<T>(75));
 
 			auto gen = compressed::ranges::zip(data_a, data_b, data_c);
 			std::for_each(std::execution::par_unseq, gen.begin(), gen.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(25));
-					CHECK(b == static_cast<decltype(type)>(50));
-					CHECK(c == static_cast<decltype(type)>(75));
+					CHECK(a == static_cast<T>(25));
+					CHECK(b == static_cast<T>(50));
+					CHECK(c == static_cast<T>(75));
 				});
 		});
 }
@@ -59,17 +59,17 @@ TEST_CASE("compressed::ranges::zip parallel loops")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip regular for loop")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			std::vector<decltype(type)> data_a(25, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(25, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(25, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(25, static_cast<T>(75));
 
 			for (auto [a, b, c] : compressed::ranges::zip(data_a, data_b, data_c))
 			{
-				CHECK(a == static_cast<decltype(type)>(25));
-				CHECK(b == static_cast<decltype(type)>(50));
-				CHECK(c == static_cast<decltype(type)>(75));
+				CHECK(a == static_cast<T>(25));
+				CHECK(b == static_cast<T>(50));
+				CHECK(c == static_cast<T>(75));
 			}
 		});
 }
@@ -79,21 +79,21 @@ TEST_CASE("compressed::ranges::zip regular for loop")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip serial mismatched sizes")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			// We expect to only iterate up until index 25 here
-			std::vector<decltype(type)> data_a(30, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(45, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(30, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(45, static_cast<T>(75));
 
 			auto gen = compressed::ranges::zip(data_a, data_b, data_c);
 			CHECK(gen.size() == 25);
 			std::for_each(std::execution::seq, gen.begin(), gen.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(25));
-					CHECK(b == static_cast<decltype(type)>(50));
-					CHECK(c == static_cast<decltype(type)>(75));
+					CHECK(a == static_cast<T>(25));
+					CHECK(b == static_cast<T>(50));
+					CHECK(c == static_cast<T>(75));
 				});
 		});
 }
@@ -103,21 +103,21 @@ TEST_CASE("compressed::ranges::zip serial mismatched sizes")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip parallel mismatched sizes")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			// We expect to only iterate up until index 25 here
-			std::vector<decltype(type)> data_a(30, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(45, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(30, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(45, static_cast<T>(75));
 
 			auto gen = compressed::ranges::zip(data_a, data_b, data_c);
 			CHECK(gen.size() == 25);
 			std::for_each(std::execution::par_unseq, gen.begin(), gen.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(25));
-					CHECK(b == static_cast<decltype(type)>(50));
-					CHECK(c == static_cast<decltype(type)>(75));
+					CHECK(a == static_cast<T>(25));
+					CHECK(b == static_cast<T>(50));
+					CHECK(c == static_cast<T>(75));
 				});
 		});
 }
@@ -127,19 +127,19 @@ TEST_CASE("compressed::ranges::zip parallel mismatched sizes")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip regular for loop mismatched sizes")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			// We expect to only iterate up until index 25 here
-			std::vector<decltype(type)> data_a(30, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(45, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(30, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(45, static_cast<T>(75));
 
 			size_t count = 0;
 			for (auto [a, b, c] : compressed::ranges::zip(data_a, data_b, data_c))
 			{
-				CHECK(a == static_cast<decltype(type)>(25));
-				CHECK(b == static_cast<decltype(type)>(50));
-				CHECK(c == static_cast<decltype(type)>(75));
+				CHECK(a == static_cast<T>(25));
+				CHECK(b == static_cast<T>(50));
+				CHECK(c == static_cast<T>(75));
 				++count;
 			}
 			CHECK(count == 25);
@@ -151,21 +151,21 @@ TEST_CASE("compressed::ranges::zip regular for loop mismatched sizes")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip parallel mismatched sizes modify")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			// We expect to only iterate up until index 25 here
-			std::vector<decltype(type)> data_a(30, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(45, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(30, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(45, static_cast<T>(75));
 
 			auto gen = compressed::ranges::zip(data_a, data_b, data_c);
 			CHECK(gen.size() == 25);
 			std::for_each(std::execution::par_unseq, gen.begin(), gen.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(25));
-					CHECK(b == static_cast<decltype(type)>(50));
-					CHECK(c == static_cast<decltype(type)>(75));
+					CHECK(a == static_cast<T>(25));
+					CHECK(b == static_cast<T>(50));
+					CHECK(c == static_cast<T>(75));
 
 					a = 75;
 					b = 49;
@@ -176,9 +176,9 @@ TEST_CASE("compressed::ranges::zip parallel mismatched sizes modify")
 			std::for_each(std::execution::par_unseq, gen_2.begin(), gen_2.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(75));
-					CHECK(b == static_cast<decltype(type)>(49));
-					CHECK(c == static_cast<decltype(type)>(25));
+					CHECK(a == static_cast<T>(75));
+					CHECK(b == static_cast<T>(49));
+					CHECK(c == static_cast<T>(25));
 				});
 		});
 }
@@ -188,21 +188,21 @@ TEST_CASE("compressed::ranges::zip parallel mismatched sizes modify")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip serial mismatched sizes modify")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			// We expect to only iterate up until index 25 here
-			std::vector<decltype(type)> data_a(30, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(45, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(30, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(45, static_cast<T>(75));
 
 			auto gen = compressed::ranges::zip(data_a, data_b, data_c);
 			CHECK(gen.size() == 25);
 			std::for_each(std::execution::seq, gen.begin(), gen.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(25));
-					CHECK(b == static_cast<decltype(type)>(50));
-					CHECK(c == static_cast<decltype(type)>(75));
+					CHECK(a == static_cast<T>(25));
+					CHECK(b == static_cast<T>(50));
+					CHECK(c == static_cast<T>(75));
 
 					a = 75;
 					b = 49;
@@ -213,9 +213,9 @@ TEST_CASE("compressed::ranges::zip serial mismatched sizes modify")
 			std::for_each(std::execution::seq, gen_2.begin(), gen_2.end(), [](auto vals)
 				{
 					auto& [a, b, c] = vals;
-					CHECK(a == static_cast<decltype(type)>(75));
-					CHECK(b == static_cast<decltype(type)>(49));
-					CHECK(c == static_cast<decltype(type)>(25));
+					CHECK(a == static_cast<T>(75));
+					CHECK(b == static_cast<T>(49));
+					CHECK(c == static_cast<T>(25));
 				});
 		});
 }
@@ -225,32 +225,32 @@ TEST_CASE("compressed::ranges::zip serial mismatched sizes modify")
 // -----------------------------------------------------------------------------------
 TEST_CASE("compressed::ranges::zip regular for loop mismatched sizes modify")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			// We expect to only iterate up until index 25 here
-			std::vector<decltype(type)> data_a(30, static_cast<decltype(type)>(25));
-			std::vector<decltype(type)> data_b(25, static_cast<decltype(type)>(50));
-			std::vector<decltype(type)> data_c(45, static_cast<decltype(type)>(75));
+			std::vector<T> data_a(30, static_cast<T>(25));
+			std::vector<T> data_b(25, static_cast<T>(50));
+			std::vector<T> data_c(45, static_cast<T>(75));
 
 			size_t count = 0;
 			for (auto [a, b, c] : compressed::ranges::zip(data_a, data_b, data_c))
 			{
-				CHECK(a == static_cast<decltype(type)>(25));
-				CHECK(b == static_cast<decltype(type)>(50));
-				CHECK(c == static_cast<decltype(type)>(75));
+				CHECK(a == static_cast<T>(25));
+				CHECK(b == static_cast<T>(50));
+				CHECK(c == static_cast<T>(75));
 
-				a = static_cast<decltype(type)>(75);
-				b = static_cast<decltype(type)>(49);
-				c = static_cast<decltype(type)>(25);
+				a = static_cast<T>(75);
+				b = static_cast<T>(49);
+				c = static_cast<T>(25);
 				++count;
 			}
 			CHECK(count == 25);
 
 			for (auto [a, b, c] : compressed::ranges::zip(data_a, data_b, data_c))
 			{
-				CHECK(a == static_cast<decltype(type)>(75));
-				CHECK(b == static_cast<decltype(type)>(49));
-				CHECK(c == static_cast<decltype(type)>(25));
+				CHECK(a == static_cast<T>(75));
+				CHECK(b == static_cast<T>(49));
+				CHECK(c == static_cast<T>(25));
 			}
 
 			// The zip should have only touched the first 25 elements with the rest being the same

@@ -161,7 +161,7 @@ void bench_image_iteration_compressed_zip(benchmark::State& state, const std::fi
 	auto image = compressed::image<T>::read(image_path);
 	bench_util::run_with_memory_sampling(state, [&]()
 		{
-			auto [channel_r, channel_g, channel_b] = image.channels_ref(0, 1, 2);
+			auto [channel_r, channel_g, channel_b] = image.channels(0, 1, 2);
 			for (auto [chunk_r, chunk_g, chunk_b] : compressed::ranges::zip(channel_r, channel_g, channel_b))
 			{
 				auto gen = compressed::ranges::zip(chunk_r, chunk_g, chunk_b);
@@ -201,9 +201,6 @@ void bench_image_iteration_compressed_get_decompressed(benchmark::State& state, 
 
 auto main(int argc, char** argv) -> int
 {
-
-
-
 	compressed::detail::Instrumentor::Get().BeginSession("Benchmarks");
 
 	for (const auto& image : get_images())

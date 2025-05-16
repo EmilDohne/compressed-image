@@ -50,7 +50,26 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		using iterator = channel_iterator<T>;
 		using const_iterator = channel_iterator<const T>;
 
-		channel() = default;
+		channel(channel&&) = default;
+		channel& operator=(channel&&) = default;
+		channel(const channel&) = delete;
+		channel& operator=(const channel&) = delete;
+			
+
+		/// Default ctor, ensures the schunk and compression/decompression contexts are always initialized
+		/// into valid states. This will not generate a valid channel however and the ctor taking data or the static
+		/// functions `zeros` and `full` are preferred.
+		channel()
+		{
+			m_Schunk = blosc2::lazy_schunk<T>(0, 1, s_default_blocksize, s_default_chunksize);
+			m_CompressionContext = blosc2::create_compression_context<T>(
+				std::thread::hardware_concurrency(),
+				enums::codec::lz4,
+				9,
+				s_default_blocksize
+			);
+			m_DecompressionContext = blosc2::create_decompression_context<T>(std::thread::hardware_concurrency());
+		};
 
 		/// Initialize the channel with the given data.
 		/// 
@@ -170,6 +189,109 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			
 		}
 
+
+		/// Create a channel filled with zeros.
+		///
+		/// Generates a lazy-channel which only stores a single value T per-chunk, only setting this to a compressed buffer
+		/// if set with something like `set_chunk`. This is especially memory efficient and should be the preferred way 
+		/// when wanting to generate an empty channel only filling out some parts (i.e. sparse cryptomatte loading).
+		/// 
+		/// \param width The width of the image channel.
+		/// \param height The height of the image channel.
+		/// \param compression_codec The compression codec to be used.
+		/// \param compression_level The compression level (default is 9).
+		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
+		///                   comfortably fit into the L1 cache of most modern CPUs.
+		/// \param chunk_size The size of each individual chunk, defaults to 4MB. Should be no larger than the expected image size 
+		///                   for optimal performance and must be a multiple of sizeof(T).
+		/// \return A channel instance with all values initialized to zero.
+		static channel zeros(
+			size_t width, 
+			size_t height,
+			enums::codec compression_codec = enums::codec::lz4,
+			uint8_t compression_level = 9,
+			size_t block_size = s_default_blocksize,
+			size_t chunk_size = s_default_chunksize
+		)
+		{
+			return channel<T>::full(width, height, static_cast<T>(0), compression_codec, compression_level, block_size, chunk_size);
+		}
+
+		/// Create a zero-initialized channel with the same shape and compression parameters as another channel.
+		///
+		/// Generates a lazy-channel which only stores a single value T per-chunk, only setting this to a compressed buffer
+		/// if set with something like `set_chunk`. This is especially memory efficient and should be the preferred way 
+		/// when wanting to generate an empty channel only filling out some parts (i.e. sparse cryptomatte loading).
+		/// 
+		/// \param other The reference channel from which to copy shape and compression settings.
+		/// \return A new channel instance with the same dimensions and compression settings as \p other, filled with zeros.
+		static channel zeros_like(const channel& other)
+		{
+			return channel<T>::zeros(
+				other.width(), 
+				other.height(), 
+				other.compression(), 
+				other.compression_level(), 
+				other.block_size(), 
+				other.chunk_size()
+			);
+		}
+
+		/// Create a channel filled with a specific value.
+		///
+		/// Generates a lazy-channel which only stores a single value T per-chunk, only setting this to a compressed buffer
+		/// if set with something like `set_chunk`. This is especially memory efficient and should be the preferred way 
+		/// when wanting to generate an empty channel only filling out some parts (i.e. sparse cryptomatte loading).
+		/// 
+		/// \param width The width of the image channel.
+		/// \param height The height of the image channel.
+		/// \param fill_value The value to fill the channel with.
+		/// \param compression_codec The compression codec to be used.
+		/// \param compression_level The compression level (default is 9).
+		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB.
+		/// \param chunk_size The size of each individual chunk, defaults to 4MB. Should be no larger than the expected image size 
+		///                   for optimal performance and must be a multiple of sizeof(T).
+		/// \return A channel instance with all values initialized to \p fill_value.
+		static channel full(
+			size_t width,
+			size_t height,
+			T fill_value,
+			enums::codec compression_codec = enums::codec::lz4,
+			uint8_t compression_level = 9,
+			size_t block_size = s_default_blocksize,
+			size_t chunk_size = s_default_chunksize
+		)
+		{
+			const size_t chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(width, chunk_size);
+			const size_t num_elements = width * height;
+
+			auto schunk = blosc2::lazy_schunk<T>(fill_value, num_elements, block_size, chunk_size_aligned);
+			return channel(std::move(schunk), width, height, compression_codec, compression_level);
+		}
+
+
+		/// Create a channel filled with a specific value and the same shape and compression settings as another channel.
+		///
+		/// Generates a lazy-channel which only stores a single value T per-chunk, only setting this to a compressed buffer
+		/// if set with something like `set_chunk`. This is especially memory efficient and should be the preferred way 
+		/// when wanting to generate an empty channel only filling out some parts (i.e. sparse cryptomatte loading).
+		/// 
+		/// \param other The reference channel from which to copy shape and compression settings.
+		/// \param fill_value The value to fill the channel with.
+		/// \return A new channel instance filled with \p fill_value and the same dimensions and compression settings as \p other.
+		static channel full_like(const channel& other, T fill_value)
+		{
+			return channel<T>::full(
+				other.width(),
+				other.height(),
+				fill_value,
+				other.compression(),
+				other.compression_level(),
+				other.block_size(),
+				other.chunk_size()
+			);
+		}
+
 		/// Returns an iterator pointing to the beginning of the compressed data.
 		///
 		/// \return An iterator to the beginning of the compressed data.
@@ -228,6 +350,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \return The compression codec.
 		enums::codec compression() const noexcept { return m_Codec; }
 
+		/// Retrieve the compression level used.
+		///
+		/// \return The compression level (typically from 1-9).
+		size_t compression_level() const noexcept
+		{
+			return m_CompressionLevel;
+		}
+
 		/// Retrieve the compressed data size.
 		///
 		/// \return The size of the compressed data in bytes.
@@ -275,10 +405,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \return The number of chunks.
 		size_t num_chunks() const 
 		{ 
-			if (!m_Schunk)
-			{
-				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
-			}
+			assert(m_Schunk != nullptr);
 
 			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
 			{
@@ -289,6 +416,31 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).num_chunks();
 			}
 			return {};
+		}
+
+		/// \brief Retrieve the block size (in bytes) of the channel
+		///
+		/// The internal blosc2 implementation reserves changing this value on compression so it may be possible
+		/// that this is not the value you initially set.
+		/// 
+		/// \return The block size (in bytes).
+		size_t block_size() const
+		{
+			assert(m_Schunk != nullptr);
+			return m_CompressionContext->blocksize;
+
+		}
+
+		/// \brief Retrieve the chunk size (in bytes) of the channel
+		/// 
+		/// \return The chunk size (in bytes).
+		size_t chunk_size() const noexcept
+		{
+			assert(m_Schunk != nullptr);
+			return std::visit([&](auto& schunk)
+				{
+					return schunk.chunk_bytes();
+				}, *m_Schunk);
 		}
 
 		/// Get the decompressed data as a vector.

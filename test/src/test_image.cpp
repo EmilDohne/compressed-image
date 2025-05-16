@@ -36,6 +36,26 @@ TEST_CASE("Read compressed file smaller than one chunk")
 }
 
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file get attributes")
+{
+	std::string name = "uv_grid_2048x2048.jpg";
+	auto path = std::filesystem::current_path() / "images" / name;
+
+	auto image = compressed::image<uint8_t>::read(path);
+
+	CHECK(image.width() == 2048);
+	CHECK(image.height() == 2048);
+	CHECK(image.num_channels() == 3);
+	CHECK(image.channelnames() == std::vector<std::string>{"R", "G", "B"});
+	CHECK(image.metadata().size() > 0);
+	CHECK(image.chunk_size() == compressed::s_default_chunksize);
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file exactly than one chunk")
 {
 	std::string name = "uv_grid_2048x2048.jpg";
@@ -76,13 +96,13 @@ TEST_CASE("Read compressed file larger than one chunk")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file, subset of channel indices")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 0, 1, 2, 3 },
 				compressed::enums::codec::lz4,
@@ -101,13 +121,13 @@ TEST_CASE("Read compressed file, subset of channel indices")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file, non contiguous channel indices")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 0, 2, 3, 11 },
 				compressed::enums::codec::lz4,
@@ -126,13 +146,13 @@ TEST_CASE("Read compressed file, non contiguous channel indices")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file, non contiguous channel indices, out of order")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 11, 0, 2, 3 },
 				compressed::enums::codec::lz4,
@@ -158,14 +178,14 @@ TEST_CASE(
 	* doctest::should_fail(true)
 )
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
 			// this should fail as this file does not have a 64th channel
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 0, 1, 64 },
 				compressed::enums::codec::lz4,
@@ -182,13 +202,13 @@ TEST_CASE(
 // -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file, subset of channel names")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "R", "G", "B", "A" },
 				compressed::enums::codec::lz4,
@@ -207,13 +227,13 @@ TEST_CASE("Read compressed file, subset of channel names")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file, non contiguous channel names")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "R", "B", "A", "VRayCryptomatte00.R" },
 				compressed::enums::codec::lz4,
@@ -232,13 +252,13 @@ TEST_CASE("Read compressed file, non contiguous channel names")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file, non contiguous channel names, out of order")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "VRayCryptomatte00.R", "R", "B", "A" },
 				compressed::enums::codec::lz4,
@@ -264,14 +284,14 @@ TEST_CASE(
 	* doctest::should_fail(true)
 )
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
 			std::string name = "multilayer_2560x1440.exr";
 			auto path = std::filesystem::current_path() / "images" / name;
 			auto input_ptr = OIIO::ImageInput::open(path.string());
 
 			// this should fail as this file does not have a z channel
-			auto image = compressed::image<decltype(type)>::read(
+			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "R", "G", "Z" },
 				compressed::enums::codec::lz4,
@@ -284,16 +304,173 @@ TEST_CASE(
 }
 
 
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file with postprocess, subset of channel names")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<T>::read(
+				std::move(input_ptr),
+				[]([[maybe_unused]] size_t channel_idx, std::span<T> values)
+				{
+					for (auto& value : values)
+					{
+						value = static_cast<T>(25);
+					}
+				},
+				{ "R", "G", "B", "A" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{"R", "G", "B", "A"});
+
+			// Check that our postprocess worked
+			auto decompressed = image.get_decompressed();
+			for (const auto& channel : decompressed)
+			{
+				test_util::check_vector_verbose(channel, static_cast<T>(25));
+			}
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file with postprocess, non contiguous channel names")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<T>::read(
+				std::move(input_ptr),
+				[]([[maybe_unused]] size_t channel_idx, std::span<T> values)
+				{
+					for (auto& value : values)
+					{
+						value = static_cast<T>(25);
+					}
+				},
+				{ "R", "B", "A", "VRayCryptomatte00.R" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{ "R", "B", "A", "VRayCryptomatte00.R"});
+
+			// Check that our postprocess worked
+			auto decompressed = image.get_decompressed();
+			for (const auto& channel : decompressed)
+			{
+				test_util::check_vector_verbose(channel, static_cast<T>(25));
+			}
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file with postprocess, non contiguous channel names, out of order")
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			auto image = compressed::image<T>::read(
+				std::move(input_ptr),
+				[]([[maybe_unused]] size_t channel_idx, std::span<T> values)
+				{
+					for (auto& value : values)
+					{
+						value = static_cast<T>(25);
+					}
+				},
+				{ "VRayCryptomatte00.R", "R", "B", "A" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+
+			// Despite us specifying "VRayCryptomatte00.R" first, since it appears later in the channels this should
+			// have the same ordering as the file
+			CHECK(image.num_channels() == 4);
+			CHECK(image.channelnames() == std::vector<std::string>{ "R", "B", "A", "VRayCryptomatte00.R"});
+
+			// Check that our postprocess worked
+			auto decompressed = image.get_decompressed();
+			for (const auto& channel : decompressed)
+			{
+				test_util::check_vector_verbose(channel, static_cast<T>(25));
+			}
+		});
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE(
+	"Read compressed file with postprocess, invalid channel name"
+	* doctest::no_breaks(true)
+	* doctest::no_output(true)
+	* doctest::should_fail(true)
+)
+{
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
+		{
+			std::string name = "multilayer_2560x1440.exr";
+			auto path = std::filesystem::current_path() / "images" / name;
+			auto input_ptr = OIIO::ImageInput::open(path.string());
+
+			// this should fail as this file does not have a z channel
+			auto image = compressed::image<T>::read(
+				std::move(input_ptr),
+				[]([[maybe_unused]] size_t channel_idx, std::span<T> values)
+				{
+					for (auto& value : values)
+					{
+						value = static_cast<T>(25);
+					}
+				},
+				{ "R", "G", "Z" },
+				compressed::enums::codec::lz4,
+				9,
+				compressed::s_default_blocksize,
+				compressed::s_default_chunksize / 2
+			);
+		});
+}
+
+
+
+
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
 TEST_CASE("Initialize image and iterate parametrized")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			auto channel_r_data = std::vector<decltype(type)>(128, static_cast<decltype(type)>(255));
+			auto channel_r_data = std::vector<T>(128, static_cast<T>(255));
 
-			auto image = compressed::image<decltype(type)>(
-				std::vector<std::vector<decltype(type)>>{ channel_r_data},
+			auto image = compressed::image<T>(
+				std::vector<std::vector<T>>{ channel_r_data},
 				16,
 				8
 			);
@@ -305,7 +482,7 @@ TEST_CASE("Initialize image and iterate parametrized")
 				{
 					for (auto& pixel : chunk)
 					{
-						CHECK(pixel == static_cast<decltype(type)>(255));
+						CHECK(pixel == static_cast<T>(255));
 					}
 				}
 			}
@@ -317,7 +494,7 @@ TEST_CASE("Initialize image and iterate parametrized")
 				{
 					for (auto& pixel : chunk)
 					{
-						pixel = static_cast<decltype(type)>(128);
+						pixel = static_cast<T>(128);
 					}
 				}
 
@@ -326,7 +503,7 @@ TEST_CASE("Initialize image and iterate parametrized")
 				{
 					for (auto& pixel : chunk_)
 					{
-						CHECK(pixel == static_cast<decltype(type)>(128));
+						CHECK(pixel == static_cast<T>(128));
 					}
 				}
 			}
@@ -340,14 +517,14 @@ TEST_CASE("Initialize image and iterate parametrized")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Zip image channels parametrized")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			auto channel_r_data = std::vector<decltype(type)>(128, static_cast<decltype(type)>(255));
-			auto channel_g_data = std::vector<decltype(type)>(128, static_cast<decltype(type)>(0));
-			auto channel_b_data = std::vector<decltype(type)>(128, static_cast<decltype(type)>(199));
+			auto channel_r_data = std::vector<T>(128, static_cast<T>(255));
+			auto channel_g_data = std::vector<T>(128, static_cast<T>(0));
+			auto channel_b_data = std::vector<T>(128, static_cast<T>(199));
 
-			auto image = compressed::image<decltype(type)>(
-				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
+			auto image = compressed::image<T>(
+				std::vector<std::vector<T>>{ channel_r_data, channel_g_data, channel_b_data },
 				16,
 				8
 			);
@@ -361,9 +538,9 @@ TEST_CASE("Zip image channels parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					CHECK(r_pixel == static_cast<decltype(type)>(255));
-					CHECK(g_pixel == static_cast<decltype(type)>(0));
-					CHECK(b_pixel == static_cast<decltype(type)>(199));
+					CHECK(r_pixel == static_cast<T>(255));
+					CHECK(g_pixel == static_cast<T>(0));
+					CHECK(b_pixel == static_cast<T>(199));
 				}
 			}
 		}
@@ -375,14 +552,14 @@ TEST_CASE("Zip image channels parametrized")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Zip image channels equal to chunk size parametrized")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			auto channel_r_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(255));
-			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
-			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
+			auto channel_r_data = std::vector<T>(1024, static_cast<T>(255));
+			auto channel_g_data = std::vector<T>(1024, static_cast<T>(0));
+			auto channel_b_data = std::vector<T>(1024, static_cast<T>(199));
 
-			auto image = compressed::image<decltype(type)>(
-				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
+			auto image = compressed::image<T>(
+				std::vector<std::vector<T>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
 				16,
 				{},
@@ -401,9 +578,9 @@ TEST_CASE("Zip image channels equal to chunk size parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					CHECK(r_pixel == static_cast<decltype(type)>(255));
-					CHECK(g_pixel == static_cast<decltype(type)>(0));
-					CHECK(b_pixel == static_cast<decltype(type)>(199));
+					CHECK(r_pixel == static_cast<T>(255));
+					CHECK(g_pixel == static_cast<T>(0));
+					CHECK(b_pixel == static_cast<T>(199));
 				}
 			}
 		}
@@ -415,14 +592,14 @@ TEST_CASE("Zip image channels equal to chunk size parametrized")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Zip image channels larger to chunk size parametrized")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			auto channel_r_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(255));
-			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
-			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
+			auto channel_r_data = std::vector<T>(1024, static_cast<T>(255));
+			auto channel_g_data = std::vector<T>(1024, static_cast<T>(0));
+			auto channel_b_data = std::vector<T>(1024, static_cast<T>(199));
 
-			auto image = compressed::image<decltype(type)>(
-				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
+			auto image = compressed::image<T>(
+				std::vector<std::vector<T>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
 				16,
 				{},
@@ -441,9 +618,9 @@ TEST_CASE("Zip image channels larger to chunk size parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					CHECK(r_pixel == static_cast<decltype(type)>(255));
-					CHECK(g_pixel == static_cast<decltype(type)>(0));
-					CHECK(b_pixel == static_cast<decltype(type)>(199));
+					CHECK(r_pixel == static_cast<T>(255));
+					CHECK(g_pixel == static_cast<T>(0));
+					CHECK(b_pixel == static_cast<T>(199));
 				}
 			}
 		}
@@ -455,14 +632,14 @@ TEST_CASE("Zip image channels larger to chunk size parametrized")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Zip modify image channels parametrized")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			auto channel_r_data = std::vector<decltype(type)>(128, static_cast<decltype(type)>(255));
-			auto channel_g_data = std::vector<decltype(type)>(128, static_cast<decltype(type)>(0));
-			auto channel_b_data = std::vector<decltype(type)>(128, static_cast<decltype(type)>(199));
+			auto channel_r_data = std::vector<T>(128, static_cast<T>(255));
+			auto channel_g_data = std::vector<T>(128, static_cast<T>(0));
+			auto channel_b_data = std::vector<T>(128, static_cast<T>(199));
 
-			auto image = compressed::image<decltype(type)>(
-				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
+			auto image = compressed::image<T>(
+				std::vector<std::vector<T>>{ channel_r_data, channel_g_data, channel_b_data },
 				16,
 				8
 			);
@@ -476,9 +653,9 @@ TEST_CASE("Zip modify image channels parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					r_pixel = static_cast<decltype(type)>(12);
-					g_pixel = static_cast<decltype(type)>(13);
-					b_pixel = static_cast<decltype(type)>(14);
+					r_pixel = static_cast<T>(12);
+					g_pixel = static_cast<T>(13);
+					b_pixel = static_cast<T>(14);
 				}
 			}
 
@@ -486,9 +663,9 @@ TEST_CASE("Zip modify image channels parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					CHECK(r_pixel == static_cast<decltype(type)>(12));
-					CHECK(g_pixel == static_cast<decltype(type)>(13));
-					CHECK(b_pixel == static_cast<decltype(type)>(14));
+					CHECK(r_pixel == static_cast<T>(12));
+					CHECK(g_pixel == static_cast<T>(13));
+					CHECK(b_pixel == static_cast<T>(14));
 				}
 			}
 		}
@@ -500,14 +677,14 @@ TEST_CASE("Zip modify image channels parametrized")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			auto channel_r_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(255));
-			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
-			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
+			auto channel_r_data = std::vector<T>(1024, static_cast<T>(255));
+			auto channel_g_data = std::vector<T>(1024, static_cast<T>(0));
+			auto channel_b_data = std::vector<T>(1024, static_cast<T>(199));
 
-			auto image = compressed::image<decltype(type)>(
-				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
+			auto image = compressed::image<T>(
+				std::vector<std::vector<T>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
 				16,
 				{},
@@ -526,9 +703,9 @@ TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					r_pixel = static_cast<decltype(type)>(12);
-					g_pixel = static_cast<decltype(type)>(13);
-					b_pixel = static_cast<decltype(type)>(14);
+					r_pixel = static_cast<T>(12);
+					g_pixel = static_cast<T>(13);
+					b_pixel = static_cast<T>(14);
 				}
 			}
 
@@ -536,9 +713,9 @@ TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					CHECK(r_pixel == static_cast<decltype(type)>(12));
-					CHECK(g_pixel == static_cast<decltype(type)>(13));
-					CHECK(b_pixel == static_cast<decltype(type)>(14));
+					CHECK(r_pixel == static_cast<T>(12));
+					CHECK(g_pixel == static_cast<T>(13));
+					CHECK(b_pixel == static_cast<T>(14));
 				}
 			}
 		}
@@ -550,14 +727,14 @@ TEST_CASE("Zip modify image channels equal to chunk size parametrized")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Zip modify image channels larger to chunk size parametrized")
 {
-	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&](auto type)
+	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			auto channel_r_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(255));
-			auto channel_g_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(0));
-			auto channel_b_data = std::vector<decltype(type)>(1024, static_cast<decltype(type)>(199));
+			auto channel_r_data = std::vector<T>(1024, static_cast<T>(255));
+			auto channel_g_data = std::vector<T>(1024, static_cast<T>(0));
+			auto channel_b_data = std::vector<T>(1024, static_cast<T>(199));
 
-			auto image = compressed::image<decltype(type)>(
-				std::vector<std::vector<decltype(type)>>{ channel_r_data, channel_g_data, channel_b_data },
+			auto image = compressed::image<T>(
+				std::vector<std::vector<T>>{ channel_r_data, channel_g_data, channel_b_data },
 				64,
 				16,
 				{},
@@ -576,9 +753,9 @@ TEST_CASE("Zip modify image channels larger to chunk size parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					r_pixel = static_cast<decltype(type)>(12);
-					g_pixel = static_cast<decltype(type)>(13);
-					b_pixel = static_cast<decltype(type)>(14);
+					r_pixel = static_cast<T>(12);
+					g_pixel = static_cast<T>(13);
+					b_pixel = static_cast<T>(14);
 				}
 			}
 
@@ -586,9 +763,9 @@ TEST_CASE("Zip modify image channels larger to chunk size parametrized")
 			{
 				for (auto [r_pixel, g_pixel, b_pixel] : compressed::ranges::zip(r_chunk, g_chunk, b_chunk))
 				{
-					CHECK(r_pixel == static_cast<decltype(type)>(12));
-					CHECK(g_pixel == static_cast<decltype(type)>(13));
-					CHECK(b_pixel == static_cast<decltype(type)>(14));
+					CHECK(r_pixel == static_cast<T>(12));
+					CHECK(g_pixel == static_cast<T>(13));
+					CHECK(b_pixel == static_cast<T>(14));
 				}
 			}
 		}
