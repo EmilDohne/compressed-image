@@ -707,7 +707,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				throw std::invalid_argument(std::format("File {} does not exist on disk", filepath.string()));
 			}
 
-			return detail::param_value::to_json(input_ptr->spec());
+			return detail::param_value::to_json(input_ptr->spec().extra_attribs);
 		}
 
 

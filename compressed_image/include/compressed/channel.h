@@ -14,6 +14,7 @@
 #include "macros.h"
 #include "enums.h"
 #include "fwd.h"
+#include "blosc2.h"
 #include "blosc2/wrapper.h"
 #include "blosc2/typedefs.h"
 #include "blosc2/schunk.h"
@@ -68,7 +69,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				9,
 				s_default_blocksize
 			);
-			m_DecompressionContext = blosc2::create_decompression_context<T>(std::thread::hardware_concurrency());
+			m_DecompressionContext = blosc2::create_decompression_context(std::thread::hardware_concurrency());
 		};
 
 		/// Initialize the channel with the given data.
