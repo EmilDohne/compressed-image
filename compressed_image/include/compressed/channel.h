@@ -14,7 +14,6 @@
 #include "macros.h"
 #include "enums.h"
 #include "fwd.h"
-#include "blosc2.h"
 #include "blosc2/wrapper.h"
 #include "blosc2/typedefs.h"
 #include "blosc2/schunk.h"
@@ -428,8 +427,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		size_t block_size() const
 		{
 			assert(m_Schunk != nullptr);
-			return m_CompressionContext->blocksize;
-
+			return std::visit([&](auto& schunk)
+				{
+					return schunk.max_block_size();
+				}, *m_Schunk);
 		}
 
 		/// \brief Retrieve the chunk size (in bytes) of the channel
