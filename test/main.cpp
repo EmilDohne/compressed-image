@@ -55,7 +55,7 @@ struct FailureReporter : public doctest::ConsoleReporter
 		}
 		else
 		{
-			constexpr int column_width = 120;
+			constexpr int column_width = 100;
 			std::cout << std::format("[doctest] {:.<{}} ok", std::string(tc->m_name), column_width - 12) << std::endl;
 		}
 	}
