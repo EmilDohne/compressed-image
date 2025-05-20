@@ -35,6 +35,32 @@ TEST_CASE("Read compressed file smaller than one chunk")
 	test_util::compare_images(image_data, image_ref, name);
 }
 
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed file and extract channels")
+{
+	std::string name = "uv_grid_2048x2048.jpg";
+	auto path = std::filesystem::current_path() / "images" / name;
+
+	auto image = compressed::image<uint8_t>::read(path);
+
+	std::vector<std::vector<uint8_t>> decompressed;
+	for ([[maybe_unused]] auto _: std::views::iota(size_t{ 0 }, image.num_channels()))
+	{
+		// Since we keep pulling out the channels the indices change back to zero
+		auto channel = image.extract_channel(0);
+		decompressed.push_back(channel.get_decompressed());
+	}
+	auto image_ref = test_util::read_oiio<uint8_t>(path);
+
+	// Since we extracted the channels, the number of channels should be zero with the channelnames 
+	// also being empty
+	CHECK(image.num_channels() == 0);
+	CHECK(image.channelnames() == std::vector<std::string>{});
+
+	test_util::compare_images(decompressed, image_ref, name);
+}
+
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------

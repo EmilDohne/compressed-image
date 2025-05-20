@@ -167,6 +167,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 
+		/// Constructs an image object with the specified channels and dimensions, optionally passing channelnames.
+		/// 
+		/// This constructor creates an image from a given set of channels. The channel names can optionally be specified. 
+		/// The passed channels should already be compressed::channel instances.
+		/// 
+		/// 
+		/// \param channels A vector of compressed::channel instances to initialize the image with.
+		/// \param width The width of the image in pixels.
+		/// \param height The height of the image in pixels.
+		/// \param channel_names (Optional) A list of channel names, must match the number of channels provided. 
+		///					     If omitted or incorrect, channel names are ignored.
 		image(
 			std::vector<compressed::channel<T>> channels,
 			size_t width,
@@ -865,6 +876,42 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		// ---------------------------------------------------------------------------------------------------------------------
 		// Accessors
 		// ---------------------------------------------------------------------------------------------------------------------
+
+		/// Extracts a channel by its index.
+		/// 
+		/// Remove the channel from the image and gives you full control over the channel. Also erases
+		/// its channel name.
+		/// 
+		/// \param index The index of the channel to retrieve.
+		/// \return The channel object.
+		/// \throws std::out_of_range if the index is out of bounds.
+		compressed::channel<T> extract_channel(size_t index)
+		{
+			if (index >= m_Channels.size())
+			{
+				throw std::out_of_range("Channel index out of range");
+			}
+			auto ret = std::move(m_Channels[index]);
+
+			m_Channels.erase(m_Channels.begin() + index);
+			m_ChannelNames.erase(m_ChannelNames.begin() + index);
+
+			return std::move(ret);
+		}
+
+		/// Extracts a channel by its name.
+		/// 
+		/// Remove the channel from the image and gives you full control over the channel. Also erases
+		/// its channel name.
+		/// 
+		/// \param name The name of the channel to retrieve.
+		/// \return The channel object.
+		/// \throws std::out_of_range if the channel name is invalid.
+		compressed::channel<T> extract_channel(const std::string_view name)
+		{
+			size_t index = get_channel_offset(name);
+			return extract_channel(index);
+		}
 
 		/// Retrieves a reference to a channel by its index.
 		/// 
