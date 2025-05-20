@@ -93,8 +93,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
                 _string
             };
 
-            inline _JSONType to_json_type(const OIIO::ParamValue& pvalue)
+            inline _JSONType to_json_type(OIIO::ParamValue pvalue)
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 auto type = pvalue.type();
 
 
@@ -102,34 +103,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
                 {
                     return _JSONType::_string;
                 }
-
-                if (
+                else if (
                     type == OIIO::TypeDesc::UINT8 ||
-                    type == OIIO::TypeDesc::UCHAR ||
                     type == OIIO::TypeDesc::INT8 ||
-                    type == OIIO::TypeDesc::CHAR ||
                     type == OIIO::TypeDesc::UINT16 ||
-                    type == OIIO::TypeDesc::USHORT ||
                     type == OIIO::TypeDesc::INT16 ||
-                    type == OIIO::TypeDesc::SHORT ||
                     type == OIIO::TypeDesc::UINT32 ||
-                    type == OIIO::TypeDesc::UINT ||
                     type == OIIO::TypeDesc::INT32 ||
-                    type == OIIO::TypeDesc::INT ||
                     type == OIIO::TypeDesc::UINT64 ||
-                    type == OIIO::TypeDesc::ULONGLONG ||
-                    type == OIIO::TypeDesc::INT64 ||
-                    type == OIIO::TypeDesc::LONGLONG
+                    type == OIIO::TypeDesc::INT64
                     )
                 {
                     return _JSONType::_int;
                 }
-
-                if (
-                    type == OIIO::TypeDesc::HALF ||
-                    type == OIIO::TypeDesc::FLOAT ||
-                    type == OIIO::TypeDesc::DOUBLE
-                    )
+                else if (type == OIIO::TypeDesc::HALF || type == OIIO::TypeDesc::FLOAT || type == OIIO::TypeDesc::DOUBLE)
                 {
                     return _JSONType::_float;
                 }
@@ -150,6 +137,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
                 requires std::is_same_v<T, std::string> || std::is_same_v<T, int> || std::is_same_v<T, float>
             T decode(const OIIO::ParamValue& pvalue)
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 if constexpr (std::is_same_v<T, std::string>)
                 {
                     return pvalue.get_string();
@@ -169,6 +157,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
                 requires std::is_same_v<T, std::string> || std::is_same_v<T, int> || std::is_same_v<T, float>
             std::vector<T> decode_array(const OIIO::ParamValue& pvalue)
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 std::vector<T> out{};
                 for (auto i : std::views::iota(0, pvalue.nvalues()))
                 {
@@ -191,6 +180,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
             inline json_ordered to_json(const OIIO::ParamValueList& list)
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 json_ordered out{};
 
                 for (const auto& pvalue : list)

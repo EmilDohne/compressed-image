@@ -24,6 +24,26 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			schunk() = default;
 
+			schunk(schunk&& other) noexcept 
+			{
+				this->m_Chunks = std::move(other.m_Chunks);
+				this->m_ChunkSize = other.m_ChunkSize;
+				this->m_BlockSize = other.m_BlockSize;
+			}
+			schunk& operator=(schunk&& other) noexcept 
+			{
+				if (this != &other) 
+				{
+					this->m_Chunks = std::move(other.m_Chunks);
+					this->m_ChunkSize = other.m_ChunkSize;
+					this->m_BlockSize = other.m_BlockSize;
+				}
+				return *this;
+			}
+			schunk(const schunk& other) = default;
+			schunk& operator=(const schunk& other) = default;
+
+
 			/// Initialize an empty schunk with just a schunk size. The data can then later
 			/// be filled with append_chunk for example.
 			schunk(size_t block_size, size_t chunk_size)

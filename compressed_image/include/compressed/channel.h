@@ -50,8 +50,32 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		using iterator = channel_iterator<T>;
 		using const_iterator = channel_iterator<const T>;
 
-		channel(channel&&) = default;
-		channel& operator=(channel&&) = default;
+		channel(channel&& other)
+		{
+			m_Schunk = std::move(other.m_Schunk);
+			m_Codec = other.m_Codec;
+			m_Nthreads = other.m_Nthreads;			
+			m_CompressionContext = std::move(other.m_CompressionContext);
+			m_DecompressionContext = std::move(other.m_DecompressionContext);
+			m_CompressionLevel = other.m_CompressionLevel;
+			m_Width = other.m_Width;
+			m_Height = other.m_Height;
+		};
+		channel& operator=(channel&& other)
+		{
+			if (this != &other)
+			{
+				m_Schunk = std::move(other.m_Schunk);
+				m_Codec = other.m_Codec;
+				m_Nthreads = other.m_Nthreads;
+				m_CompressionContext = std::move(other.m_CompressionContext);
+				m_DecompressionContext = std::move(other.m_DecompressionContext);
+				m_CompressionLevel = other.m_CompressionLevel;
+				m_Width = other.m_Width;
+				m_Height = other.m_Height;
+			}
+			return *this;
+		};
 		channel(const channel&) = delete;
 		channel& operator=(const channel&) = delete;
 			
@@ -95,6 +119,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			m_Width = width;
 			m_Height = height;
 			m_Codec = compression_codec;
@@ -145,6 +170,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			uint8_t compression_level = 9
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			m_Codec = compression_codec;
 			m_CompressionLevel = util::ensure_compression_level(compression_level);
 
@@ -333,6 +359,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			m_CompressionContext = blosc2::create_compression_context<T>(nthreads, m_Codec, m_CompressionLevel, block_size);
 			m_DecompressionContext = blosc2::create_decompression_context(nthreads);
+			m_Nthreads = nthreads;
 		}
 
 		/// The channel width.
@@ -445,19 +472,72 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				}, *m_Schunk);
 		}
 
+		/// Retrieves and decompresses a chunk of data into the provided buffer.
+		///
+		/// This function retrieves the chunk at the given index from the internal `schunk`,
+		/// decompresses it using the current decompression context, and stores the result in `buffer`.
+		///
+		/// \param buffer A span representing the destination buffer to store the decompressed data.
+		///               Must be large enough to hold one chunk of decompressed data.
+		/// \param chunk_idx The index of the chunk to retrieve.
+		///
+		/// \throws std::runtime_error if the internal `schunk` pointer is not initialized.
+		void get_chunk(std::span<T> buffer, size_t chunk_idx) const
+		{
+			if (!m_Schunk)
+			{
+				throw std::runtime_error("Internal Error: Channel instance is not properly initialized, unable to get decompressed data");
+			}
+
+			return std::visit([&](const auto& schunk)
+				{
+					// We cheat a little bit here by creating this compression ctx on the fly, unfortunately this is 
+					// necessary as blosc2 will actually modify the ctx on decompression.
+					auto decomp_ctx = blosc2::create_decompression_context(m_Nthreads);
+					return schunk.chunk(decomp_ctx, buffer, chunk_idx);
+				}, *m_Schunk);
+		}
+
+		/// Compresses and sets a chunk of data from the provided buffer at the specified index.
+		///
+		/// This function compresses the data in the provided buffer using the current compression
+		/// context and writes it into the internal `schunk` at the given index.
+		///
+		/// \param buffer A span representing the source data to be compressed and stored.
+		/// \param chunk_idx The index of the chunk to overwrite or set with the compressed data.
+		///
+		/// \throws std::runtime_error if the internal `schunk` pointer is not initialized.
+		void set_chunk(std::span<T> buffer, size_t chunk_idx)
+		{
+			if (!m_Schunk)
+			{
+				throw std::runtime_error("Internal Error: Channel instance is not properly initialized, unable to set data");
+			}
+
+			return std::visit([&](auto& schunk)
+				{
+					return schunk.set_chunk(m_CompressionContext, buffer, chunk_idx);
+				}, *m_Schunk);
+		}
+
 		/// Get the decompressed data as a vector.
 		///
+		/// \throws std::runtime_error if the internal `schunk` pointer is not initialized.
+		/// 
 		/// \return A vector containing the decompressed data.
-		std::vector<T> get_decompressed()
+		std::vector<T> get_decompressed() const
 		{
-			if (m_Schunk)
+			if (!m_Schunk)
 			{
-				return std::visit([&](auto& schunk)
-					{
-						return schunk.to_uncompressed(m_DecompressionContext);
-					}, *m_Schunk);
+				throw std::runtime_error("Internal Error: Channel instance is not properly initialized, unable to get decompressed data");
 			}
-			throw std::runtime_error("Internal Error: Channel instance is not properly initialized, unable to get decompressed data");
+			return std::visit([&](const auto& schunk)
+				{
+					// We cheat a little bit here by creating this compression ctx on the fly, unfortunately this is 
+					// necessary as blosc2 will actually modify the ctx on decompression.
+					auto decomp_ctx = blosc2::create_decompression_context(m_Nthreads);
+					return schunk.to_uncompressed(decomp_ctx);
+				}, *m_Schunk);
 		}
 
 		/// Equality operators, compares pointers to check for equality
@@ -470,6 +550,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// The storage for the internal data, stored contiguously in a compressed data format
 		blosc2::schunk_var_ptr<T> m_Schunk = nullptr;
 		enums::codec m_Codec = enums::codec::lz4;
+
+		size_t m_Nthreads = std::thread::hardware_concurrency();
 
 		/// We store a compression and decompression context here to allow us to reuse them rather than having
 		/// to reinitialize them on launch. May be nullptr;

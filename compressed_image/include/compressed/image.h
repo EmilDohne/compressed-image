@@ -102,6 +102,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			m_Width = width;
 			m_Height = height;
 			m_ChannelNames = channel_names;
@@ -173,6 +174,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::vector<std::string> channel_names = {}
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			m_Width = width;
 			m_Height = height;
 			m_ChannelNames = channel_names;
@@ -318,6 +320,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			// Initialize the OIIO primitives
 			auto input_ptr = OIIO::ImageInput::open(filepath);
 			if (!input_ptr)
@@ -391,6 +394,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			std::vector<std::string> channelnames{};
 			const auto& spec = input_ptr->spec();
 
@@ -497,6 +501,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			std::vector<std::string> channelnames{};
 			const auto& spec = input_ptr->spec();
 
@@ -571,6 +576,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			return image<T>::read_impl(
 				std::move(input_ptr),
 				std::move(channelnames),
@@ -672,6 +678,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 			)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			return image<T>::read_impl(
 				std::move(input_ptr),
 				std::move(channelnames),
@@ -979,10 +986,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Each channel's decompressed data is stored as a separate vector.
 		/// 
 		/// \return A vector of decompressed channel data, where each inner vector corresponds to a channel.
-		std::vector<std::vector<T>> get_decompressed()
+		std::vector<std::vector<T>> get_decompressed() const
 		{
 			std::vector<std::vector<T>> result{};
-			for (auto& channel : m_Channels)
+			for (const auto& channel : m_Channels)
 			{
 				result.push_back(channel.get_decompressed());
 			}
@@ -1154,6 +1161,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t chunk_size = s_default_chunksize
 			)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			assert(chunk_size % sizeof(T) == 0);
 			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
 
@@ -1288,6 +1296,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				// Finally create the channels from the schunks
 				for (const auto channel_idx : std::views::iota(0, nchannels))
 				{
+					_COMPRESSED_PROFILE_SCOPE("generate channels");
 					channels.push_back(
 						compressed::channel<T>(
 							std::move(schunks[channel_idx]),
@@ -1349,6 +1358,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			PostProcess&& postprocess
 		)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			const int nchannels = chend - chbegin;
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 			const auto typedesc = enums::get_type_desc<T>();

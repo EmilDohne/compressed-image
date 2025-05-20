@@ -8,6 +8,7 @@
 #include "compressed/detail/scoped_timer.h"
 
 #include "blosc2.h"
+
 #include "blosc2/blosc2-common.h"
 #include "blosc2/blosc2-stdio.h"
 #include "blosc2/filters-registry.h"
@@ -361,6 +362,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		blosc2::context_ptr create_compression_context(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level, size_t block_size)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			detail::init_filters();
 			auto cparams = create_blosc2_cparams<T>(schunk, nthreads, codec, compression_level, block_size);
 			return blosc2::context_ptr(blosc2_create_cctx(cparams));
@@ -369,6 +371,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		blosc2::context_ptr create_compression_context(size_t nthreads, enums::codec codec, uint8_t compression_level, size_t block_size)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			detail::init_filters();
 			auto cparams = create_blosc2_cparams<T>(nthreads, codec, compression_level, block_size);
 			return blosc2::context_ptr(blosc2_create_cctx(cparams));
@@ -377,6 +380,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Create a blosc2 decompression context with the given number of threads.
 		inline blosc2::context_ptr create_decompression_context(schunk_ptr& schunk, size_t nthreads)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			if (nthreads > std::numeric_limits<int16_t>::max())
 			{
 				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
@@ -394,6 +398,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Create a blosc2 decompression context with the given number of threads.
 		inline blosc2::context_ptr create_decompression_context(size_t nthreads)
 		{
+			_COMPRESSED_PROFILE_FUNCTION();
 			if (nthreads > std::numeric_limits<int16_t>::max())
 			{
 				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
