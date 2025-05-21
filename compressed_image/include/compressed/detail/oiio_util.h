@@ -14,6 +14,7 @@
 
 #include <OpenImageIO/imageio.h>
 
+#include "scoped_timer.h"
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {

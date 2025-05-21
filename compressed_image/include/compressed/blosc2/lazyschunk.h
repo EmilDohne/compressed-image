@@ -11,6 +11,8 @@
 #include "wrapper.h"
 #include "schunk_mixin.h"
 
+#include "compressed/detail/scoped_timer.h"
+
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
 

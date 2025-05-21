@@ -26,6 +26,7 @@
 #include "channel.h"
 #include "image_algo.h"
 #include "detail/oiio_util.h"
+#include "detail/scoped_timer.h"
 
 #include "iterators/iterator.h"
 

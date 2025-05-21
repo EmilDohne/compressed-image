@@ -8,6 +8,7 @@
 #include "compressed/macros.h"
 #include "compressed/util.h"
 #include "compressed/blosc2/util.h"
+#include "compressed/detail/scoped_timer.h"
 #include "wrapper.h"
 #include "schunk_mixin.h"
 

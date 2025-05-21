@@ -20,7 +20,7 @@
 #include "blosc2/lazyschunk.h"
 #include "constants.h"
 #include "util.h"
-
+#include "detail/scoped_timer.h"
 #include "iterators/iterator.h"
 
 using json_ordered = nlohmann::ordered_json;
