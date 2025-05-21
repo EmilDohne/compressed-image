@@ -84,7 +84,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// functions `zeros` and `full` are preferred.
 		channel()
 		{
-			m_Schunk = blosc2::lazy_schunk<T>(0, 1, s_default_blocksize, s_default_chunksize);
+			m_Schunk = std::make_shared<schunk_var<T>>(blosc2::lazy_schunk<T>(0, 1, s_default_blocksize, s_default_chunksize));
 			m_CompressionContext = blosc2::create_compression_context<T>(
 				std::thread::hardware_concurrency(),
 				enums::codec::lz4,
