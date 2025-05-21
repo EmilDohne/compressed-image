@@ -20,10 +20,9 @@
 #include "blosc2/lazyschunk.h"
 #include "constants.h"
 #include "util.h"
+#include "json_alias.h"
 #include "detail/scoped_timer.h"
 #include "iterators/iterator.h"
-
-using json_ordered = nlohmann::ordered_json;
 
 
 namespace NAMESPACE_COMPRESSED_IMAGE

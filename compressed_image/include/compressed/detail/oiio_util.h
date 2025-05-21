@@ -15,6 +15,7 @@
 #include <OpenImageIO/imageio.h>
 
 #include "scoped_timer.h"
+#include "compressed/json_alias.h"
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
