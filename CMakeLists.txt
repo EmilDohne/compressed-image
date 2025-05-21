@@ -58,9 +58,10 @@ endif()
 find_package(OpenImageIO CONFIG QUIET)
 if (OpenImageIO_FOUND)
     message(STATUS "Found OpenImageIO")
-    add_compile_definitions(COMPRESSED_IMAGE_OIIO_AVAILABLE)
+    set(COMPRESSED_IMAGE_HAVE_OIIO TRUE)
 else()
     message(WARNING "OpenImageIO not found, some features will not be available")
+    set(COMPRESSED_IMAGE_HAVE_OIIO TRUE)
 endif()
 
 # Projects

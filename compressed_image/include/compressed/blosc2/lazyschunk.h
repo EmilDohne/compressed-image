@@ -47,6 +47,27 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			using detail::schunk_mixin<T, detail::lazy_chunk<T>>::chunk_bytes;
 
+			lazy_schunk() = default;
+			lazy_schunk(lazy_schunk&& other) noexcept
+			{
+				this->m_Chunks = std::move(other.m_Chunks);
+				this->m_ChunkSize = other.m_ChunkSize;
+				this->m_BlockSize = other.m_BlockSize;
+			}
+			lazy_schunk& operator=(lazy_schunk&& other) noexcept
+			{
+				if (this != &other)
+				{
+					this->m_Chunks = std::move(other.m_Chunks);
+					this->m_ChunkSize = other.m_ChunkSize;
+					this->m_BlockSize = other.m_BlockSize;
+				}
+				return *this;
+			}
+			lazy_schunk(const lazy_schunk& other) = default;
+			lazy_schunk& operator=(const lazy_schunk& other) = default;
+
+
 			/// Initialize a lazy super-chunk from the given value, has a near-zero
 			/// cost with the chunks only being initialized on read/modify.
 			/// 

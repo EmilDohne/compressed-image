@@ -14,6 +14,11 @@ if (MSVC)
 endif()
 
 
+if (COMPRESSED_IMAGE_HAVE_OIIO)
+	target_compile_definitions(compressed_image INTERFACE COMPRESSED_IMAGE_OIIO_AVAILABLE)
+endif()
+
+
 # Crank up warning levels on both MSVC, Clang and GCC
 if (COMPRESSED_IMAGE_EXTENDED_WARNINGS)
 	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
