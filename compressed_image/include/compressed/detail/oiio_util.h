@@ -32,6 +32,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
         /// 
         /// which describe the channels 1, 2 and 3. 
         /// 
+        /// This function assumes that the subimage is set appropriately on the image before the call to this function!
+        /// 
         /// \param input_ptr The image to query
         /// \param channelnames The channelnames to construct pairings for, invalid channelnames throw a std::out_of_range
         /// 

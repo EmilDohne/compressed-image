@@ -23,6 +23,7 @@ TEST_CASE("Read compressed file smaller than one chunk")
 
 	auto image = compressed::image<uint8_t>::read(
 		path, 
+		0,
 		compressed::enums::codec::lz4, 
 		9,
 		compressed::s_default_blocksize, 
@@ -104,7 +105,8 @@ TEST_CASE("Read compressed file larger than one chunk")
 	auto path = std::filesystem::current_path() / "images" / name;
 
 	auto image = compressed::image<float>::read(
-		path, 
+		path,
+		0,
 		compressed::enums::codec::lz4, 
 		9, 
 		compressed::s_default_blocksize, 
@@ -131,6 +133,7 @@ TEST_CASE("Read compressed file, subset of channel indices")
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 0, 1, 2, 3 },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -156,6 +159,7 @@ TEST_CASE("Read compressed file, non contiguous channel indices")
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 0, 2, 3, 11 },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -181,6 +185,7 @@ TEST_CASE("Read compressed file, non contiguous channel indices, out of order")
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 11, 0, 2, 3 },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -214,6 +219,7 @@ TEST_CASE(
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ 0, 1, 64 },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -237,6 +243,7 @@ TEST_CASE("Read compressed file, subset of channel names")
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "R", "G", "B", "A" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -262,6 +269,7 @@ TEST_CASE("Read compressed file, non contiguous channel names")
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "R", "B", "A", "VRayCryptomatte00.R" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -287,6 +295,7 @@ TEST_CASE("Read compressed file, non contiguous channel names, out of order")
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "VRayCryptomatte00.R", "R", "B", "A" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -320,6 +329,7 @@ TEST_CASE(
 			auto image = compressed::image<T>::read(
 				std::move(input_ptr),
 				{ "R", "G", "Z" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -351,6 +361,7 @@ TEST_CASE("Read compressed file with postprocess, subset of channel names")
 					}
 				},
 				{ "R", "G", "B", "A" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -390,6 +401,7 @@ TEST_CASE("Read compressed file with postprocess, non contiguous channel names")
 					}
 				},
 				{ "R", "B", "A", "VRayCryptomatte00.R" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -429,6 +441,7 @@ TEST_CASE("Read compressed file with postprocess, non contiguous channel names, 
 					}
 				},
 				{ "VRayCryptomatte00.R", "R", "B", "A" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,
@@ -476,6 +489,7 @@ TEST_CASE(
 					}
 				},
 				{ "R", "G", "Z" },
+				0,
 				compressed::enums::codec::lz4,
 				9,
 				compressed::s_default_blocksize,

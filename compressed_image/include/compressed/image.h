@@ -219,10 +219,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Example:
 		/// \code{.cpp}
 		/// std::filesystem::path filepath = "image.exr";
-		/// auto img = compressed::image::read<uint8_t>(filepath, compressed::enums::codec::lz4, 5);
+		/// auto img = compressed::image::read<uint8_t>(filepath, 0, compressed::enums::codec::lz4, 5);
 		/// \endcode
 		///
 		/// \param filepath The file path of the image to read.
+		/// \param subimage The subimage to extract the channels from (default: 0). Only relevant for multi-part images.
 		/// \param compression_codec The compression codec to use (default: LZ4).
 		/// \param compression_level The compression level (default: 9).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
@@ -235,6 +236,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \return A compressed image instance.
 		static image read(
 			std::filesystem::path filepath,
+			int subimage = 0,
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -247,11 +249,23 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				throw std::invalid_argument(std::format("File {} does not exist on disk", filepath.string()));
 			}
+
+			// Ensure we seek to the right subimage before retrieving the spec as it is subimage dependent.
+			auto res = input_ptr->seek_subimage(subimage, 0);
+			if (!res)
+			{
+				throw std::invalid_argument(
+					std::format(
+						"File '{}' does not have a subimage {}, cannot seek to it", filepath.string(), subimage
+					)
+				);
+			}
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 
 			return image<T>::read(
 				std::move(input_ptr),
 				spec.channelnames,
+				subimage,
 				compression_codec,
 				compression_level,
 				block_size,
@@ -285,9 +299,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// std::filesystem::path filepath = "image.exr";
 		/// 
 		/// // Read an image file and apply a post-process which adds 1 to the pixel value for all RGB channels (0, 1, 2).
-		/// auto img = compressed::image::read<uint8_t>(
-		///		filepath, 
-		///		[](size_t channel_idx, std::span<T> chunk)
+		/// 
+		/// auto postprocess = [](size_t channel_idx, std::span<T> chunk)
 		///		{
 		///			if (channel_idx > 2)
 		///			{
@@ -298,9 +311,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///			{
 		///				value += 1;
 		///			}
-		///		}
-		///		compressed::enums::codec::lz4, 
-		///		5
+		///		};
+		/// 
+		/// auto img = compressed::image::read<uint8_t>(
+		///		filepath, 
+		///		std::forward(postprocess),
+		///		0, // subimage
+		///		compressed::enums::codec::lz4, // compression_code
+		///		5 // compression_level
 		/// );
 		/// \endcode
 		///
@@ -309,6 +327,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///					   take a `size_t` and a `std::span<T>` where the `size_t` is the channel index we are currently
 		///					   iterating over (e.g. 3 for the alpha channel) and the `std::span<T>` is a chunk within that
 		///					   channel, where this chunk is and what coordinates it represents is not passed along.
+		/// \param subimage The subimage to extract the channels from (default: 0). Only relevant for multi-part images.
 		/// \param compression_codec The compression codec to use (default: LZ4).
 		/// \param compression_level The compression level (default: 9).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
@@ -324,6 +343,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		static image read(
 			std::filesystem::path filepath,
 			PostProcess&& postprocess,
+			int subimage = 0,
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -337,10 +357,22 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				throw std::invalid_argument(std::format("File {} does not exist on disk", filepath.string()));
 			}
+			
+			// Ensure we seek to the right subimage before retrieving the spec as it is subimage dependent.
+			auto res = input_ptr->seek_subimage(subimage, 0);
+			if (!res)
+			{
+				throw std::invalid_argument(
+					std::format(
+						"File '{}' does not have a subimage {}, cannot seek to it", filepath.string(), subimage
+					)
+				);
+			}
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 
 			return image<T>::read(
 				std::move(input_ptr),
+				subimage,
 				std::forward<PostProcess>(postprocess),
 				spec.channelnames,
 				compression_codec,
@@ -385,6 +417,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///						  std::out_of_range if one of the passed channels does not exist. It is perfectly valid
 		///						  to e.g. call this with {3, 1, 2} when the underlying channel structure may be 
 		///						  RGBA. Sorting these back into their underlying channel structure is done on read.
+		/// \param subimage The subimage to extract the channels from (default: 0). Only relevant for multi-part images.
 		/// \param compression_codec The compression codec to use (default: LZ4).
 		/// \param compression_level The compression level (default: 9).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
@@ -398,6 +431,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		static image read(
 			std::unique_ptr<OIIO::ImageInput> input_ptr,
 			std::vector<int> channelindices,
+			int subimage = 0,
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -406,6 +440,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
 			std::vector<std::string> channelnames{};
+
+			// Ensure we seek to the right subimage before retrieving the spec as it is subimage dependent.
+			auto res = input_ptr->seek_subimage(subimage, 0);
+			if (!res)
+			{
+				throw std::invalid_argument(
+					std::format(
+						"File does not have a subimage {}, cannot seek to it", subimage
+					)
+				);
+			}
 			const auto& spec = input_ptr->spec();
 
 			for (int i : channelindices)
@@ -416,6 +461,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return image<T>::read(
 				std::move(input_ptr),
 				std::move(channelnames),
+				subimage,
 				compression_codec,
 				compression_level,
 				block_size,
@@ -459,22 +505,25 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// 	throw std::runtime_error(std::format("file {} does not exist on disk", filepath.string()));
 		/// }
 		/// 
-		/// // Read an image file and apply a post-process which adds 1 to the pixel value for all RGB channels (0, 1, 2).
-		/// auto img = compressed::image::read<uint8_t>(
-		///		std::move(input_ptr), 
-		///		[](size_t channel_idx, std::span<T> chunk)
+		/// auto postprocess = [](size_t channel_idx, std::span<T> chunk)
 		///		{
 		///			if (channel_idx > 2)
 		///			{
 		///				return;
 		///			}
-		/// 
+		///		
 		///			std::for_each(std::execution::par_unseq, chunk.begin(), chunk.end(), [](T& value)
 		///			{
 		///				value += 1;
 		///			}
-		///		},
+		///		};
+		/// 
+		/// // Read an image file and apply a post-process which adds 1 to the pixel value for all RGB channels (0, 1, 2).
+		/// auto img = compressed::image::read<uint8_t>(
+		///		std::move(input_ptr), 
+		///		std::forward(postprocess),
 		///		{ 0, 1, 2, 3}, // only read the RGBA channels
+		///		0, // subimage
 		///		compressed::enums::codec::lz4, 
 		///		5
 		/// );
@@ -489,6 +538,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///						  std::out_of_range if one of the passed channels does not exist. It is perfectly valid
 		///						  to e.g. call this with {3, 1, 2} when the underlying channel structure may be 
 		///						  RGBA. Sorting these back into their underlying channel structure is done on read.
+		/// \param subimage The subimage to extract the channels from (default: 0). Only relevant for multi-part images.
 		/// \param compression_codec The compression codec to use (default: LZ4).
 		/// \param compression_level The compression level (default: 9).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
@@ -505,6 +555,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::unique_ptr<OIIO::ImageInput> input_ptr,
 			PostProcess&& postprocess,
 			std::vector<int> channelindices,
+			int subimage = 0,
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -513,6 +564,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
 			std::vector<std::string> channelnames{};
+
+			// Ensure we seek to the right subimage before retrieving the spec as it is subimage dependent.
+			auto res = input_ptr->seek_subimage(subimage, 0);
+			if (!res)
+			{
+				throw std::invalid_argument(
+					std::format(
+						"File does not have a subimage {}, cannot seek to it", subimage
+					)
+				);
+			}
 			const auto& spec = input_ptr->spec();
 
 			for (int i : channelindices)
@@ -523,6 +585,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return image<T>::read(
 				std::move(input_ptr),
 				std::forward<PostProcess>(postprocess),
+				subimage,
 				std::move(channelnames),
 				compression_codec,
 				compression_level,
@@ -567,6 +630,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///						std::out_of_range if one of the passed channels does not exist. It is perfectly valid
 		///						to e.g. call this with {"G", "R", "A"} when the underlying channel structure may be 
 		///						RGBA. Sorting these back into their underlying channel structure is done on read.
+		/// \param subimage The subimage to extract the channels from (default: 0). Only relevant for multi-part images.
 		/// \param compression_codec The compression codec to use (default: LZ4).
 		/// \param compression_level The compression level (default: 9).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
@@ -580,6 +644,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		static image read(
 			std::unique_ptr<OIIO::ImageInput> input_ptr,
 			std::vector<std::string> channelnames,
+			int subimage = 0,
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -591,6 +656,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				std::move(input_ptr),
 				std::move(channelnames),
 				std::nullopt,
+				subimage,
 				compression_codec,
 				compression_level,
 				block_size,
@@ -636,10 +702,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// 	throw std::runtime_error(std::format("file {} does not exist on disk", filepath.string()));
 		/// }
 		/// 
-		/// // Read an image file and apply a post-process which adds 1 to the pixel value for all RGB channels (0, 1, 2).
-		/// auto img = compressed::image::read<uint8_t>(
-		///		std::move(input_ptr), 
-		///		[](size_t channel_idx, std::span<T> chunk)
+		/// auto postprocess = [](size_t channel_idx, std::span<T> chunk)
 		///		{
 		///			if (channel_idx > 2)
 		///			{
@@ -650,8 +713,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///			{
 		///				value += 1;
 		///			}
-		///		},
+		///		};
+		/// 
+		/// // Read an image file and apply a post-process which adds 1 to the pixel value for all RGB channels (0, 1, 2).
+		/// auto img = compressed::image::read<uint8_t>(
+		///		std::move(input_ptr), 
+		///		std::forward(postprocess),
 		///		{ 0, 1, 2, 3}, // only read the RGBA channels
+		///		0, // subimage
 		///		compressed::enums::codec::lz4, 
 		///		5
 		/// );
@@ -666,6 +735,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///						std::out_of_range if one of the passed channels does not exist. It is perfectly valid
 		///						to e.g. call this with {"G", "R", "A"} when the underlying channel structure may be 
 		///						RGBA. Sorting these back into their underlying channel structure is done on read.
+		/// \param subimage The subimage to extract the channels from (default: 0). Only relevant for multi-part images.
 		/// \param compression_codec The compression codec to use (default: LZ4).
 		/// \param compression_level The compression level (default: 9).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
@@ -682,6 +752,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::unique_ptr<OIIO::ImageInput> input_ptr,
 			PostProcess&& postprocess,
 			std::vector<std::string> channelnames,
+			int subimage = 0,
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -693,6 +764,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				std::move(input_ptr),
 				std::move(channelnames),
 				std::forward<PostProcess>(postprocess),
+				subimage,
 				compression_codec,
 				compression_level,
 				block_size,
@@ -1201,6 +1273,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::unique_ptr<OIIO::ImageInput> input_ptr,
 			std::vector<std::string> channelnames,
 			PostProcess&& postprocess,
+			int subimage,
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -1211,6 +1284,16 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			assert(chunk_size % sizeof(T) == 0);
 			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
 
+			// Seek to the right subimage before getting the spec.
+			auto res = input_ptr->seek_subimage(subimage, 0);
+			if (!res)
+			{
+				throw std::invalid_argument(
+					std::format(
+						"File does not have a subimage {}, cannot seek to it", subimage
+					)
+				);
+			}
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 
 			// Align the chunk size to the scanlines and tiles (if applicable), this makes our life considerably 
@@ -1315,6 +1398,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					{
 						image<T>::read_contiguous_channels_impl<true>(
 							input_ptr,
+							subimage,
 							chbegin,
 							chend,
 							interleaved_fitted,
@@ -1330,6 +1414,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					{
 						image<T>::read_contiguous_channels_impl<false>(
 							input_ptr,
+							subimage,
 							chbegin,
 							chend,
 							interleaved_fitted,
@@ -1348,6 +1433,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					{
 						image<T>::read_contiguous_channels_impl<true>(
 							input_ptr,
+							subimage,
 							chbegin,
 							chend,
 							interleaved_fitted,
@@ -1363,6 +1449,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					{
 						image<T>::read_contiguous_channels_impl<false>(
 							input_ptr,
+							subimage,
 							chbegin,
 							chend,
 							interleaved_fitted,
@@ -1431,6 +1518,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			requires std::invocable<std::remove_reference_t<PostProcess>, size_t, std::span<T>> || std::is_same_v<std::remove_cvref_t<PostProcess>, std::nullopt_t>
 		static void read_contiguous_channels_impl(
 			std::unique_ptr<OIIO::ImageInput>& input_ptr,
+			int subimage,
 			int chbegin,
 			int chend,
 			std::span<T> interleaved_buffer,
@@ -1444,6 +1532,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			_COMPRESSED_PROFILE_FUNCTION();
 			const int nchannels = chend - chbegin;
+			assert(input_ptr->current_subimage() == subimage);
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 			const auto typedesc = enums::get_type_desc<T>();
 
@@ -1524,7 +1613,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				if constexpr (read_tiles)
 				{
 					input_ptr->read_tiles(
-						0, // subimage
+						subimage,
 						0, // miplevel
 						0, // xbegin
 						spec.width, // xend
@@ -1541,7 +1630,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				else
 				{
 					input_ptr->read_scanlines(
-						0, // subimage
+						subimage,
 						0, // miplevel
 						y, // ybegin
 						y + scanlines_to_read, // yend

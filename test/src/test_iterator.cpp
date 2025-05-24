@@ -51,6 +51,7 @@ TEST_CASE("Iterator: comparison")
 	auto path = std::filesystem::current_path() / "images" / name;
 	auto image = compressed::image<uint8_t>::read(
 		path,
+		0,
 		compressed::enums::codec::lz4,
 		9,
 		4096, 
@@ -68,6 +69,7 @@ TEST_CASE("Iterator: comparison")
 	// Different image, iterator should not match
 	auto image_2 = compressed::image<uint8_t>::read(
 		path,
+		0, 
 		compressed::enums::codec::lz4,
 		9,
 		4096,
