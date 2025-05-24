@@ -47,7 +47,11 @@ namespace test_util
 		}
 
 		auto typedesc = compressed::enums::get_type_desc<T>();
-		input_ptr->read_image(subimage, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
+		auto ok = input_ptr->read_image(subimage, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
+		if (!ok)
+		{
+			throw std::runtime_error(std::format("Image {} failed to read because: {}", filepath.string(), input_ptr->geterror()));
+		}
 		compressed::image_algo::deinterleave(std::span<const T>(pixels), channels);
 		return channels;
 	}

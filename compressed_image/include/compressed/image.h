@@ -1601,21 +1601,25 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			// Iterate all scanlines and read as many scanlines as possible in one go, compressing them on the fly 
-			// into all of the super-chunks. 
-			int y = 0;
-			while (y < spec.height)
+			// into all of the super-chunks. This works for data windows as well where the y and x may not start at zero
+			int y = spec.y;
+			while (y < (spec.height + spec.y))
 			{
 				_COMPRESSED_PROFILE_SCOPE("Read Scanlines/Tiles and compress");
-				int scanlines_to_read = static_cast<int>(std::min<size_t>(scanlines_per_chunk, static_cast<size_t>(spec.height - y)));
+				int scanlines_to_read = static_cast<int>(std::min<size_t>(
+					scanlines_per_chunk, static_cast<size_t>(spec.height + spec.y - y)
+				));
 
+
+				bool read_successful = false;
 				// Since the passed `scanlines_per_chunk` is already appropriately aligned to either tiles or scanlines,
 				// we can safely call either `read_tiles` or `read_scanlines` here making sure we are correctly aligned
 				if constexpr (read_tiles)
 				{
-					input_ptr->read_tiles(
+					read_successful = input_ptr->read_tiles(
 						subimage,
 						0, // miplevel
-						0, // xbegin
+						spec.x, // xbegin
 						spec.width, // xend
 						y, // ybegin
 						y + scanlines_to_read, // yend
@@ -1629,7 +1633,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				}
 				else
 				{
-					input_ptr->read_scanlines(
+					read_successful = input_ptr->read_scanlines(
 						subimage,
 						0, // miplevel
 						y, // ybegin
@@ -1639,6 +1643,16 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 						chend,
 						typedesc,
 						static_cast<void*>(interleaved_buffer.data())
+					);
+				}
+
+				if (!read_successful)
+				{
+					throw std::runtime_error(
+						std::format(
+							"OIIO read failure when reading scanlines {}-{} for channels {}-{}: '{}'",
+							y, y + scanlines_to_read, chbegin, chend, input_ptr->geterror()
+						)
 					);
 				}
 
