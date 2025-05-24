@@ -26,12 +26,17 @@ namespace test_util
 	/// \return A vector of vectors, where each inner vector represents a deinterleaved channel.
 	/// \throws std::runtime_error if the image fails to open or read.
 	template <typename T>
-	std::vector<std::vector<T>> read_oiio(std::filesystem::path filepath)
+	std::vector<std::vector<T>> read_oiio(std::filesystem::path filepath, int subimage = 0)
 	{
 		auto input_ptr = OIIO::ImageInput::open(filepath.string());
 		if (!input_ptr)
 		{
 			throw std::runtime_error(std::format("Failed to open image {}", filepath.string()));
+		}
+		auto res = input_ptr->seek_subimage(subimage, 0);
+		if (!res)
+		{
+			throw std::runtime_error(std::format("Image {} does not contain subimage {}", filepath.string(), subimage));
 		}
 		const OIIO::ImageSpec& spec = input_ptr->spec();
 		std::vector<T> pixels(static_cast<size_t>(spec.width) * spec.height * spec.nchannels);
@@ -42,7 +47,7 @@ namespace test_util
 		}
 
 		auto typedesc = compressed::enums::get_type_desc<T>();
-		input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
+		input_ptr->read_image(subimage, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
 		compressed::image_algo::deinterleave(std::span<const T>(pixels), channels);
 		return channels;
 	}

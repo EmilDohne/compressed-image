@@ -38,6 +38,52 @@ TEST_CASE("Read compressed file smaller than one chunk")
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed tiled file and extract channels")
+{
+	std::string name = "tiled_cryptomatte.exr";
+	auto path = std::filesystem::current_path() / "images" / name;
+
+	auto image = compressed::image<uint8_t>::read(
+		path,
+		0,
+		compressed::enums::codec::lz4,
+		9,
+		compressed::s_default_blocksize,
+		compressed::s_default_chunksize * 2
+	);
+	auto image_data = image.get_decompressed();
+	auto image_ref = test_util::read_oiio<uint8_t>(path);
+
+	test_util::compare_images(image_data, image_ref, name);
+}
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Read compressed multipart file and extract channels")
+{
+	std::string name = "multipart.0001.exr";
+	auto path = std::filesystem::current_path() / "images" / name;
+
+	for (int subimage = 0; subimage < 10; ++subimage)
+	{
+		auto image = compressed::image<uint8_t>::read(
+			path,
+			subimage,
+			compressed::enums::codec::lz4,
+			9,
+			compressed::s_default_blocksize,
+			compressed::s_default_chunksize * 2
+		);
+		auto image_data = image.get_decompressed();
+		auto image_ref = test_util::read_oiio<uint8_t>(path, subimage);
+
+		test_util::compare_images(image_data, image_ref, name);
+	}
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Read compressed file and extract channels")
 {
 	std::string name = "uv_grid_2048x2048.jpg";
