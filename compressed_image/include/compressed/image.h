@@ -1213,15 +1213,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			const OIIO::ImageSpec& spec = input_ptr->spec();
 
-			// Reject tiled files
-			if (spec.tile_width != 0)
+			// Align the chunk size to the scanlines and tiles (if applicable), this makes our life considerably 
+			// easier and allows us to not deal with partial scanlines.
+			size_t chunk_size_aligned = 0;
+			if (spec.tile_height != 0)
 			{
-				throw std::runtime_error("Opening tiled image files is currently unsupported.");
+				chunk_size_aligned = util::align_chunk_to_tile_bytes<T>(spec.width, spec.tile_height, chunk_size);
 			}
-
-			// Align the chunk size to the scanlines, this makes our life considerably easier and allows
-			// us to not deal with partial scanlines.
-			const size_t chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(spec.width, chunk_size);
+			else
+			{
+				chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(spec.width, chunk_size);
+			}
 
 			// Get a std::vector containing a begin-end pair for all contiguous channels in our channelnames.
 			// So if we pass 'R', 'B' and 'A' in a rgba image we would get the following
@@ -1309,33 +1311,69 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				// Read the contiguous channel sequence into the contexts and schunks.
 				if constexpr (std::invocable<std::remove_reference_t<PostProcess>, size_t, std::span<T>>)
 				{
-					image<T>::read_contiguous_channels_impl(
-						input_ptr,
-						chbegin,
-						chend,
-						interleaved_fitted,
-						deinterleaved_fitted,
-						scanlines_per_chunk,
-						contexts,
-						schunks,
-						chunk_buffer,
-						std::forward<PostProcess>(postprocess)
-					);
+					if (spec.tile_height != 0)
+					{
+						image<T>::read_contiguous_channels_impl<true>(
+							input_ptr,
+							chbegin,
+							chend,
+							interleaved_fitted,
+							deinterleaved_fitted,
+							scanlines_per_chunk,
+							contexts,
+							schunks,
+							chunk_buffer,
+							std::forward<PostProcess>(postprocess)
+						);
+					}
+					else
+					{
+						image<T>::read_contiguous_channels_impl<false>(
+							input_ptr,
+							chbegin,
+							chend,
+							interleaved_fitted,
+							deinterleaved_fitted,
+							scanlines_per_chunk,
+							contexts,
+							schunks,
+							chunk_buffer,
+							std::forward<PostProcess>(postprocess)
+						);
+					}
 				}
 				else
 				{
-					image<T>::read_contiguous_channels_impl(
-						input_ptr,
-						chbegin,
-						chend,
-						interleaved_fitted,
-						deinterleaved_fitted,
-						scanlines_per_chunk,
-						contexts,
-						schunks,
-						chunk_buffer,
-						std::nullopt
-					);
+					if (spec.tile_height != 0)
+					{
+						image<T>::read_contiguous_channels_impl<true>(
+							input_ptr,
+							chbegin,
+							chend,
+							interleaved_fitted,
+							deinterleaved_fitted,
+							scanlines_per_chunk,
+							contexts,
+							schunks,
+							chunk_buffer,
+							std::nullopt
+						);
+					}
+					else
+					{
+						image<T>::read_contiguous_channels_impl<false>(
+							input_ptr,
+							chbegin,
+							chend,
+							interleaved_fitted,
+							deinterleaved_fitted,
+							scanlines_per_chunk,
+							contexts,
+							schunks,
+							chunk_buffer,
+							std::nullopt
+						);
+					}
 				}
 
 
@@ -1389,7 +1427,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param chunk_buffer A scratch buffer for compression (from which we copy).
 		/// 
 		/// \throws std::invalid_argument if any of the above conditions is not met.
-		template <typename PostProcess = std::nullopt_t>
+		template <bool read_tiles, typename PostProcess = std::nullopt_t>
 			requires std::invocable<std::remove_reference_t<PostProcess>, size_t, std::span<T>> || std::is_same_v<std::remove_cvref_t<PostProcess>, std::nullopt_t>
 		static void read_contiguous_channels_impl(
 			std::unique_ptr<OIIO::ImageInput>& input_ptr,
@@ -1478,19 +1516,42 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			int y = 0;
 			while (y < spec.height)
 			{
-				_COMPRESSED_PROFILE_SCOPE("Read Scanlines and compress");
+				_COMPRESSED_PROFILE_SCOPE("Read Scanlines/Tiles and compress");
 				int scanlines_to_read = static_cast<int>(std::min<size_t>(scanlines_per_chunk, static_cast<size_t>(spec.height - y)));
-				input_ptr->read_scanlines(
-					0, // subimage
-					0, // miplevel
-					y, // ybegin
-					y + scanlines_to_read, // yend
-					0, // z
-					chbegin,
-					chend,
-					typedesc,
-					static_cast<void*>(interleaved_buffer.data())
-				);
+
+				// Since the passed `scanlines_per_chunk` is already appropriately aligned to either tiles or scanlines,
+				// we can safely call either `read_tiles` or `read_scanlines` here making sure we are correctly aligned
+				if constexpr (read_tiles)
+				{
+					input_ptr->read_tiles(
+						0, // subimage
+						0, // miplevel
+						0, // xbegin
+						spec.width, // xend
+						y, // ybegin
+						y + scanlines_to_read, // yend
+						0, // zbegin	
+						1, // zend
+						chbegin,
+						chend,
+						typedesc,
+						static_cast<void*>(interleaved_buffer.data())
+					);
+				}
+				else
+				{
+					input_ptr->read_scanlines(
+						0, // subimage
+						0, // miplevel
+						y, // ybegin
+						y + scanlines_to_read, // yend
+						0, // z
+						chbegin,
+						chend,
+						typedesc,
+						static_cast<void*>(interleaved_buffer.data())
+					);
+				}
 
 				// Deinterleave the buffers, in some cases we may be deinterleaving empty space here but that 
 				// is ok as we refit the buffers. Since in most cases the size will only be off by at most one

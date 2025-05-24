@@ -130,6 +130,46 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return num_scanlines * width;
 		}
 
+		/// Align the given chunk size to be a multiple of `width` and `tile_height`. This simplifies
+		/// a lot of the calculations around chunk size so should be used instead of always
+		/// aligning to the chunk size.
+		/// 
+		/// \tparam T the type representing the image data
+		/// \param chunk_size the size of a single chunk (in bytes)
+		/// \param width the width of a single scanline (in elements)
+		template <typename T>
+		size_t align_chunk_to_tile_elems(size_t width, size_t tile_height, size_t chunk_size)
+		{
+			size_t scanline_size = sizeof(T) * width;
+			if (scanline_size > chunk_size) 
+			{
+				throw std::runtime_error(
+					std::format(
+					"Scanline size ({:L}) exceeds chunk size ({:L}).", 
+						scanline_size, chunk_size
+					)
+				);
+			}
+
+			// Calculate the number of full scanlines that fit in the chunk
+			size_t num_scanlines = chunk_size / scanline_size;
+
+			// Align down to nearest multiple of tile_height
+			size_t aligned_scanlines = (num_scanlines / tile_height) * tile_height;
+
+			if (aligned_scanlines == 0) 
+			{
+				throw std::runtime_error(
+					std::format(
+					"Chunk size ({:L}) is too small to fit even one tile ({} scanlines, {} bytes per scanline).",
+					chunk_size, tile_height, scanline_size
+					)
+				);
+			}
+
+			return aligned_scanlines * width;
+		}
+
 		/// Align the given chunk size to be a multiple of `width`. This simplifies
 		/// a lot of the calculations around chunk size so should be used instead of always
 		/// aligning to the chunk size.
@@ -141,6 +181,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		size_t align_chunk_to_scanlines_bytes(size_t width, size_t chunk_size)
 		{
 			return align_chunk_to_scanlines_elems<T>(width, chunk_size) * sizeof(T);
+		}
+
+		/// Align the given chunk size to be a multiple of `width`. This simplifies
+		/// a lot of the calculations around chunk size so should be used instead of always
+		/// aligning to the chunk size.
+		/// 
+		/// \tparam T the type representing the image data
+		/// \param chunk_size the size of a single chunk (in bytes)
+		/// \param width the width of a single scanline (in bytes)
+		template <typename T>
+		size_t align_chunk_to_tile_bytes(size_t width, size_t tile_height, size_t chunk_size)
+		{
+			return align_chunk_to_tile_elems<T>(width, tile_height, chunk_size) * sizeof(T);
 		}
 
 		/// Checks if the given `sz` is aligned to a multiple of the scanline size.
