@@ -461,6 +461,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 		/// \brief Retrieve the chunk size (in bytes) of the channel
 		/// 
+		/// This will be all of the chunk sizes except for the last chunk. The last chunk may be smaller so to accurately
+		/// capture it you should use the override with a size_t
+		/// 
 		/// \return The chunk size (in bytes).
 		size_t chunk_size() const noexcept
 		{
@@ -470,6 +473,21 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					return schunk.chunk_bytes();
 				}, *m_Schunk);
 		}
+
+		/// \brief Retrieve the chunk size (in bytes) of the channel at the given chunk index.
+		/// 
+		/// \return The chunk size (in bytes) at index `chunk_index`.
+		/// 
+		/// \throws std::out_of_range if the chunk index is invalid
+		size_t chunk_size(size_t chunk_index) const
+		{
+			assert(m_Schunk != nullptr);
+			return std::visit([&](auto& schunk)
+				{
+					return schunk.chunk_bytes(chunk_index);
+				}, *m_Schunk);
+		}
+
 
 		/// Retrieves and decompresses a chunk of data into the provided buffer.
 		///
