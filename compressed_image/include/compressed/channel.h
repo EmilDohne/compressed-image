@@ -46,6 +46,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	template <typename T>
 	struct channel : public std::ranges::view_interface<channel<T>>
 	{
+		using value_type = T;
 		using iterator = channel_iterator<T>;
 		using const_iterator = channel_iterator<const T>;
 
