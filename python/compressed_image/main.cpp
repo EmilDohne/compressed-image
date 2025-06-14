@@ -6,7 +6,7 @@
 
 
 
-PYBIND11_MODULE(compressed_image, m) 
+PYBIND11_MODULE(compressed, m) 
 {
-	bind_codec_enum(m);
+	compressed_py::bind_codec_enum(m);
 }

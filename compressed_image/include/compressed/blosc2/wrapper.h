@@ -317,7 +317,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
 			}
-			nthreads = std::min(nthreads, static_cast<size_t>(1));
+			nthreads = std::max(nthreads, static_cast<size_t>(1));
 
 			assert(std::numeric_limits<int32_t>::max() > block_size);
 
@@ -342,7 +342,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				throw std::out_of_range(std::format("Number of threads may not exceed {}, got {:L}", std::numeric_limits<int16_t>::max(), nthreads));
 			}
-			nthreads = std::min(nthreads, static_cast<size_t>(1));
+			nthreads = std::max(nthreads, static_cast<size_t>(1));
 
 			assert(std::numeric_limits<int32_t>::max() > block_size);
 

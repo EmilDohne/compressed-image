@@ -890,7 +890,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t num_chunks = 0;
 			for (const auto& channel : m_Channels)
 			{
-				compressed_size += channel.compressed_size();
+				compressed_size += channel.compressed_bytes();
 				uncompressed_size += channel.uncompressed_size();
 				num_chunks += channel.num_chunks();
 			}
@@ -1384,7 +1384,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				{
 					schunks.push_back(blosc2::schunk<T>(block_size, chunk_size_aligned));
 					contexts.push_back(blosc2::create_compression_context<T>(
-						std::thread::hardware_concurrency(),
+						std::thread::hardware_concurrency() / 2,
 						compression_codec,
 						comp_level_adjusted,
 						block_size
