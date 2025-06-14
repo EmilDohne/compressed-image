@@ -171,4 +171,4 @@ namespace compressed_py
             )doc");
     }
 
-}
+} // compressed_py
