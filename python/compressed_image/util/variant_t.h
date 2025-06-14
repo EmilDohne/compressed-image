@@ -1,9 +1,15 @@
 #pragma once
 
-#include <pybind11/numpy.h>
 #include <format>
 #include <stdexcept>
+#include <concepts>
+#include <variant>
 
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/stl.h>
+
+namespace py = pybind11;
 
 namespace compressed_py
 {
@@ -75,13 +81,13 @@ namespace compressed_py
 	// variants for our type-erased(ish) classes we expose on the python side.
 	template <template<typename> class Class>
 	using variant_t = std::variant<
-		std::shared_ptr<Class<float>>		// python equivalent: np.float32
-		std::shared_ptr<Class<double>>		// python equivalent: np.float64
-		std::shared_ptr<Class<uint8_t>>		// python equivalent: np.uint8
-		std::shared_ptr<Class<int8_t>>		// python equivalent: np.int8
-		std::shared_ptr<Class<uint16_t>>	// python equivalent: np.uint16
-		std::shared_ptr<Class<int16_t>>		// python equivalent: np.int16
-		std::shared_ptr<Class<uint32_t>>	// python equivalent: np.uint32
+		std::shared_ptr<Class<float>>,		// python equivalent: np.float32
+		std::shared_ptr<Class<double>>,		// python equivalent: np.float64
+		std::shared_ptr<Class<uint8_t>>,	// python equivalent: np.uint8
+		std::shared_ptr<Class<int8_t>>,		// python equivalent: np.int8
+		std::shared_ptr<Class<uint16_t>>,	// python equivalent: np.uint16
+		std::shared_ptr<Class<int16_t>>,	// python equivalent: np.int16
+		std::shared_ptr<Class<uint32_t>>,	// python equivalent: np.uint32
 		std::shared_ptr<Class<int32_t>>		// python equivalent: np.int32
 	>;
 

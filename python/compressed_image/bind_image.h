@@ -3,17 +3,22 @@
 #include "wrappers/dynamic_channel.h"
 #include "wrappers/dynamic_image.h"
 
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/stl.h>
+
+namespace py = pybind11;
+
 namespace compressed_py
 {
 
 	void bind_compressed_image(py::module_& m)
     {
+
         py::class_<compressed_py::dynamic_image, std::shared_ptr<compressed_py::dynamic_image>>(m, "Image", R"doc(
             A dynamically-typed compressed image composed of multiple channels, supporting
-            Pythonic interaction with numpy arrays and efficient memory/storage via lazy compression.
+            interaction with numpy arrays and efficient memory/storage via lazy compression.
 
-            This is the image equivalent of `compressed.Channel`, supporting reading, writing, 
-            statistics, metadata, and channel-level access.
         )doc")
             .def(py::init<
                     std::vector<py::array>,
@@ -44,7 +49,6 @@ namespace compressed_py
                 :param block_size: Block size.
                 :param chunk_size: Chunk size.
             )doc")
-
             .def_static("read",
                 py::overload_cast<
                     std::filesystem::path,

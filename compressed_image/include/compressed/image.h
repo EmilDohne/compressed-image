@@ -927,7 +927,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t total_compressed = 1;
 			for (const auto& channel : m_Channels)
 			{
-				total_compressed += channel.compressed_size();
+				total_compressed += channel.compressed_bytes();
 				total_uncompressed += channel.uncompressed_size();
 			}
 			return static_cast<double>(total_uncompressed) / total_compressed;

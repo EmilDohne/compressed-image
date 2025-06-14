@@ -8,5 +8,7 @@
 
 PYBIND11_MODULE(compressed, m) 
 {
-	compressed_py::bind_codec_enum(m);
+	compressed_py::bind_enums(m);
+	compressed_py::bind_compressed_channel(m);
+	compressed_py::bind_compressed_image(m);
 }

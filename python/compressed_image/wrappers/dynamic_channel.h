@@ -1,5 +1,8 @@
 #pragma once
 
+#include <vector>
+#include <variant>
+
 #include "../util/variant_t.h"
 #include "compressed/channel.h"
 
@@ -7,6 +10,8 @@
 #include <pybind11/numpy.h>
 
 #include <py_img_util/image.h>
+
+namespace py = pybind11;
 
 namespace compressed_py
 {
@@ -16,6 +21,34 @@ namespace compressed_py
 	struct dynamic_channel : public base_variant_class<compressed::channel>
 	{
 		using base_variant_class::base_variant_class; // inherit constructors
+
+		dynamic_channel(
+			py::array data,
+			size_t width,
+			size_t height,
+			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
+			uint8_t compression_level = 9,
+			size_t block_size = compressed::s_default_blocksize,
+			size_t chunk_size = compressed::s_default_chunksize
+		)
+		{
+			dispatch_by_dtype(dtype, [&](auto tag)
+				{
+					using T = decltype(tag);
+					static_assert(np_bitdepth<T>, "Unsupported type passed to full");
+
+					auto channel = std::make_shared<compressed::image<T>>(
+						py_img_util::from_py_array(py_img_util::tag::view{}, data, width, height),
+						width,
+						height,
+						compression_codec,
+						compression_level,
+						block_size,
+						chunk_size
+					);
+					base_variant_class::m_ClassVariant = channel;
+				});
+		}
 
 		static std::shared_ptr<dynamic_channel> full(
 			py::dtype dtype,
@@ -53,7 +86,7 @@ namespace compressed_py
 				});
 		}
 
-		static std::shared_ptr<dynamic_channel> full_like(const dynamic_channel& other, std::variant<double, int> fill_value, )
+		static std::shared_ptr<dynamic_channel> full_like(const dynamic_channel& other, std::variant<double, int> fill_value)
 		{
 			return std::visit([&](auto&& ch_ptr)
 				{
@@ -156,7 +189,7 @@ namespace compressed_py
 		{
 			return std::visit([](auto&& ch_ptr)
 				{
-					return ch->block_size();
+					return ch_ptr->block_size();
 				}, base_variant_class::m_ClassVariant
 			);
 		}
@@ -175,7 +208,7 @@ namespace compressed_py
 		/// \param chunk_index Index of the chunk to query.
 		size_t chunk_size(size_t chunk_index) const
 		{
-			return std::visit([chunk_index](auto&& ch_ptr)
+			return std::visit([&](auto&& ch_ptr)
 				{
 					return ch_ptr->chunk_size(chunk_index);
 				}, base_variant_class::m_ClassVariant
@@ -186,7 +219,7 @@ namespace compressed_py
 		/// \param chunk_idx Index of the chunk to retrieve.
 		py::array get_chunk(size_t chunk_idx) const
 		{
-			return std::visit([](auto&& ch_ptr) -> py::array
+			return std::visit([&](auto&& ch_ptr) -> py::array
 				{
 					using T = typename std::decay_t<decltype(*ch_ptr)>::value_type;
 					std::vector<T> buffer(this->chunk_size(chunk_idx));
@@ -194,7 +227,7 @@ namespace compressed_py
 
 					// Use the size, ptr overload of array_t. Since array_t is an extension of py::array we can
 					// implicitly cast back down.
-					return py::array_t<T>(static_cast<py::ssize_t>(vec.size()), vec.data());
+					return py::array_t<T>(static_cast<py::ssize_t>(buffer.size()), buffer.data());
 				}, base_variant_class::m_ClassVariant);
 		}
 
@@ -219,7 +252,7 @@ namespace compressed_py
 					std::span<const T> buffer(static_cast<const T*>(info.ptr), info.size);
 
 					ch_ptr->set_chunk(buffer, chunk_idx);
-				}, m_ClassVariant);
+				}, base_variant_class::m_ClassVariant);
 		}
 
 		py::array get_decompressed() const
@@ -227,10 +260,10 @@ namespace compressed_py
 			return std::visit([](auto&& ch_ptr) -> py::array
 				{
 					using T = typename std::decay_t<decltype(*ch_ptr)>::value_type;
-					auto decompressed = ch_ptr->get_decompressed(chunk_idx);
+					auto decompressed = ch_ptr->get_decompressed();
 
 					// This will handle converting it into a 2d numpy array.
-					return py_image_util::to_py_array(std::move(decompressed), ch_ptr->width(), ch_ptr->height());
+					return py_img_util::to_py_array(std::move(decompressed), ch_ptr->width(), ch_ptr->height());
 				}, base_variant_class::m_ClassVariant);
 		}
 

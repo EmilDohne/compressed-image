@@ -34,6 +34,32 @@ namespace compressed_py
         operations.
 
         )doc")
+            .def(py::init<py::array,
+                size_t,
+                size_t,
+                compressed::enums::codec,
+                uint8_t,
+                size_t,
+                size_t>(),
+                py::arg("data"),
+                py::arg("width"),
+                py::arg("height"),
+                py::arg("compression_codec") = compressed::enums::codec::lz4,
+                py::arg("compression_level") = 9,
+                py::arg("block_size") = compressed::s_default_blocksize,
+                py::arg("chunk_size") = compressed::s_default_chunksize,
+                R"doc(
+            Create a Channel from a NumPy array.
+
+            Parameters:
+                data (np.ndarray): The input NumPy array.
+                width (int): Width of the channel.
+                height (int): Height of the channel.
+                compression_codec (Codec): Compression codec to use (default: lz4).
+                compression_level (int): Compression level (default: 9).
+                block_size (int): Block size for compression (default: 8192).
+                chunk_size (int): Chunk size for compression (default: 65536).
+            )doc")
             .def_static("full", &compressed_py::dynamic_channel::full,
                 py::arg("dtype"), 
                 py::arg("fill_value"),
