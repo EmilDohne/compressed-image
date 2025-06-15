@@ -11,7 +11,7 @@
 #include <filesystem>
 
 #include <blosc2.h>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #ifdef COMPRESSED_IMAGE_OIIO_AVAILABLE
 #include <OpenImageIO/imageio.h>
@@ -56,6 +56,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	template <typename T>
 	struct image : public std::ranges::view_interface<image<T>>
 	{
+		using value_type = T;
 
 		image() = default;
 		image(image&&) = default;
@@ -64,6 +65,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		image& operator=(const image&) = delete;
 		~image() = default;
 
+
 		/// Constructs an image object with the specified channels, dimensions, and optional compression parameters.
 		/// 
 		/// This constructor creates an image from a given set of channels. The channel names can optionally be specified. 
@@ -71,7 +73,110 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// 
 		/// Example:
 		/// \code{.cpp}
-		/// std::vector<std::vector<const uint8_t>> channels = ...;
+		/// std::vector<std::span<const uint8_t>> channels = ...;
+		/// compressed::image<uint8_t> my_image(channels, 1920, 1080, {"r", "g", "b"}, codec::lz4, 5);
+		/// \endcode
+		/// 
+		/// \param channels A vector of spans containing the image channels (each channel is a 2D array of pixel data).
+		///					on construction these will be compressed thus the data can be safely freed after this function.
+		/// \param width The width of the image in pixels.
+		/// \param height The height of the image in pixels.
+		/// \param channel_names (Optional) A list of channel names, must match the number of channels provided. 
+		///					     If omitted or incorrect, channel names are ignored.
+		/// \param compression_codec (Optional) The codec used for compression, default is `codec::lz4`.
+		/// \param compression_level (Optional) The compression level, default is `9`.
+		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
+		///					  comfortably fit into the L1 cache of most modern CPUs. If you know your cpu can handle 
+		///					  larger blocks feel free to up this number.
+		/// \param chunk_size The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. 
+		///					  This should be tweaked to be no larger than the size of the usual images you are expecting  
+		///					  to compress for optimal performance but this could be upped which might give better compression
+		///					  ratios. Must be a multiple of sizeof(T).
+		/// \throws std::runtime_error if a channel fails to be inserted.
+		image(
+			std::vector<std::span<const T>> channels,
+			size_t width,
+			size_t height,
+			std::vector<std::string> channel_names = {},
+			enums::codec compression_codec = enums::codec::lz4,
+			size_t compression_level = 9,
+			size_t block_size = s_default_blocksize,
+			size_t chunk_size = s_default_chunksize
+		)
+		{
+			_COMPRESSED_PROFILE_FUNCTION();
+			m_Width = width;
+			m_Height = height;
+			m_ChannelNames = channel_names;
+			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
+
+			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
+			assert(chunk_size < std::numeric_limits<int32_t>::max());
+			assert(block_size < chunk_size);
+			if (channel_names.size() != channels.size() && channel_names.size() != 0)
+			{
+				std::cout << std::format(
+					"Invalid channelnames passed to image constructor, required them to match the number of" \
+					" channels in the channels parameter.Expected {} items but instead got {} names. Ignoring channel names",
+					channels.size(), channel_names.size()) << std::endl;
+
+				m_ChannelNames = {};
+			}
+
+			// Iterate all channels and start creating channels for it.
+			size_t channel_idx = 0;
+			for (const auto& _channel : channels)
+			{
+				try
+				{
+					// Generate the channel and append it.
+					m_Channels.push_back(compressed::channel<T>(
+						_channel,
+						width,
+						height,
+						compression_codec,
+						comp_level_adjusted,
+						block_size,
+						chunk_size
+					));
+				}
+				catch (const std::exception& e)
+				{
+					if (m_ChannelNames.size() > 0)
+					{
+						throw std::runtime_error(
+							std::format(
+								"Failed to insert channel '{}' at position {}. Full error: \n{}",
+								m_ChannelNames[channel_idx],
+								channel_idx,
+								e.what()
+							)
+						);
+					}
+					else
+					{
+						throw std::runtime_error(
+							std::format(
+								"Failed to insert channel at position {}. Full error: \n{}",
+								channel_idx,
+								e.what()
+							)
+						);
+					}
+				}
+				++channel_idx;
+			}
+		}
+
+
+		/// Constructs an image object with the specified channels, dimensions, and optional compression parameters.
+		/// 
+		/// This constructor creates an image from a given set of channels. The channel names can optionally be specified. 
+		/// The image is then compressed using the provided codec and compression level.
+		/// 
+		/// Example:
+		/// \code{.cpp}
+		/// std::vector<std::vector<uint8_t>> channels = ...;
 		/// compressed::image<uint8_t> my_image(channels, 1920, 1080, {"r", "g", "b"}, codec::lz4, 5);
 		/// \endcode
 		/// 
@@ -845,7 +950,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t height,
 			std::optional<std::string> name = std::nullopt,
 			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 5
+			uint8_t compression_level = 5
 		)
 		{
 			m_Channels.push_back(compressed::channel(

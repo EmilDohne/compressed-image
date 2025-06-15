@@ -9,7 +9,7 @@
 #include <execution>
 
 #include "blosc2.h"
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include "macros.h"
 #include "enums.h"
@@ -380,7 +380,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// Retrieve the compression level used.
 		///
 		/// \return The compression level (typically from 1-9).
-		size_t compression_level() const noexcept
+		uint8_t compression_level() const noexcept
 		{
 			return m_CompressionLevel;
 		}

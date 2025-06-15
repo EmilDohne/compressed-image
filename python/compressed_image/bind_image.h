@@ -21,6 +21,7 @@ namespace compressed_py
 
         )doc")
             .def(py::init<
+                    py::dtype,
                     std::vector<py::array>,
                     size_t,
                     size_t,
@@ -29,6 +30,7 @@ namespace compressed_py
                     size_t,
                     size_t,
                     size_t>(),
+                py::arg("dtype"),
                 py::arg("channels"),
                 py::arg("width"),
                 py::arg("height"),
@@ -51,13 +53,16 @@ namespace compressed_py
             )doc")
             .def_static("read",
                 py::overload_cast<
+                    py::dtype,
                     std::filesystem::path,
                     int,
                     compressed::enums::codec,
                     size_t,
                     size_t,
                     size_t>(&compressed_py::dynamic_image::read),
-                py::arg("filepath"), py::arg("subimage"),
+                py::arg("dtype"),
+                py::arg("filepath"), 
+                py::arg("subimage"),
                 py::arg("compression_codec") = compressed::enums::codec::lz4,
                 py::arg("compression_level") = 9,
                 py::arg("block_size") = compressed::s_default_blocksize,
@@ -68,6 +73,7 @@ namespace compressed_py
 
             .def_static("read",
                 py::overload_cast<
+                    py::dtype,
                     std::filesystem::path,
                     int,
                     std::vector<int>,
@@ -75,7 +81,10 @@ namespace compressed_py
                     size_t,
                     size_t,
                     size_t>(&compressed_py::dynamic_image::read),
-                py::arg("filepath"), py::arg("subimage"), py::arg("channel_indices"),
+                py::arg("dtype"),
+                py::arg("filepath"), 
+                py::arg("subimage"), 
+                py::arg("channel_indices"),
                 py::arg("compression_codec") = compressed::enums::codec::lz4,
                 py::arg("compression_level") = 9,
                 py::arg("block_size") = compressed::s_default_blocksize,
@@ -86,6 +95,7 @@ namespace compressed_py
 
             .def_static("read",
                 py::overload_cast<
+                    py::dtype,
                     std::filesystem::path,
                     int,
                     std::vector<std::string>,
@@ -93,7 +103,10 @@ namespace compressed_py
                     size_t,
                     size_t,
                     size_t>(&compressed_py::dynamic_image::read),
-                py::arg("filepath"), py::arg("subimage"), py::arg("channel_names"),
+                py::arg("dtype"),
+                py::arg("filepath"), 
+                py::arg("subimage"), 
+                py::arg("channel_names"),
                 py::arg("compression_codec") = compressed::enums::codec::lz4,
                 py::arg("compression_level") = 9,
                 py::arg("block_size") = compressed::s_default_blocksize,
@@ -177,7 +190,7 @@ namespace compressed_py
                 :return: Chunk size.
             )doc")
 
-            .def("metadata", py::overload_cast<const json_ordered&>(&compressed_py::dynamic_image::metadata),
+            .def("metadata", py::overload_cast<const compressed::json_ordered&>(&compressed_py::dynamic_image::metadata),
                 py::arg("metadata"),
                 R"doc(
                 Set metadata.
@@ -189,4 +202,4 @@ namespace compressed_py
             )doc");
     }
 
-} compressed_py
+} // compressed_py

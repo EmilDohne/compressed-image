@@ -3,7 +3,7 @@
 #include <vector>
 #include <variant>
 
-#include "../util/variant_t.h"
+#include "util/variant_t.h"
 #include "compressed/channel.h"
 
 #include <pybind11/pybind11.h>
@@ -32,13 +32,15 @@ namespace compressed_py
 			size_t chunk_size = compressed::s_default_chunksize
 		)
 		{
-			dispatch_by_dtype(dtype, [&](auto tag)
+			dispatch_by_dtype(data.dtype(), [&](auto tag)
 				{
 					using T = decltype(tag);
 					static_assert(np_bitdepth<T>, "Unsupported type passed to full");
 
-					auto channel = std::make_shared<compressed::image<T>>(
-						py_img_util::from_py_array(py_img_util::tag::view{}, data, width, height),
+					py::array_t<T> typed_array = data.cast<py::array_t<T>>();
+
+					auto channel = std::make_shared<compressed::channel<T>>(
+						py_img_util::from_py_array(py_img_util::tag::view{}, typed_array, width, height),
 						width,
 						height,
 						compression_codec,
@@ -249,7 +251,7 @@ namespace compressed_py
 						throw std::runtime_error("set_chunk requires numpy array of type " + std::string(py::format_descriptor<T>::format()));
 					}
 
-					std::span<const T> buffer(static_cast<const T*>(info.ptr), info.size);
+					std::span<T> buffer(static_cast<T*>(info.ptr), info.size);
 
 					ch_ptr->set_chunk(buffer, chunk_idx);
 				}, base_variant_class::m_ClassVariant);

@@ -69,7 +69,8 @@ namespace compressed_py
 
 
 	template <typename T>
-	concept np_bitdepth = requires std::is_same_v<T, float> ||
+	concept np_bitdepth = 
+		std::is_same_v<T, float> ||
 		std::is_same_v<T, double>   ||
 		std::is_same_v<T, uint8_t>  ||
 		std::is_same_v<T, int8_t>   ||
@@ -110,8 +111,8 @@ namespace compressed_py
 			m_ClassVariant = std::make_shared<Class<uint8_t>>();
 		}
 
-		base_variant_class(variant_t<Class> variant)
-			: m_ClassVariant(variant) 
+		explicit base_variant_class(variant_t<Class> variant)
+			: m_ClassVariant(std::move(variant)) 
 		{
 		}
 

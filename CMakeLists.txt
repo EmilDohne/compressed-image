@@ -47,10 +47,6 @@ target_include_directories(blosc2_include SYSTEM INTERFACE thirdparty/c-blosc2/i
 # JSON module for parsing metadata
 add_subdirectory(thirdparty/json)
 
-# Add target for json headers
-add_library(nlohmann_json_include INTERFACE)
-target_include_directories(nlohmann_json_include SYSTEM INTERFACE thirdparty/json/single_include/nlohmann)
-
 # Include the local vcpkg toolchain, if specified
 if (COMPRESSED_IMAGE_USE_VCPKG)
     include("${PROJECT_SOURCE_DIR}/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake")

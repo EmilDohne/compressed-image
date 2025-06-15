@@ -5,7 +5,7 @@ target_include_directories(compressed_image INTERFACE "include")
 target_link_libraries(compressed_image INTERFACE  
 	blosc2_static 
 	blosc2_include 
-	nlohmann_json_include 
+	nlohmann_json 
 	OpenImageIO::OpenImageIO
 )
 
