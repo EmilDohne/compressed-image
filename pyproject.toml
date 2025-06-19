@@ -11,7 +11,6 @@ build-dir = "build/{wheel_tag}"
 cmake.version = "CMakeLists.txt"
 wheel.packages = ["python/py_module/compressed_image"]
 wheel.install-dir = "compressed_image"
-sdist.include = ["compressed_image/include"]
 sdist.exclude = [".github", "benchmark", "docs", "examples", "test"]
 
 [tool.scikit-build.cmake.define]

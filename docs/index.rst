@@ -1,3 +1,7 @@
+..
+  Copyright Contributors to the compressed-image project.
+
+
 compressed-image
 ########################################
 

@@ -28,21 +28,6 @@
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
 
-	/// Compressed channel representation, usually stored as a part of a larger image. Allows for serial access while random
-	/// access is limited. 
-	/// 
-	/// \code{.cpp}
-	/// compressed::image<T> = ...;
-	/// for (auto& chunk : image.channel_ref("r"))
-	/// {
-	///		for (auto& [index, pixel] : std::views::enumerate(chunk))
-	///		{
-	///			size_t x = chunk.x(index);
-	///			size_t y = chunk.y(index);
-	///			pixel = (x + y * image.width()) / image.size();
-	///		}
-	/// }
-	/// \endcode
 	template <typename T>
 	struct channel : public std::ranges::view_interface<channel<T>>
 	{
@@ -100,11 +85,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param data The span of input data to be compressed.
 		/// \param width The width of the image channel.
 		/// \param height The height of the image channel.
-		/// \param compression_codec The compression codec to be used.
+		/// \param compression_codec The compression codec to be used (default is lz4).
 		/// \param compression_level The compression level (default is 5).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
 		///					  comfortably fit into the L1 cache of most modern CPUs. If you know your cpu can handle 
-		///					  larger blocks feel free to up this number.
+		///					  larger blocks feel free to up this number although this may not increase performance
 		/// \param chunk_size The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. 
 		///					  This should be tweaked to be no larger than the size of the usual images you are expecting  
 		///					  to compress for optimal performance but this could be upped which might give better compression
@@ -157,7 +142,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param compression_level The compression level (default is 5).
 		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
 		///					  comfortably fit into the L1 cache of most modern CPUs. If you know your cpu can handle 
-		///					  larger blocks feel free to up this number.
+		///					  larger blocks feel free to up this number although this may not increase performance
 		/// \param chunk_size The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. 
 		///					  This should be tweaked to be no larger than the size of the usual images you are expecting  
 		///					  to compress for optimal performance but this could be upped which might give better compression
@@ -475,6 +460,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				}, *m_Schunk);
 		}
 
+		size_t chunk_elems() const
+		{
+			auto chunk_size = this->chunk_size();
+			assert(chunk_size % sizeof(T) == 0);
+			return chunk_size / sizeof(T);
+		}
+
 		/// \brief Retrieve the chunk size (in bytes) of the channel at the given chunk index.
 		/// 
 		/// \return The chunk size (in bytes) at index `chunk_index`.
@@ -487,6 +479,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				{
 					return schunk.chunk_bytes(chunk_index);
 				}, *m_Schunk);
+		}
+
+		size_t chunk_elems(size_t chunk_index) const
+		{
+			auto chunk_size = this->chunk_size(chunk_index);
+			assert(chunk_size % sizeof(T) == 0);
+			return chunk_size / sizeof(T);
 		}
 
 
