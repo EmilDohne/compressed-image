@@ -19,6 +19,9 @@ benchmark/images/*.tga
 # Release artifacts
 release/
 
+# Wheel Artifacts
+wheels/
+
 # setuptools related artifacts
 .venv/
 build/

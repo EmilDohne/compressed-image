@@ -6,4 +6,7 @@ pybind11_add_module(compressed_image_py compressed_image/main.cpp)
 target_include_directories(compressed_image_py PRIVATE compressed_image)
 target_link_libraries(compressed_image_py PUBLIC nlohmann_json pybind11_json py_image_util compressed_image)
 
-install(TARGETS compressed_image_py LIBRARY DESTINATION .)
+install(TARGETS compressed_image_py
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})

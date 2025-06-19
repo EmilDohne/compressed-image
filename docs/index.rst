@@ -11,7 +11,7 @@ About
 
 ``compressed-image`` is a library for reading, storing and modifying images and channels as compressed in-memory buffers
 allowing for very memory-efficient representations of these. This library acts as a stop-gap between storing images purely
-in-memory and reading them from disk. 
+in-memory and reading them from disk on-demand. 
 
 It trades a bit of performance for significantly lower memory usage. For more detailed
 information please have a look at the benchmark section :ref:`cimg_benchmarks`

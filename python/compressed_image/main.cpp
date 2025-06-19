@@ -6,7 +6,7 @@
 
 
 
-PYBIND11_MODULE(compressed, m) 
+PYBIND11_MODULE(compressed_image, m) 
 {
 	compressed_py::bind_enums(m);
 	compressed_py::bind_compressed_channel(m);

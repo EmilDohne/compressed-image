@@ -6,5 +6,20 @@ build-backend = "scikit_build_core.build"
 name = "compressed-image"
 version = "0.1.0"
 
-[tool.scikit_build_core]
+[tool.scikit-build]
+build-dir = "build/{wheel_tag}"
+cmake.version = "CMakeLists.txt"
+wheel.packages = ["python/py_module/compressed_image"]
 wheel.install-dir = "compressed_image"
+sdist.include = ["compressed_image/include"]
+sdist.exclude = [".github", "benchmark", "docs", "examples", "test"]
+
+[tool.scikit-build.cmake.define]
+COMPRESSED_DETERMINE_MAIN_PROJECT = false
+COMPRESSED_IMAGE_BUILD_TESTS = false
+COMPRESSED_IMAGE_BUILD_EXAMPLES = false
+COMPRESSED_IMAGE_BUILD_DOCS = false
+COMPRESSED_IMAGE_BUILD_BENCHMARKS = false
+COMPRESSED_IMAGE_BUILD_PYTHON = true
+COMPRESSED_IMAGE_USE_VCPKG = true
+
