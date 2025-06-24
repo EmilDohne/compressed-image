@@ -11,8 +11,8 @@ standalone. It stores its data as a compressed buffer split up into smaller chun
 memory efficient storage and modification as we only ever need to decompress one chunk at a time for which we 
 can reuse the same memory buffer.
 
-Iteration
-**********
+Iterating over a channel
+*************************
 
 The C++ class exposes methods for handling this decompression/recompression for you. It allows for iteration over
 a channel almost like you would iterate over a regular std::vector<T> without having to worry about the decompression
@@ -30,14 +30,15 @@ or recompression.
         for (auto& [index, pixel] : std::views::enumerate(chunk))
         {
             // The index here is local to the chunk itself, we will take care
-            // of computing it's global coordinate.
+            // of computing its global coordinate.
             auto x = chunk.x(index);
             auto y = chunk.y(index);
 
-            // You can now modify the span.
+            // You can now modify the pixel in-place
             pixel = static_cast<T>(x) * y;
         }
     }
+    // Note that the chunk_span is only valid as long as the iterator is alive!
 
 
 Lazy channels
@@ -54,8 +55,8 @@ Lazy channels are channels which store a single value per-chunk until that chunk
 for largely sparse data and is used extensively by the `cryptomatte-api <https://github.com/EmilDohne/cryptomatte-api>`_. 
 
 When using lazily generated channels, it is usually advised to not iterate over them as shown above (although it is
-entirely valid) as that will invoke the cost of decompression/recompression, 
-but instead it is recommended to explicitly set the chunks that will contain data.
+entirely valid) as that will store explicit data on each of the chunks making the further memory savings negligible. 
+Instead, it is recommended to explicitly set the chunks that will contain data.
 
 Take for example a mask channel which will only cover a small portion of the image, rather than having to explicitly store
 compressed data for the whole image (which won't compress 100% and will have a non-trivial overhead), 
