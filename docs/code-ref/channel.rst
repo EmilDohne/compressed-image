@@ -92,11 +92,46 @@ we can just store a single value for all chunks outside of this mask area.
     so you can always safely convert from ``chunk_size`` -> ``chunk_elems``.
 
 
+Memory layout
+****************
+
+``compressed::channel<T>`` are internally stored as chunks of scanline data, with each chunk representing n scanlines
+(this may also include partial scanlines, although in most cases it will be aligned to scanlines). If we visualize this,
+a chunk could therefore look like this:
+
+.. image:: ../images/chunked_image.jpg
+
+As either the chunk size grows, or the image shrinks, the chunk will take up more or less vertical space in the image.
+This is important to know as unlike e.g. tiled images this means that if you wish to access a vertical slice in an image,
+this will result in you having to decompress the entire image.
+
+The chunk size is additionally capped such that if you have a channel that takes up less bytes than ``chunk_size``,
+the chunk size will be adjusted to be == width * height * sizeof(T). Therefore there is no need to modify the chunk size
+if you plan on only compressing smaller images.
+
+Block size
+============
+
+You may notice the constructor of channels taking a ``block_size`` parameter. This parameter controls the size of blocks
+within chunks. The compressed data is stored in 3 levels with the ``blocks`` being the lowest level. It goes channels >
+chunks > blocks. 
+
+While the user can set the block size, they cannot extract just a single block of data from a chunk, and it is also not
+transparent where a block starts or ends. 
+
+The main thing to worry about when it comes to block size is knowing that:
+
+**A**, it is the smallest unit and is what will be compressed in the end (chunks simply hold collections of blocks).
+
+**B**, it should roughly fit into the L1 cache of your CPU for better data throughput.
+
+These implementation details are usually tackled just fine with ``compressed::s_default_blocksize``
+
 
 .. _channel_struct:
 
-channel 
-************
+Channel Struct 
+**************
 
 .. tab:: c++
 
