@@ -26,7 +26,7 @@ namespace compressed_py
 		using base_variant_class::base_variant_class; // inherit constructors
 
 		dynamic_image(
-			py::dtype dtype,
+			const py::object& dtype_,
 			std::vector<py::array> channels,
 			size_t width,
 			size_t height,
@@ -37,6 +37,9 @@ namespace compressed_py
 			size_t chunk_size = compressed::s_default_chunksize
 		)
 		{
+			// This allows to take e.g. np.uint8 or 'uint8' as dtype rather than only allowing for an instantiated 
+			// numpy.dtype
+			auto dtype = py::dtype::from_args(dtype_);
 			dispatch_by_dtype(dtype, [&](auto tag) -> void
 				{
 					using T = decltype(tag);
@@ -64,8 +67,8 @@ namespace compressed_py
 		}
 
 		static std::shared_ptr<dynamic_image> read(
-			py::dtype dtype,
-			std::filesystem::path filepath,
+			const py::object& dtype_,
+			std::string filepath,
 			int subimage,
 			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
 			size_t compression_level = 9,
@@ -73,6 +76,9 @@ namespace compressed_py
 			size_t chunk_size = compressed::s_default_chunksize
 		)
 		{
+			// This allows to take e.g. np.uint8 or 'uint8' as dtype rather than only allowing for an instantiated 
+			// numpy.dtype
+			auto dtype = py::dtype::from_args(dtype_);
 			return dispatch_by_dtype(dtype, [&](auto tag) -> std::shared_ptr<dynamic_image>
 				{
 					using T = decltype(tag);
@@ -86,8 +92,8 @@ namespace compressed_py
 		}
 
 		static std::shared_ptr<dynamic_image> read(
-			py::dtype dtype,
-			std::filesystem::path filepath,
+			const py::object& dtype_,
+			std::string filepath,
 			int subimage,
 			std::vector<int> channel_indices,
 			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
@@ -96,6 +102,9 @@ namespace compressed_py
 			size_t chunk_size = compressed::s_default_chunksize
 		)
 		{
+			// This allows to take e.g. np.uint8 or 'uint8' as dtype rather than only allowing for an instantiated 
+			// numpy.dtype
+			auto dtype = py::dtype::from_args(dtype_);
 			return dispatch_by_dtype(dtype, [&](auto tag) -> std::shared_ptr<dynamic_image>
 				{
 					using T = decltype(tag);
@@ -105,7 +114,7 @@ namespace compressed_py
 					auto input_ptr = OIIO::ImageInput::open(filepath);
 					if (!input_ptr)
 					{
-						throw std::invalid_argument(std::format("File {} does not exist on disk", filepath.string()));
+						throw std::invalid_argument(std::format("File {} does not exist on disk", filepath));
 					}
 
 					auto image = compressed::image<T>::read(std::move(input_ptr), channel_indices, subimage, compression_codec, compression_level, block_size, chunk_size);
@@ -115,8 +124,8 @@ namespace compressed_py
 		}
 
 		static std::shared_ptr<dynamic_image> read(
-			py::dtype dtype,
-			std::filesystem::path filepath,
+			const py::object& dtype_,
+			std::string filepath,
 			int subimage,
 			std::vector<std::string> channel_names,
 			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
@@ -125,6 +134,9 @@ namespace compressed_py
 			size_t chunk_size = compressed::s_default_chunksize
 		)
 		{
+			// This allows to take e.g. np.uint8 or 'uint8' as dtype rather than only allowing for an instantiated 
+			// numpy.dtype
+			auto dtype = py::dtype::from_args(dtype_);
 			return dispatch_by_dtype(dtype, [&](auto tag) -> std::shared_ptr<dynamic_image>
 				{
 					using T = decltype(tag);
@@ -134,7 +146,7 @@ namespace compressed_py
 					auto input_ptr = OIIO::ImageInput::open(filepath);
 					if (!input_ptr)
 					{
-						throw std::invalid_argument(std::format("File {} does not exist on disk", filepath.string()));
+						throw std::invalid_argument(std::format("File {} does not exist on disk", filepath));
 					}
 
 					auto image = compressed::image<T>::read(std::move(input_ptr), channel_names, subimage, compression_codec, compression_level, block_size, chunk_size);

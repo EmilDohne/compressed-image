@@ -21,10 +21,12 @@ release/
 
 # Wheel Artifacts
 wheels/
+wheelhouse/
 
 # setuptools related artifacts
 .venv/
 build/
+dist/
 
 # VS Code Counter
 .VSCodeCounter/

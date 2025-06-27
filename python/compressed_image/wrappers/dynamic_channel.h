@@ -53,7 +53,7 @@ namespace compressed_py
 		}
 
 		static std::shared_ptr<dynamic_channel> full(
-			py::dtype dtype,
+			const py::object& dtype_,
 			std::variant<double, int> fill_value,
 			size_t width,
 			size_t height,
@@ -63,6 +63,9 @@ namespace compressed_py
 			size_t chunk_size = compressed::s_default_chunksize
 		)
 		{
+			// This allows to take e.g. np.uint8 or 'uint8' as dtype rather than only allowing for an instantiated 
+			// numpy.dtype
+			auto dtype = py::dtype::from_args(dtype_);
 			return dispatch_by_dtype(dtype, [&](auto tag) -> std::shared_ptr<dynamic_channel> 
 				{
 					using T = decltype(tag);
@@ -114,7 +117,7 @@ namespace compressed_py
 		}
 
 		static std::shared_ptr<dynamic_channel> zeros(
-			py::dtype dtype,
+			const py::object& dtype_,
 			size_t width,
 			size_t height,
 			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
@@ -122,6 +125,9 @@ namespace compressed_py
 			size_t block_size = compressed::s_default_blocksize,
 			size_t chunk_size = compressed::s_default_chunksize)
 		{
+			// This allows to take e.g. np.uint8 or 'uint8' as dtype rather than only allowing for an instantiated 
+			// numpy.dtype
+			auto dtype = py::dtype::from_args(dtype_);
 			return dispatch_by_dtype(dtype, [&](auto tag) -> std::shared_ptr<dynamic_channel> 
 				{
 					using T = decltype(tag);
@@ -153,6 +159,22 @@ namespace compressed_py
 			return std::visit([](auto&& ch_ptr) 
 				{
 					return std::make_tuple(ch_ptr->height(), ch_ptr->width());
+				}, m_ClassVariant);
+		}
+
+		size_t width() const 
+		{
+			return std::visit([](auto&& ch_ptr) 
+				{
+					return ch_ptr->width();
+				}, m_ClassVariant);
+		}
+
+		size_t height() const 
+		{
+			return std::visit([](auto&& ch_ptr) 
+				{
+					return ch_ptr->height();
 				}, m_ClassVariant);
 		}
 

@@ -53,8 +53,8 @@ namespace compressed_py
             )doc")
             .def_static("read",
                 py::overload_cast<
-                    py::dtype,
-                    std::filesystem::path,
+                    const py::object&,
+                    std::string,
                     int,
                     compressed::enums::codec,
                     size_t,
@@ -73,8 +73,8 @@ namespace compressed_py
 
             .def_static("read",
                 py::overload_cast<
-                    py::dtype,
-                    std::filesystem::path,
+                    const py::object&,
+                    std::string,
                     int,
                     std::vector<int>,
                     compressed::enums::codec,
@@ -95,8 +95,8 @@ namespace compressed_py
 
             .def_static("read",
                 py::overload_cast<
-                    py::dtype,
-                    std::filesystem::path,
+                    const py::object&,
+                    std::string,
                     int,
                     std::vector<std::string>,
                     compressed::enums::codec,
@@ -189,7 +189,6 @@ namespace compressed_py
                 R"doc(
                 :return: Chunk size.
             )doc")
-
             .def("metadata", py::overload_cast<const compressed::json_ordered&>(&compressed_py::dynamic_image::metadata),
                 py::arg("metadata"),
                 R"doc(

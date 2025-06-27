@@ -127,10 +127,12 @@ namespace compressed_py
             .def_property_readonly("dtype", &compressed_py::dynamic_channel::dtype, R"doc(
             :return: The numpy dtype of the underlying channel.
             )doc")
-            .def("shape", &compressed_py::dynamic_channel::shape,
+            .def_property_readonly("shape", &compressed_py::dynamic_channel::shape,
                 R"doc(
             :return: Tuple of (height, width).
             )doc")
+            .def_property_readonly("width", &compressed_py::dynamic_channel::width)
+            .def_property_readonly("height", &compressed_py::dynamic_channel::height)
                     .def("compressed_bytes", &compressed_py::dynamic_channel::compressed_bytes,
                         R"doc(
             :return: Size of the compressed data in bytes.

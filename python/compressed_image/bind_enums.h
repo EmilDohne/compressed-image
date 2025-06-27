@@ -21,8 +21,7 @@ namespace compressed_py
 			.value("blosclz", compressed::enums::codec::blosclz, "blosclz: Lightweight, fast compression optimized for high-speed decompression.")
 			.value("lz4", compressed::enums::codec::lz4, "lz4: Extremely fast compression and decompression with moderate compression ratio.")
 			.value("lz4hc", compressed::enums::codec::lz4hc, "lz4hc: High-compression variant of LZ4 with slower compression but similar fast decompression.")
-			.value("zstd", compressed::enums::codec::zstd, "zstd: Zstandard compression providing high compression ratios with good speed.")
-			.export_values();
+			.value("zstd", compressed::enums::codec::zstd, "zstd: Zstandard compression providing high compression ratios with good speed.");
 	}
 
 } // compressed_py
