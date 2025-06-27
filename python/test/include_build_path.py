@@ -12,6 +12,7 @@ import os
 # feel free to modify this. The dir should point to the containing folder of the 
 # .pyd file.
 _rel_paths = [
+    "../../../build/python",
     "../../../bin-int/compressed-image/x64-release/python",
     "../../../bin-int/compressed-image/x64-debug/python",
 ]
