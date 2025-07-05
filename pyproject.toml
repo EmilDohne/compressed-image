@@ -28,7 +28,5 @@ test-command = "py -m pytest {project}/python/test"
 
 # Use delvewheel on windows since cibuildhweel by default doesn't do this.
 [tool.cibuildwheel.windows]
-before-build = """
-	if exist build\\wheel_generation rmdir /s /q build\\wheel_generation && pip install delvewheel
-"""
+before-build = "if exist build\\wheel_generation rmdir /s /q build\\wheel_generation && pip install delvewheel"
 repair-wheel-command = "delvewheel repair --add-path build/wheel_generation/python/Release --wheel-dir {dest_dir} {wheel}"

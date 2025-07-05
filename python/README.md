@@ -36,18 +36,16 @@ compressed-image/
 
 Testing of the python bindings is done via the [pytest](https://pypi.org/project/pytest/) library, if you followed the build steps above you should have a `compressed_image.cpxxx-xxx_xxx.pyd/so/dylib` in the build directory. To then test these you should go to the `python/test` directory and execute pytest:
 
+> [!NOTE] 
+> If you are not testing via cibuildwheel you will likely have to copy the .pyd file as well as any `.dll`/`.so`/`.dylib`
+> files into the `test/` directory so pytest can import your built module
+
 - `cd <dir/to/compressed-image>/python/test`
 - `pytest`
 
 This will now run the test suite and you should be good to go!
 
 Whenever you change something you may either need to run the build commands above (if you changed the cpp source code) or just rerun pytest if you only changed the test suite. Good luck! 
-
-### Dynamic path mapping
-
-The test suite dynamically maps the build directory into the python test suite via the [include_build_path](./test/include_build_path.py) file. All this does is dynamically appends the build directory to the `PYTHONPATH` allowing us to import from this.
-
-This is admittedly not the best solution for this but will work in most cases, if you build to a different directory than the one described above you may extend this list of paths to check for.
 
 ## Building the wheel
 
