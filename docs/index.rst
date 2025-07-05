@@ -29,7 +29,6 @@ Features
 - Reading files from disk with low memory usage
 - Modification without having to decompress the entire image
 - Lazy image/channel representations with extremely low memory footprints
-- Rigorously tested
 
 Performance
 ===========
@@ -102,7 +101,6 @@ Contents
 .. toctree::
    :maxdepth: 2
 
-   introduction.rst
    code-ref/main.rst
    benchmarks.rst
   

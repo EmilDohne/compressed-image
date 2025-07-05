@@ -52,6 +52,18 @@ class Codec:
 
 class Channel:
 
+    def __init__(
+        self, 
+        data: numpy.ndarray, 
+        width: typing.SupportsInt, 
+        height: typing.SupportsInt, 
+        compression_codec: Codec = Codec.lz4, 
+        compression_level: typing.SupportsInt = 9, 
+        block_size: typing.SupportsInt = 32_768, 
+        chunk_size: typing.SupportsInt = 4_194_304
+        ) -> None:
+        ...
+
     @staticmethod
     def full(
         dtype: numpy.typing.DTypeLike, 
@@ -85,17 +97,21 @@ class Channel:
     def zeros_like(other: Channel) -> Channel:
         ...
 
-    def __init__(
-        self, 
-        data: numpy.ndarray, 
-        width: typing.SupportsInt, 
-        height: typing.SupportsInt, 
-        compression_codec: Codec = Codec.lz4, 
-        compression_level: typing.SupportsInt = 9, 
-        block_size: typing.SupportsInt = 32_768, 
-        chunk_size: typing.SupportsInt = 4_194_304
-        ) -> None:
+    @property
+    def dtype(self) -> numpy.typing.DTypeLike:
         ...
+
+    @property
+    def width(self) -> int:
+        ...
+
+    @property
+    def height(self) -> int:
+        ...
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        ...   
 
     def block_size(self) -> int:
         ...
@@ -105,7 +121,15 @@ class Channel:
         ...
 
     @typing.overload
+    def chunk_elems(self) -> int:
+        ...
+
+    @typing.overload
     def chunk_size(self, chunk_index: typing.SupportsInt) -> int:
+        ...
+
+    @typing.overload
+    def chunk_elems(self, chunk_index: typing.SupportsInt) -> int:
         ...
 
     def compressed_bytes(self) -> int:
@@ -117,7 +141,12 @@ class Channel:
     def compression_level(self) -> int:
         ...
 
+    @typing.overload
     def get_chunk(self, chunk_index: typing.SupportsInt) -> numpy.ndarray:
+        ...
+
+    @typing.overload
+    def get_chunk(self, chunk_index: typing.SupportsInt, array: numpy.ndarray) -> numpy.ndarray:
         ...
 
     def get_decompressed(self) -> numpy.ndarray:
@@ -126,29 +155,13 @@ class Channel:
     def num_chunks(self) -> int:
         ...
 
-    def set_chunk(self, array: numpy.ndarray, chunk_index: typing.SupportsInt) -> None:
+    def set_chunk(self, chunk_index: typing.SupportsInt, array: numpy.ndarray, ) -> None:
         ...
 
     def uncompressed_size(self) -> int:
         ...
         
     def update_nthreads(self, nthreads: typing.SupportsInt, block_size: typing.SupportsInt = 32_768) -> None:
-        ...
-
-    @property
-    def dtype(self) -> numpy.typing.DTypeLike:
-        ...
-
-    @property
-    def height(self) -> int:
-        ...
-
-    @property
-    def shape(self) -> tuple[int, int]:
-        ...
-
-    @property
-    def width(self) -> int:
         ...
 
 
@@ -220,6 +233,12 @@ class Image:
         ) -> None:
         ...
 
+    def __getitem__(self, key: typing.Union[str, int]) -> Channel:
+        ...
+
+    def __len__(self) -> int:
+        ...
+
     @typing.overload
     def channel(self, index: typing.SupportsInt) -> Channel:
         ...
@@ -230,6 +249,30 @@ class Image:
 
     def channels(self) -> list[Channel]:
         ...
+
+    @property
+    def width(self) -> int:
+        ...
+
+    @property
+    def height(self) -> int:
+        ...
+
+    @property
+    def num_channels(self) -> int:
+        ...
+
+    @property
+    def channel_names(self) -> typing.List[str]:
+        ...
+
+    @channel_names.setter
+    def channel_names(self, names: typing.List[str]):
+        ...
+
+    @property
+    def shape(self) -> int:
+        ...  
 
     def chunk_size(self) -> int:
         ...
@@ -243,11 +286,6 @@ class Image:
     def get_decompressed(self) -> list[numpy.ndarray]:
         ...
 
-    def height(self) -> int:
-        ...
-        
-    def num_channels(self) -> int:
-        ...
 
     def print_statistics(self) -> None:
         ...
@@ -255,6 +293,5 @@ class Image:
     def update_nthreads(self, nthreads: typing.SupportsInt) -> None:
         ...
 
-    def width(self) -> int:
-        ...
+   
         

@@ -15,7 +15,6 @@ It is written entirely using C++20 while also providing pre-built python binarie
 - Reading files from disk with low memory usage
 - Modification without having to decompress the entire image
 - Lazy image/channel representations with extremely low memory footprints
-- Rigorously tested
 
 ## Performance
 

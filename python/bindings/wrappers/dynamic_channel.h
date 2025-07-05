@@ -3,8 +3,10 @@
 #include <vector>
 #include <variant>
 
+#include "util/npy_half.h"
 #include "util/variant_t.h"
 #include "compressed/channel.h"
+#include "compressed/util.h"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
@@ -20,6 +22,7 @@ namespace compressed_py
 	/// to python exposing the data in a more pythonic dynamic fashion that is more akin to a np.ndarray
 	struct dynamic_channel : public base_variant_class<compressed::channel>
 	{
+
 		using base_variant_class::base_variant_class; // inherit constructors
 
 		dynamic_channel(
@@ -54,7 +57,7 @@ namespace compressed_py
 
 		static std::shared_ptr<dynamic_channel> full(
 			const py::object& dtype_,
-			std::variant<double, int> fill_value,
+			py::object fill_value,
 			size_t width,
 			size_t height,
 			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
@@ -72,14 +75,12 @@ namespace compressed_py
 					static_assert(np_bitdepth<T>, "Unsupported type passed to full");
 
 					T value{};
-					try 
+					try
 					{
-						value = std::visit([](auto&& val) -> T 
-							{
-								return static_cast<T>(val);
-							}, fill_value);
+						// Attempt to cast the fill_value to the correct target type
+						value = fill_value.cast<T>();
 					}
-					catch (...) 
+					catch (const py::cast_error&)
 					{
 						throw std::runtime_error("Could not convert fill_value to the target dtype.");
 					}
@@ -91,7 +92,7 @@ namespace compressed_py
 				});
 		}
 
-		static std::shared_ptr<dynamic_channel> full_like(const dynamic_channel& other, std::variant<double, int> fill_value)
+		static std::shared_ptr<dynamic_channel> full_like(const dynamic_channel& other, py::object fill_value)
 		{
 			return std::visit([&](auto&& ch_ptr)
 				{
@@ -99,12 +100,10 @@ namespace compressed_py
 					T value{};
 					try 
 					{
-						value = std::visit([](auto&& val) -> T 
-							{
-								return static_cast<T>(val);
-							}, fill_value);
+						// Attempt to cast the fill_value to the correct target type
+						value = fill_value.cast<T>();
 					}
-					catch (...) 
+					catch (const py::cast_error&) 
 					{
 						throw std::runtime_error("Could not convert fill_value to the target dtype.");
 					}
@@ -151,7 +150,6 @@ namespace compressed_py
 					return std::make_shared<dynamic_channel>(channel);
 				}, other->m_ClassVariant);
 		}
-
 
 		/// Returns the shape of the channel as (height, width).
 		std::tuple<size_t, size_t> shape() const 
@@ -228,6 +226,15 @@ namespace compressed_py
 			);
 		}
 
+		size_t chunk_elems() const
+		{
+			return std::visit([](auto&& ch_ptr)
+				{
+					return ch_ptr->chunk_elems();
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
 		/// Returns the size of a specific chunk by index.
 		/// \param chunk_index Index of the chunk to query.
 		size_t chunk_size(size_t chunk_index) const
@@ -239,6 +246,49 @@ namespace compressed_py
 			);
 		}
 
+		size_t chunk_elems(size_t chunk_index) const
+		{
+			return std::visit([&](auto&& ch_ptr)
+				{
+					return ch_ptr->chunk_elems(chunk_index);
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
+		// Fill the passed array with the chunk data.
+		void get_chunk(size_t chunk_idx, py::array& array) const
+		{
+			std::visit([&](auto&& ch_ptr) -> void
+				{
+					using T = typename std::decay_t<decltype(*ch_ptr)>::value_type;
+
+					// Validate dtype
+					if (!py::isinstance<py::array_t<T>>(array))
+					{
+						throw std::invalid_argument("Array must have dtype matching channel element type.");
+					}
+
+					// Validate dimensions
+					if (array.ndim() != 1)
+					{
+						throw std::invalid_argument("Array must be 1-dimensional.");
+					}
+
+					// Validate size
+					if (array.shape(0) != static_cast<py::ssize_t>(ch_ptr->chunk_elems(chunk_idx)))
+					{
+						throw std::invalid_argument("Array length does not match number of chunk elements.");
+					}
+
+					// Get a mutable span and fill it
+					auto buf = static_cast<T*>(array.mutable_data());
+					std::span<T> buffer(buf, ch_ptr->chunk_elems(chunk_idx));
+
+					ch_ptr->get_chunk(buffer, chunk_idx);
+
+				}, base_variant_class::m_ClassVariant);
+		}
+
 		/// Copies decompressed chunk data into the provided buffer.
 		/// \param chunk_idx Index of the chunk to retrieve.
 		py::array get_chunk(size_t chunk_idx) const
@@ -246,7 +296,7 @@ namespace compressed_py
 			return std::visit([&](auto&& ch_ptr) -> py::array
 				{
 					using T = typename std::decay_t<decltype(*ch_ptr)>::value_type;
-					std::vector<T> buffer(this->chunk_size(chunk_idx));
+					compressed::util::default_init_vector<T> buffer(this->chunk_elems(chunk_idx));
 					ch_ptr->get_chunk(std::span<T>(buffer), chunk_idx);
 
 					// Use the size, ptr overload of array_t. Since array_t is an extension of py::array we can
@@ -255,7 +305,7 @@ namespace compressed_py
 				}, base_variant_class::m_ClassVariant);
 		}
 
-		void set_chunk(py::array array, size_t chunk_idx)
+		void set_chunk(size_t chunk_idx, py::array array)
 		{
 			std::visit([&](auto&& ch_ptr)
 				{
@@ -265,12 +315,17 @@ namespace compressed_py
 					py::buffer_info info = array.request();
 					if (info.ndim != 1)
 					{
-						throw std::runtime_error("set_chunk requires a 1D numpy array");
+						throw py::value_error("set_chunk requires a 1D numpy array");
 					}
 
-					if (info.format != py::format_descriptor<T>::format())
+					if (!info.item_type_is_equivalent_to<T>())
 					{
-						throw std::runtime_error("set_chunk requires numpy array of type " + std::string(py::format_descriptor<T>::format()));
+						throw py::value_error(
+							std::format("set_chunk requires numpy array of struct type '{}', instead got '{}'",
+								std::string(py::format_descriptor<T>::format()),
+								std::string(info.format)
+							)
+						);
 					}
 
 					std::span<T> buffer(static_cast<T*>(info.ptr), info.size);
@@ -318,5 +373,6 @@ namespace compressed_py
 			);
 		}
 	};
+
 
 } // compressed_py

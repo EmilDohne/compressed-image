@@ -1,6 +1,9 @@
 # The sphinx template and setup was mostly adopted from openimageios docs to mimic their styling
 import subprocess, os, sys
 
+# This is for local development to properly include the paths
+sys.path.insert(0, os.path.abspath("../bin-int/compressed-image/x64-release/python"))
+sys.path.insert(0, os.path.abspath("../bin-int/compressed-image/x64-debug/python"))
 
 def configureDoxyfile(input_dir, output_dir):
     with open('Doxyfile.in', 'r') as file :

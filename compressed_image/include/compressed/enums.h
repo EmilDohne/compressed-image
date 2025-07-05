@@ -35,13 +35,25 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				return OIIO::TypeDesc::UINT8;
 			}
+			else if constexpr (std::is_same_v<T, int8_t>)
+			{
+				return OIIO::TypeDesc::INT8;
+			}
 			else if constexpr (std::is_same_v<T, uint16_t>)
 			{
 				return OIIO::TypeDesc::UINT16;
 			}
+			else if constexpr (std::is_same_v<T, int16_t>)
+			{
+				return OIIO::TypeDesc::INT16;
+			}
 			else if constexpr (std::is_same_v<T, uint32_t>)
 			{
 				return OIIO::TypeDesc::UINT32;
+			}
+			else if constexpr (std::is_same_v<T, int32_t>)
+			{
+				return OIIO::TypeDesc::INT32;
 			}
 			else if constexpr (std::is_same_v<T, float>)
 			{

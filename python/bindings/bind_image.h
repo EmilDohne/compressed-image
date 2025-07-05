@@ -20,8 +20,9 @@ namespace compressed_py
             interaction with numpy arrays and efficient memory/storage via lazy compression.
 
         )doc")
+            .def(py::init<>())
             .def(py::init<
-                    py::dtype,
+                    const py::object&,
                     std::vector<py::array>,
                     size_t,
                     size_t,
@@ -126,6 +127,26 @@ namespace compressed_py
                 Add a channel to the image.
             )doc")
 
+            .def("__getitem__", [](std::shared_ptr<compressed_py::dynamic_image>& self, std::variant<std::string, size_t> key)
+            {
+                if (std::holds_alternative<size_t>(key))
+                {
+                    return self->channel(std::get<size_t>(key));
+                }
+                else
+                {
+                    return self->channel(std::get<std::string>(key));
+                }
+
+			}, py::arg("key"), R"doc(
+                Get channel by index or name.
+            )doc")
+
+            .def("__len__", [](std::shared_ptr<compressed_py::dynamic_image>& self)
+            {
+                return self->num_channels();
+            })
+
             .def("channel", py::overload_cast<size_t>(&compressed_py::dynamic_image::channel),
                 py::arg("index"),
                 R"doc(
@@ -164,20 +185,28 @@ namespace compressed_py
                 :return: Compression ratio.
             )doc")
 
-            .def("width", &compressed_py::dynamic_image::width,
+			.def_property_readonly("shape", &compressed_py::dynamic_image::shape,
+			R"doc(
+                :return: Image shape in format (nchannels, height, width)
+            )doc")
+
+            .def_property_readonly("width", &compressed_py::dynamic_image::width,
                 R"doc(
                 :return: Image width.
             )doc")
 
-            .def("height", &compressed_py::dynamic_image::height,
+            .def_property_readonly("height", &compressed_py::dynamic_image::height,
                 R"doc(
                 :return: Image height.
             )doc")
 
-            .def("num_channels", &compressed_py::dynamic_image::num_channels,
+            .def_property_readonly("num_channels", &compressed_py::dynamic_image::num_channels,
                 R"doc(
                 :return: Number of channels.
             )doc")
+
+            .def("get_channel_names", py::overload_cast<>(&compressed_py::dynamic_image::channel_names, py::const_))
+            .def("set_channel_names", py::overload_cast<std::vector<std::string>>(&compressed_py::dynamic_image::channel_names))
 
             .def("update_nthreads", &compressed_py::dynamic_image::update_nthreads,
                 py::arg("nthreads"),
@@ -189,16 +218,12 @@ namespace compressed_py
                 R"doc(
                 :return: Chunk size.
             )doc")
-            .def("metadata", py::overload_cast<const compressed::json_ordered&>(&compressed_py::dynamic_image::metadata),
-                py::arg("metadata"),
-                R"doc(
-                Set metadata.
-            )doc")
-
-            .def("metadata", py::overload_cast<>(&compressed_py::dynamic_image::metadata),
-                R"doc(
-                Get metadata.
-            )doc");
+            .def("set_metadata", 
+                py::overload_cast<const nlohmann::json&>(&compressed_py::dynamic_image::metadata)
+            )
+            .def("get_metadata",
+			    py::overload_cast<>(&compressed_py::dynamic_image::metadata)
+            );
     }
 
 } // compressed_py

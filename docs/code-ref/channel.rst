@@ -18,27 +18,48 @@ The C++ class exposes methods for handling this decompression/recompression for 
 a channel almost like you would iterate over a regular std::vector<T> without having to worry about the decompression
 or recompression.
 
-.. code-block:: cpp
+.. tab:: c++
 
-    compressed::channel<T> my_channel = ...;
+    .. code-block:: cpp
 
-    // This will iterate through all the chunks of the channel, decompressing and recompressing
-    // them, reusing the same internal buffer. On dereference you get a chunk
-    // span which is a std::span<T> with additional metadata for e.g. finding the x and y coordinate
-    for (compressed::container::chunk_span<T> chunk : channel)
-    {
-        for (auto& [index, pixel] : std::views::enumerate(chunk))
+        compressed::channel<T> my_channel = ...;
+
+        // This will iterate through all the chunks of the channel, decompressing and recompressing
+        // them, reusing the same internal buffer. On dereference you get a chunk
+        // span which is a std::span<T> with additional metadata for e.g. finding the x and y coordinate
+        for (compressed::container::chunk_span<T> chunk : channel)
         {
-            // The index here is local to the chunk itself, we will take care
-            // of computing its global coordinate.
-            auto x = chunk.x(index);
-            auto y = chunk.y(index);
+            for (auto& [index, pixel] : std::views::enumerate(chunk))
+            {
+                // The index here is local to the chunk itself, we will take care
+                // of computing its global coordinate.
+                auto x = chunk.x(index);
+                auto y = chunk.y(index);
 
-            // You can now modify the pixel in-place
-            pixel = static_cast<T>(x) * y;
+                // You can now modify the pixel in-place
+                pixel = static_cast<T>(x) * y;
+            }
         }
-    }
-    // Note that the chunk_span is only valid as long as the iterator is alive!
+        // Note that the chunk_span is only valid as long as the iterator is alive!
+
+
+.. tab:: python
+
+    .. code-block:: python
+
+        import compressed_image as compressed
+        
+        channel: compressed.Channel = ...
+
+        buffer = np.ndarray((channel.chunk_elems(),), dtype = channel.dtype)
+        for i in range(channel.num_chunks() - 1):
+            channel.get_chunk(i, buffer)
+            buffer[:] = i
+            channel.set_chunk(i, buffer)
+
+        final_buffer = channel.get_chunk(channel.num_chunks() -1)
+        final_buffer[:] = channel.num_chunks() - 1
+        channel.set_chunk(channel.num_chunks() -1, final_buffer)
 
 
 Lazy channels
@@ -62,35 +83,58 @@ Take for example a mask channel which will only cover a small portion of the ima
 compressed data for the whole image (which won't compress 100% and will have a non-trivial overhead), 
 we can just store a single value for all chunks outside of this mask area. 
 
-.. code-block:: cpp
+.. tab:: c++
 
-    auto lazy_channel = compressed::channel<T>::zeros(2048 /*width*/, 2048 /*height*/);
+    .. code-block:: cpp
 
-    // Generate a buffer which will hold the chunk data, we never have to allocate the whole image
-    std::vector<T> buffer(lazy_channel.chunk_elems());
+        auto lazy_channel = compressed::channel<T>::zeros(2048 /*width*/, 2048 /*height*/);
 
-    // Iterate over all the chunks and modify only specific ones.
-    for (size_t i = 0; i < lazy_channel.num_chunks())
-    {
-        if (/* some arbitrary condition is true */)
+        // Generate a buffer which will hold the chunk data, we never have to allocate the whole image
+        std::vector<T> buffer(lazy_channel.chunk_elems());
+
+        // Iterate over all the chunks and modify only specific ones.
+        for (size_t i = 0; i < lazy_channel.num_chunks())
         {
-            // Note that we need to take a subspan of the buffer here. All chunks within a 
-            // channel are guaranteed to be the same size, except for the last chunk which
-            // may be smaller, we do not pad up to the chunk size so we need to ensure 
-            // we do not try to set too much data.
-            std::span<T> chunk_span(buffer.begin(), buffer.begin() + lazy_channel.chunk_elems(i));
+            if (/* some arbitrary condition is true */)
+            {
+                // Note that we need to take a subspan of the buffer here. All chunks within a 
+                // channel are guaranteed to be the same size, except for the last chunk which
+                // may be smaller, we do not pad up to the chunk size so we need to ensure 
+                // we do not try to set too much data.
+                std::span<T> chunk_span(buffer.begin(), buffer.begin() + lazy_channel.chunk_elems(i));
 
-            // Setting this to a span which does not have the size compressed::channel<T>::chun_elems(index)
-            // would raise an exception here.
-            lazy_channel.set_chunk(chunk_span, i);
+                // Setting this to a span which does not have the size compressed::channel<T>::chun_elems(index)
+                // would raise an exception here.
+                lazy_channel.set_chunk(chunk_span, i);
+            }
         }
-    }
 
-.. note::
+    .. note::
 
-    Even though you may provide your own chunk size, we internally ensure that this is always a multiple of sizeof(T)
-    so you can always safely convert from ``chunk_size`` -> ``chunk_elems``.
+        Even though you may provide your own chunk size, we internally ensure that this is always a multiple of sizeof(T)
+        so you can always safely convert from ``chunk_size`` -> ``chunk_elems``.
 
+
+.. tab:: python
+
+    .. code-block:: python
+
+        import compressed_image as compressed
+        
+        channel = compressed.Channel.zeros(np.float16, width = 2048, height = 2048)
+
+        # Now we can iterate over all the channels and only modify specific ones
+        for chunk_idx in range(channel.num_chunks())
+            if some_condition:
+                decompressed = channel.get_chunk(chunk_idx)
+
+                # Do some modifications
+                decompressed[:] = 100
+
+                # Now ensure we set back the chunk, as otherwise the data will not update!
+                channel.set_chunk(chnk_ix, decompressed)
+
+    
 
 Memory layout
 ****************
@@ -142,4 +186,8 @@ Channel Struct
 
 .. tab:: python
 
-    tbd
+    .. autoclass:: compressed_image.Channel
+        :members:
+        :inherited-members:
+
+        .. automethod:: __init__

@@ -921,6 +921,29 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param name (Optional) Channel name of the channel to be inserted. If no channel names are set this argument is ignored.
 		void add_channel(compressed::channel<T> _channel, std::optional<std::string> name = std::nullopt)
 		{
+			if (_channel.width() != this->width())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its width does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						this->width(), _channel.width()
+					)
+				);
+			}
+			if (_channel.height() != this->height())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its height does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						this->height(), _channel.height()
+					)
+				);
+			}
+
 			m_Channels.push_back(std::move(_channel));
 			if (m_ChannelNames.size() > 0)
 			{
@@ -953,6 +976,29 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			uint8_t compression_level = 5
 		)
 		{
+			if (width != this->width())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its width does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						width, this->width()
+					)
+				);
+			}
+			if (height != this->height())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its height does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						height, this->height()
+					)
+				);
+			}
+
 			m_Channels.push_back(compressed::channel(
 				std::span<const T>(data.begin(), data.end()),
 				width,
@@ -960,7 +1006,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				compression_codec,
 				compression_level
 			));
-			if (m_ChannelNames.size() > 0)
+
+			if (name.has_value() && m_ChannelNames.size() == m_Channels.size())
+			{
+				m_ChannelNames.push_back(name.value());
+			}
+			else if (m_ChannelNames.size() > 0)
 			{
 				m_ChannelNames.push_back(name.value_or(""));
 			}

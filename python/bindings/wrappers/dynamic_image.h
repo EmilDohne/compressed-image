@@ -168,6 +168,16 @@ namespace compressed_py
 				{
 					using T = typename std::decay_t<decltype(*img_ptr)>::value_type;
 
+					if (!py::isinstance<py::array_t<T>>(data))
+					{
+						throw std::invalid_argument("Array must have dtype matching image element type.");
+					}
+					// Validate dimensions
+					if (data.ndim() != 2)
+					{
+						throw std::invalid_argument("Array must be 2-dimensional.");
+					}
+
 					py::array_t<T> typed_array = data.cast<py::array_t<T>>();
 					img_ptr->add_channel(
 						py_img_util::from_py_array(py_img_util::tag::view{}, typed_array, width, height),
@@ -205,9 +215,9 @@ namespace compressed_py
 				{
 					using T = typename std::decay_t<decltype(*img_ptr)>::value_type;
 
-					auto& channel = img_ptr->channel(index);
-					auto channel_ptr = std::shared_ptr<compressed::channel<T>>(&channel);
-					return std::make_shared<dynamic_channel>(channel_ptr);
+					auto& ch = img_ptr->channel(index);
+					auto aliasing_ptr = std::shared_ptr<compressed::channel<T>>(img_ptr, &ch);
+					return std::make_shared<dynamic_channel>(aliasing_ptr);
 				}, base_variant_class::m_ClassVariant
 			);
 		}
@@ -218,9 +228,10 @@ namespace compressed_py
 				{
 					using T = typename std::decay_t<decltype(*img_ptr)>::value_type;
 
-					auto& channel = img_ptr->channel(name);
-					auto ptr = std::shared_ptr<compressed::channel<T>>(&channel);
-					return std::make_shared<dynamic_channel>(ptr);
+					// Here we alias 
+					auto& ch = img_ptr->channel(name);
+					auto aliasing_ptr = std::shared_ptr<compressed::channel<T>>(img_ptr, &ch);
+					return std::make_shared<dynamic_channel>(aliasing_ptr);
 				}, base_variant_class::m_ClassVariant
 			);
 		}
@@ -236,8 +247,8 @@ namespace compressed_py
 
 					for (auto& channel : channels)
 					{
-						auto ptr = std::shared_ptr<compressed::channel<T>>(&channel);
-						out_channels.push_back(std::make_shared<dynamic_channel>(ptr));
+						auto aliasing_ptr = std::shared_ptr<compressed::channel<T>>(img_ptr, &channel);
+						out_channels.push_back(std::make_shared<dynamic_channel>(aliasing_ptr));
 					}
 
 					return out_channels;
@@ -267,6 +278,30 @@ namespace compressed_py
 					return img_ptr->get_channel_offset(channelname);
 				}, base_variant_class::m_ClassVariant
 			);
+		}
+
+		std::vector<std::string> channel_names() const
+		{
+			return std::visit([&](auto&& img_ptr)
+				{
+					return img_ptr->channelnames();
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
+		void channel_names(std::vector<std::string> _channelnames)
+		{
+			std::visit([&](auto&& img_ptr)
+				{
+					img_ptr->channelnames(_channelnames);
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
+		/// Returns the shape of the image as (nchannels, height, width).
+		std::tuple<size_t, size_t, size_t> shape() const noexcept
+		{
+			return std::make_tuple(this->num_channels(), this->height(), this->width());
 		}
 
 		size_t width() const noexcept
@@ -314,7 +349,7 @@ namespace compressed_py
 			);
 		}
 
-		void metadata(const compressed::json_ordered& _metadata) noexcept
+		void metadata(const nlohmann::json& _metadata) noexcept
 		{
 			std::visit([&](auto&& img_ptr)
 				{
@@ -323,7 +358,7 @@ namespace compressed_py
 			);
 		}
 
-		compressed::json_ordered metadata() noexcept
+		nlohmann::json metadata() noexcept
 		{
 			return std::visit([](auto&& img_ptr)
 				{

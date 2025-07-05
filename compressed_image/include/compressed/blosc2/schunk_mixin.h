@@ -220,7 +220,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					{
 						if (this->chunk_bytes(i) != this->chunk_bytes())
 						{
-							throw std::runtime_error(
+							throw std::invalid_argument(
 								std::format(
 									"Error while validating chunk sizes; Expected all chunks to have a size equivalent to {:L} (m_ChunkSize)."
 									" However, chunk {} instead has a chunk size of {:L}. Having a size different from the rest of the chunks"

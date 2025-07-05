@@ -5,6 +5,10 @@
 #include <concepts>
 #include <variant>
 
+#include "Imath/half.h"
+
+#include "npy_half.h"
+
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
@@ -24,7 +28,11 @@ namespace compressed_py
 	template <typename Func>
 	auto dispatch_by_dtype(const py::dtype& dtype, Func&& f)
 	{
-		if (dtype.is(py::dtype::of<float>())) 
+		if (dtype.is(py::dtype::of<Imath::half>()))
+		{
+			return std::invoke(std::forward<Func>(f), Imath::half{});
+		}
+		else if (dtype.is(py::dtype::of<float>())) 
 		{
 			return std::invoke(std::forward<Func>(f), float{});
 		}
@@ -58,9 +66,9 @@ namespace compressed_py
 		}
 		else 
 		{
-			throw std::runtime_error(std::format(
+			throw std::invalid_argument(std::format(
 				"Unsupported dtype: kind='{}', itemsize={}.\n"
-				"Supported types are: np.float32, np.float64, np.uint8, np.int8, "
+				"Supported types are: np.float16, np.float32, np.float64, np.uint8, np.int8, "
 				"np.uint16, np.int16, np.uint32, np.int32.",
 				dtype.kind(), dtype.itemsize()
 			));
@@ -70,6 +78,7 @@ namespace compressed_py
 
 	template <typename T>
 	concept np_bitdepth = 
+		std::is_same_v<T, Imath::half> ||
 		std::is_same_v<T, float> ||
 		std::is_same_v<T, double>   ||
 		std::is_same_v<T, uint8_t>  ||
@@ -82,14 +91,15 @@ namespace compressed_py
 	// variants for our type-erased(ish) classes we expose on the python side.
 	template <template<typename> class Class>
 	using variant_t = std::variant<
-		std::shared_ptr<Class<float>>,		// python equivalent: np.float32
-		std::shared_ptr<Class<double>>,		// python equivalent: np.float64
-		std::shared_ptr<Class<uint8_t>>,	// python equivalent: np.uint8
-		std::shared_ptr<Class<int8_t>>,		// python equivalent: np.int8
-		std::shared_ptr<Class<uint16_t>>,	// python equivalent: np.uint16
-		std::shared_ptr<Class<int16_t>>,	// python equivalent: np.int16
-		std::shared_ptr<Class<uint32_t>>,	// python equivalent: np.uint32
-		std::shared_ptr<Class<int32_t>>		// python equivalent: np.int32
+		std::shared_ptr<Class<Imath::half>>,	// python equivalent: np.float16
+		std::shared_ptr<Class<float>>,			// python equivalent: np.float32
+		std::shared_ptr<Class<double>>,			// python equivalent: np.float64
+		std::shared_ptr<Class<uint8_t>>,		// python equivalent: np.uint8
+		std::shared_ptr<Class<int8_t>>,			// python equivalent: np.int8
+		std::shared_ptr<Class<uint16_t>>,		// python equivalent: np.uint16
+		std::shared_ptr<Class<int16_t>>,		// python equivalent: np.int16
+		std::shared_ptr<Class<uint32_t>>,		// python equivalent: np.uint32
+		std::shared_ptr<Class<int32_t>>			// python equivalent: np.int32
 	>;
 
 
