@@ -21,7 +21,6 @@ COMPRESSED_IMAGE_BUILD_PYTHON = true
 COMPRESSED_IMAGE_EXTENDED_WARNINGS = true
 
 [tool.cibuildwheel]
-build = "cp312-*"
 archs = "auto64"
 manylinux-x86_64-image = "quay.io/pypa/manylinux_2_34_x86_64:latest"
 test-requires = "pytest"
