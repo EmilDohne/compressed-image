@@ -999,14 +999,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				);
 			}
 
-			m_Channels.push_back(compressed::channel(
-				std::span<const T>(data.begin(), data.end()),
-				width,
-				height,
-				compression_codec,
-				compression_level
-			));
-
 			if (name.has_value() && m_ChannelNames.size() == m_Channels.size())
 			{
 				m_ChannelNames.push_back(name.value());
@@ -1015,6 +1007,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				m_ChannelNames.push_back(name.value_or(""));
 			}
+
+			m_Channels.push_back(compressed::channel(
+				std::span<const T>(data.begin(), data.end()),
+				width,
+				height,
+				compression_codec,
+				compression_level
+			));
 		}
 
 		/// \brief Prints statistical information about the image file structure.
