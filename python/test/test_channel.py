@@ -5,7 +5,6 @@ import numpy.typing as npt
 
 import compressed_image as compressed
 
-
 class TestCompressedChannel:
     
     def test_invalid_dtype(self):

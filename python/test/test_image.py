@@ -11,8 +11,7 @@ import numpy.typing as npt
 import compressed_image as compressed
 
 # The base dir to the cpp test images, so we don't have to copy them over to our python test suite.
-_BASE_IMAGE_PATH_ABS = os.path.abspath("../../test/images")
-_BASE_IMAGE_PATH_ABS = os.path.abspath("test/images")
+_BASE_IMAGE_PATH_ABS = os.path.join(os.path.dirname(__file__), "../../test/images")
 
 
 class TestCompressedImage:

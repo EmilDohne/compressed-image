@@ -4,10 +4,11 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "compressed-image"
-version = "0.1.0"
+version = "1.0.0"
+dependencies = ["numpy"]
 
 [tool.scikit-build]
-build-dir = "build/{wheel_tag}"
+build-dir = "build/wheel_generation"
 cmake.version = "CMakeLists.txt"
 wheel.packages = ["python/py_module/compressed_image"]
 wheel.install-dir = "compressed_image"
@@ -15,10 +16,20 @@ sdist.exclude = [".github", "benchmark", "docs", "examples", "test"]
 
 [tool.scikit-build.cmake.define]
 COMPRESSED_DETERMINE_MAIN_PROJECT = false
-COMPRESSED_IMAGE_BUILD_TESTS = false
-COMPRESSED_IMAGE_BUILD_EXAMPLES = false
-COMPRESSED_IMAGE_BUILD_DOCS = false
-COMPRESSED_IMAGE_BUILD_BENCHMARKS = false
-COMPRESSED_IMAGE_BUILD_PYTHON = true
 COMPRESSED_IMAGE_USE_VCPKG = true
+COMPRESSED_IMAGE_BUILD_PYTHON = true
+COMPRESSED_IMAGE_EXTENDED_WARNINGS = true
 
+[tool.cibuildwheel]
+build = "cp312-*"
+archs = "auto64"
+manylinux-x86_64-image = "quay.io/pypa/manylinux_2_34_x86_64:latest"
+test-requires = "pytest"
+test-command = "py -m pytest {project}/python/test"
+
+# Use delvewheel on windows since cibuildhweel by default doesn't do this.
+[tool.cibuildwheel.windows]
+before-build = """
+	if exist build\\wheel_generation rmdir /s /q build\\wheel_generation && pip install delvewheel
+"""
+repair-wheel-command = "delvewheel repair --add-path build/wheel_generation/python/Release --wheel-dir {dest_dir} {wheel}"
