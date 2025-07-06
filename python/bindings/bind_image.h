@@ -20,7 +20,6 @@ namespace compressed_py
             interaction with numpy arrays and efficient memory/storage via lazy compression.
 
         )doc")
-            .def(py::init<>())
             .def(py::init<
                     const py::object&,
                     std::vector<py::array>,
@@ -122,7 +121,7 @@ namespace compressed_py
                 py::arg("height"),
                 py::arg("name") = std::nullopt,
                 py::arg("compression_codec") = compressed::enums::codec::lz4,
-                py::arg("compression_level") = 5,
+                py::arg("compression_level") = 9,
                 R"doc(
                 Add a channel to the image.
             )doc")

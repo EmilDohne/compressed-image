@@ -102,16 +102,16 @@ class Channel:
         ...
 
     @property
+    def shape(self) -> tuple[int, int]:
+        ...   
+
+    @property
     def width(self) -> int:
         ...
 
     @property
     def height(self) -> int:
         ...
-
-    @property
-    def shape(self) -> tuple[int, int]:
-        ...   
 
     def block_size(self) -> int:
         ...
@@ -229,7 +229,7 @@ class Image:
         height: typing.SupportsInt, 
         name: typing.Optional[str] = None, 
         compression_codec: Codec = Codec.lz4, 
-        compression_level: typing.SupportsInt = 5
+        compression_level: typing.SupportsInt = 9
         ) -> None:
         ...
 
@@ -251,6 +251,10 @@ class Image:
         ...
 
     @property
+    def shape(self) -> int:
+        ...  
+
+    @property
     def width(self) -> int:
         ...
 
@@ -262,17 +266,17 @@ class Image:
     def num_channels(self) -> int:
         ...
 
-    @property
-    def channel_names(self) -> typing.List[str]:
+    def get_channel_names(self) -> typing.List[str]:
         ...
 
-    @channel_names.setter
-    def channel_names(self, names: typing.List[str]):
+    def set_channel_names(self, names: typing.List[str]):
         ...
 
-    @property
-    def shape(self) -> int:
-        ...  
+    def get_metadata(self) -> dict:
+        ...
+    
+    def set_metadata(self, _metadata: dict) -> None:
+        ...
 
     def chunk_size(self) -> int:
         ...
@@ -285,7 +289,6 @@ class Image:
         
     def get_decompressed(self) -> list[numpy.ndarray]:
         ...
-
 
     def print_statistics(self) -> None:
         ...
