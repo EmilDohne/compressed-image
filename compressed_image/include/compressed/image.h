@@ -303,6 +303,33 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 				m_ChannelNames = {};
 			}
+
+			size_t counter = 0;
+			for (auto& channel : channels)
+			{
+				if (channel.width() != width)
+				{
+					throw std::invalid_argument(
+						std::format(
+							"Invalid channel passed to compressed::image constructor at index {}. It's width does not"
+							" equal {} but instead is {}",
+							counter, width, channel.width()
+						)
+					);
+				}
+				if (channel.height() != height)
+				{
+					throw std::invalid_argument(
+						std::format(
+							"Invalid channel passed to compressed::image constructor at index {}. It's height does not"
+							" equal {} but instead is {}",
+							counter, height, channel.height()
+						)
+					);
+				}
+
+				++counter;
+			}
 			m_Channels = std::move(channels);
 		}
 
