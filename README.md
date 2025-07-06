@@ -55,10 +55,10 @@ std::vector<uint8_t> channel_r_decompressed = channel_r.get_decompressed();
 
 ### python
 ```py    
-import compressed_image as cimg
+import compressed_image as compressed
 
-image = cimg.Image.read("/some/file/path")
-channel_r: cimg.Channel = image[0]
+image = compressed.Image.read(np.float16, "/some/file/path", subimage=0)
+channel_r: compressed.Channel = image[0]
 
 # Iterate over the chunks in the channel, this is more memory efficient than decompressing all the data
 # at once
