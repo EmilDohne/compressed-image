@@ -17,7 +17,7 @@ _BASE_IMAGE_PATH_ABS = os.path.join(os.path.dirname(__file__), "../../test/image
 class TestCompressedImage:
 
     def test_modify_metadata(self):
-        image = compressed.Image()
+        image = compressed.Image(np.uint8, [], 64, 64)
         metadata = {"my_key": "my_val"}
         image.set_metadata(metadata)
 
