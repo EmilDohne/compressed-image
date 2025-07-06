@@ -9,7 +9,7 @@ This documentation is aimed at developers trying to modify, extend or fix the py
 
 The python bindings are built by CMake using pybind11. To enable building of the python bindings make sure to specify the `-DCOMPRESSED_IMAGE_BUILD_PYTHON=ON` flag. 
 
-If you additionally want to build the dependencies (openimageio) you should also specify the `-DCOMPRESSED_IMAGE_USE_VCPKG=ON` flag.
+If you additionally want to build the dependencies (openimageio) you should also specify the `-DCOMPRESSED_IMAGE_USE_VCPKG=ON` flag. Otherwise it is your responsibility to provide a working version of these dependencies visible through `find_package`
 
 ### Build steps
 
@@ -22,7 +22,9 @@ If you additionally want to build the dependencies (openimageio) you should also
 
 `cmake --build build`
 
-You should now be left with a folder tree roughly as follows:
+This takes care of configuring the cmake project (the first command) and then building the output dir `build`
+
+Once this is done, you should now be left with a folder tree roughly as follows:
 
 ```
 compressed-image/
@@ -34,11 +36,10 @@ compressed-image/
 
 ## Testing the python bindings
 
-Testing of the python bindings is done via the [pytest](https://pypi.org/project/pytest/) library, if you followed the build steps above you should have a `compressed_image.cpxxx-xxx_xxx.pyd/so/dylib` in the build directory. To then test these you should go to the `python/test` directory and execute pytest:
+Testing of the python bindings is done via [pytest](https://pypi.org/project/pytest/), if you followed the build steps above you should have a `compressed_image.cpxxx-xxx_xxx.pyd/so/dylib` in the build directory. To then test these you should go to the `python/test` directory and execute pytest:
 
 > [!NOTE] 
-> If you are not testing via cibuildwheel you will likely have to copy the .pyd file as well as any `.dll`/`.so`/`.dylib`
-> files into the `test/` directory so pytest can import your built module
+> If you are not testing via cibuildwheel (i.e. following the previous and this step) you will likely have to copy the .pyd file as well as any `.dll`/`.so`/`.dylib` files into the `test/` directory so pytest can import your built module. This step has to be repeated whenever you rebuild
 
 - `cd <dir/to/compressed-image>/python/test`
 - `pytest`
@@ -49,7 +50,7 @@ Whenever you change something you may either need to run the build commands abov
 
 ## Building the wheel
 
-Sometimes it is helpful to build the wheel locally when either trying to see how the package would be installed for users.
+Sometimes it is helpful to build the wheel locally when trying to see how the package would be installed for users.
 
 For building wheels the process is quite similar to the build but even easier!
 
@@ -59,9 +60,9 @@ For building wheels the process is quite similar to the build but even easier!
 
 `cibuildwheel`
 
-Now you should see a build being kicked off in the background, this will likely take some time especially since the dependencies need to be downloaded and built, this could take up to 10-15 minutes so please stand by!
+Now you should see a build being kicked off, this will likely take some time especially since the dependencies need to be downloaded and built, this could take up to 10-15 minutes so please stand by!
 
-Once the build is done you should have a `wheelhouse` folder that was created in the root of the project. In there there should be a `compressed_image-x.x.x-cpxxx-cpxxx-xxx_xxxxx.whl` which is your wheel (the x's denote variables)
+Once the build is done, you should have a `wheelhouse` folder that was created in the root of the project. In there there should be a `compressed_image-x.x.x-cpxxx-cpxxx-xxx_xxxxx.whl` which is your wheel (the x's denote variables)
 
 > [!NOTE]
 > You may notice this kicking off the wheel building for all supported Python versions. To limit this and build for a specific version, you can set the CIBW_BUILD environment variable:
@@ -73,6 +74,14 @@ Once the build is done you should have a `wheelhouse` folder that was created in
 > - export CIBW_BUILD="cp312-*"
 >
 > Where `cp312` would be replaced by the version you wish to build for such as `cp313`
+
+### Installing the wheel
+
+For installing the built wheel you can use pip or your preferred package manager by running
+
+`py -m pip install compressed_image-x.x.x-cpxxx-cpxxx-xxx_xxxxx.whl`
+
+This ideally should be done in a venv to isolate the built dependency.
 
 ## Building the sdist
 

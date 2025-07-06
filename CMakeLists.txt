@@ -4,8 +4,14 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set (CMAKE_CXX_STANDARD 20)
 project (CompressedImageBuild)
 
+# If we are compiling as the main project we automatically turn on all the build options.
+# This can be circumvented by passing "-DCOMPRESSED_DETERMINE_MAIN_PROJECT=OFF"
 set(MAIN_PROJECT OFF)
-option (COMPRESSED_DETERMINE_MAIN_PROJECT ON)
+option (
+    COMPRESSED_DETERMINE_MAIN_PROJECT 
+    "Whether to automatically determine if we are building this module as main project" 
+    ON
+)
 if (CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR AND COMPRESSED_DETERMINE_MAIN_PROJECT)
     message("Compiling compressed-image as main project")
     set(MAIN_PROJECT ON)
@@ -23,15 +29,15 @@ if (MAIN_PROJECT)
     set(COMPRESSED_IMAGE_EXTENDED_WARNINGS ON)
 endif()
 
-
-option(_COMPRESSED_IMAGE_SANITIZE_FLAGS OFF)
 option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." OFF)
-option(COMPRESSED_IMAGE_EXTENDED_WARNINGS OFF)
+option(COMPRESSED_IMAGE_EXTENDED_WARNINGS "Whether to compile with extended warnings (-Wextra, -Werror etc.)" OFF)
 option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
 option(COMPRESSED_IMAGE_BUILD_EXAMPLES OFF)
 option(COMPRESSED_IMAGE_BUILD_DOCS OFF)
 option(COMPRESSED_IMAGE_BUILD_BENCHMARKS OFF)
 option(COMPRESSED_IMAGE_BUILD_PYTHON OFF)
+
+option(_COMPRESSED_IMAGE_SANITIZE_FLAGS "Internal CI flag for enabling sanitizer builds" OFF)
 
 
 # Add thirdparty libraries
@@ -49,10 +55,11 @@ add_subdirectory (thirdparty/c-blosc2)
 add_library(blosc2_include INTERFACE)
 target_include_directories(blosc2_include SYSTEM INTERFACE thirdparty/c-blosc2/include)
 
-# JSON module for parsing metadata
+# JSON module for parsing/storing metadata
 add_subdirectory(thirdparty/json)
 
-# Include the local vcpkg toolchain, if specified
+# Include the local vcpkg toolchain, if requested, otherwise it is up to the user
+# to provide a valid OpenImageIO library (that can be found via find_package)
 if (COMPRESSED_IMAGE_USE_VCPKG)
     include("${PROJECT_SOURCE_DIR}/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake")
 endif()
