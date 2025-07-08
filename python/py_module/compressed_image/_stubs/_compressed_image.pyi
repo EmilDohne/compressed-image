@@ -222,6 +222,10 @@ class Image:
         ) -> Image:
         ...
 
+    @staticmethod
+    def dtype_from_file(filepath: str) -> numpy.dtype:
+        ...
+
     def add_channel(
         self, 
         data: numpy.ndarray, 
@@ -229,8 +233,13 @@ class Image:
         height: typing.SupportsInt, 
         name: typing.Optional[str] = None, 
         compression_codec: Codec = Codec.lz4, 
-        compression_level: typing.SupportsInt = 9
+        compression_level: typing.SupportsInt = 9,
+        block_size: typing.SupportsInt = 32_768, 
+        chunk_size: typing.SupportsInt = 4_194_304
         ) -> None:
+        ...
+
+    def remove_channel(self, name_or_index: typing.Union[str, int]) -> None:
         ...
 
     def __getitem__(self, key: typing.Union[str, int]) -> Channel:
@@ -275,7 +284,7 @@ class Image:
     def get_metadata(self) -> dict:
         ...
     
-    def set_metadata(self, _metadata: dict) -> None:
+    def set_metadata(self, metadata: dict) -> None:
         ...
 
     def chunk_size(self) -> int:

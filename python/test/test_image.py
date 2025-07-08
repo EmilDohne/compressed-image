@@ -41,6 +41,12 @@ class TestCompressedImage:
         image.set_channel_names(chnames)
         assert image.get_channel_names() == chnames
 
+    def test_dtype_from_file(self):
+        img_path = os.path.join(_BASE_IMAGE_PATH_ABS, "multilayer_1920x1080.exr")
+        dtype = compressed.Image.dtype_from_file(img_path)
+
+        assert dtype == np.dtype(np.float16)
+
 
 # Parametrize over all supported dtypes by compressed.Image
 @pytest.mark.parametrize("dtype", 
@@ -192,3 +198,15 @@ class TestCompressedImageParametrized:
         # Invalid np array height
         with pytest.raises(ValueError):
             image.add_channel(np.full((32, 64), 90, np.bool), 64, 64)
+
+    def test_remove_channel(self, dtype: npt.DTypeLike):
+        img_path = os.path.join(_BASE_IMAGE_PATH_ABS, "multilayer_1920x1080.exr")
+        image = compressed.Image.read(np.float16, img_path, subimage = 0, channel_names = ["R", "G", "B", "A"])
+
+        image.remove_channel("R")
+        # Since the indices shift this is now channel B
+        image.remove_channel(1)
+
+        assert len(image) == 2
+        assert image.get_channel_names() == ["G", "A"]
+        assert image.num_channels() == 2

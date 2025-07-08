@@ -4,15 +4,18 @@
 #include <variant>
 
 #include "util/variant_t.h"
+#include "util/dtype_util.h"
 #include "compressed/image.h"
 #include "dynamic_channel.h"
 
+#include <OpenImageIO/imageio.h>
 #include "pybind11_json/pybind11_json.hpp"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
 #include <py_img_util/image.h>
+
 
 namespace py = pybind11;
 
@@ -155,13 +158,26 @@ namespace compressed_py
 				});
 		}
 
+		static py::dtype dtype_from_file(std::string filepath)
+		{
+			auto input_ptr = OIIO::ImageInput::open(filepath);
+			if (!input_ptr)
+			{
+				throw std::invalid_argument(std::format("File {} does not exist on disk", filepath));
+			}
+
+			return from_type_desc(input_ptr->spec().format);
+		}
+
 		void add_channel(
 			py::array data,
 			size_t width,
 			size_t height,
 			std::optional<std::string> name = std::nullopt,
 			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
-			uint8_t compression_level = 5
+			uint8_t compression_level = 9,
+			size_t block_size = compressed::s_default_blocksize,
+            size_t chunk_size = compressed::s_default_chunksize
 		)
 		{
 			std::visit([&](auto&& img_ptr)
@@ -179,14 +195,61 @@ namespace compressed_py
 					}
 
 					py::array_t<T> typed_array = data.cast<py::array_t<T>>();
-					img_ptr->add_channel(
+					auto channel = compressed::channel<T>(
 						py_img_util::from_py_array(py_img_util::tag::view{}, typed_array, width, height),
 						width,
 						height,
-						name,
 						compression_codec,
-						compression_level
+						compression_level,
+						block_size,
+						chunk_size
 					);
+					img_ptr->add_channel(std::move(channel), name);
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
+		void remove_channel(std::variant<size_t, std::string> index_or_name)
+		{
+			std::visit([&](auto&& img_ptr)
+				{
+
+					if (std::holds_alternative<size_t>(index_or_name))
+					{
+						auto idx = std::get<size_t>(index_or_name);
+						if (idx > img_ptr->num_channels())
+						{
+							throw std::invalid_argument(
+								std::format(
+									"Unable to remove channel with index {} as it does not exist on the image.",
+									idx
+								)
+							);
+						}
+
+						auto& channels = img_ptr->channels();
+						channels.erase(channels.begin() + idx);
+
+						// Update the channel names as well
+						auto channel_names = img_ptr->channelnames();
+						channel_names.erase(channel_names.begin() + idx);
+						img_ptr->channelnames(std::move(channel_names));
+					}
+					else
+					{
+						auto name = std::get<std::string>(index_or_name);
+						// This will throw if the name doesn't exist
+						auto idx = img_ptr->get_channel_offset(name);
+
+						auto& channels = img_ptr->channels();
+						channels.erase(channels.begin() + idx);
+
+						// Update the channel names as well
+						auto channel_names = img_ptr->channelnames();
+						channel_names.erase(channel_names.begin() + idx);
+						img_ptr->channelnames(std::move(channel_names));
+					}
+
 				}, base_variant_class::m_ClassVariant
 			);
 		}

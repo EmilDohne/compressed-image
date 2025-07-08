@@ -23,7 +23,6 @@ and conversion to/from numpy arrays.
 Supports the following np.dtypes as fill values:
     - np.float16
     - np.float32
-    - np.float64
     - np.uint8
     - np.int8
     - np.uint16
