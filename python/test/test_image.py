@@ -45,7 +45,30 @@ class TestCompressedImage:
         img_path = os.path.join(_BASE_IMAGE_PATH_ABS, "multilayer_1920x1080.exr")
         dtype = compressed.Image.dtype_from_file(img_path)
 
-        assert dtype == np.dtype(np.float16)
+        assert dtype == np.dtype(np.float32)
+        
+    def test_dtypes_from_file_multi_dtype(self):
+        img_path = os.path.join(_BASE_IMAGE_PATH_ABS, "multilayer_1920x1080.exr")
+        dtypes = compressed.Image.dtypes_from_file(img_path)
+
+        print(dtypes)
+        assert dtypes == [
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # RGBA F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # GI.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # SSS.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # atmosphere.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # background.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # caustics.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # cryptomatte.RGBA F16
+            np.dtype(np.float32), np.dtype(np.float32), np.dtype(np.float32), np.dtype(np.float32), # cryptomatte00.RGBA F32
+            np.dtype(np.float32), np.dtype(np.float32), np.dtype(np.float32), np.dtype(np.float32), # cryptomatte01.RGBA F32
+            np.dtype(np.float32), np.dtype(np.float32), np.dtype(np.float32), np.dtype(np.float32), # cryptomatte02.RGBA F32
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # lighting.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # reflect.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # refract.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # selfIllum.RGB F16
+            np.dtype(np.float16), np.dtype(np.float16), np.dtype(np.float16), # specular.RGB F16          
+        ]
 
 
 # Parametrize over all supported dtypes by compressed.Image
@@ -209,4 +232,4 @@ class TestCompressedImageParametrized:
 
         assert len(image) == 2
         assert image.get_channel_names() == ["G", "A"]
-        assert image.num_channels() == 2
+        assert image.num_channels == 2

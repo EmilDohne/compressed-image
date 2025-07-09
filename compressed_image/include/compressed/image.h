@@ -971,11 +971,16 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				);
 			}
 
-			m_Channels.push_back(std::move(_channel));
-			if (m_ChannelNames.size() > 0)
+			if (name.has_value() && m_ChannelNames.size() == m_Channels.size())
+			{
+				m_ChannelNames.push_back(name.value());
+			}
+			else if (m_ChannelNames.size() > 0)
 			{
 				m_ChannelNames.push_back(name.value_or(""));
 			}
+
+			m_Channels.push_back(std::move(_channel));
 		}
 
 		/// Adds a channel to the image.

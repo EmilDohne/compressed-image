@@ -169,6 +169,29 @@ namespace compressed_py
 			return from_type_desc(input_ptr->spec().format);
 		}
 
+		// E.g. exr files may have multiple subtypes per-image, this will return all of those dtypes, the indices can be
+		// used 
+		static std::vector<py::dtype> dtypes_from_file(std::string filepath)
+		{
+			auto input_ptr = OIIO::ImageInput::open(filepath);
+			if (!input_ptr)
+			{
+				throw std::invalid_argument(std::format("File {} does not exist on disk", filepath));
+			}
+
+			if (input_ptr->spec().channelformats.size() > 0 && input_ptr->spec().nchannels > 0)
+			{
+				auto formats = input_ptr->spec().channelformats;
+				std::vector<py::dtype> out_formats;
+				for (auto format : formats)
+				{
+					out_formats.push_back(from_type_desc(format));
+				}
+				return out_formats;
+			}
+			return { from_type_desc(input_ptr->spec().format) };
+		}
+
 		void add_channel(
 			py::array data,
 			size_t width,
@@ -412,7 +435,7 @@ namespace compressed_py
 			);
 		}
 
-		void metadata(const nlohmann::json& _metadata) noexcept
+		void set_metadata(const nlohmann::json& _metadata) noexcept
 		{
 			std::visit([&](auto&& img_ptr)
 				{
@@ -421,7 +444,7 @@ namespace compressed_py
 			);
 		}
 
-		nlohmann::json metadata() noexcept
+		nlohmann::json get_metadata() noexcept
 		{
 			return std::visit([](auto&& img_ptr)
 				{

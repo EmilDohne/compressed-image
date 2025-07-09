@@ -270,12 +270,31 @@ with the image metadata.
             )doc")
 
             .def_static("dtype_from_file", &compressed_py::dynamic_image::dtype_from_file,
-                py::ary("filepath")
+                py::arg("filepath"),
                 R"doc(
 Extract the dtype from a given image file without having to read the whole image. This is the 
 recommended method for extracting the files' dtype from an image.
 
 :returns: The dtype of the image at the given filepath.
+            )doc")
+
+        .def_static("dtypes_from_file", &compressed_py::dynamic_image::dtypes_from_file,
+        py::arg("filepath"),
+        R"doc(
+Extract all the dtypes from a given image file without having to read the whole image. This is the 
+recommended method for extracting the files' dtype from an image. This will either extract a list of all dtypes
+of the image with each entry corresponding to the a channel or a list of a single value with the dtype for
+the whole image if the image does not have per-channel dtypes.
+
+So in an image with these channels
+
+["R", "G", "B", "A", "Z"]
+
+it might be like this:
+
+[np.float16, np.float16, np.float16, np.float16, np.float32]
+
+:returns: The dtypes of the image at the given filepath.
             )doc")
 
             .def("add_channel", &compressed_py::dynamic_image::add_channel,
@@ -435,7 +454,8 @@ Example output:
 Retrieve the channel names, these aren't guaranteed to be populated if e.g. the image doesn't have any channel names
 assigned to them on creation. This is always guaranteed however to be either empty or the size of self.num_channels
             )doc")
-            .def("set_channel_names", py::overload_cast<std::vector<std::string>>(&compressed_py::dynamic_image::channel_names)R"doc(
+            .def("set_channel_names", py::overload_cast<std::vector<std::string>>(&compressed_py::dynamic_image::channel_names), 
+                R"doc(
 Set the channel names, the names of these may be whatever you wish the to be, the only restriction is that the length of this
 list must be == len(channel).
             )doc")
@@ -450,23 +470,17 @@ Update the number of threads used internally for compression/decompression. By d
                 R"doc(
 Get the chunk size used for compression, this is the same across all channels.
             )doc")
-            .def("set_metadata", 
-                py::overload_cast<const nlohmann::json&>(&compressed_py::dynamic_image::metadata), py::arg("metadata"),
-                R"doc(
+            .def("set_metadata", &compressed_py::dynamic_image::set_metadata, py::arg("metadata"), R"doc(
 Set the metadata on the image, this may be any arbitrary dict and it is entirely up to you to manage this metadata/interpret it.
 This may for example encode color space information.
 
 :param metadata: The metadata to set on the image.
             )doc"
             )
-            .def("get_metadata",
-			    py::overload_cast<>(&compressed_py::dynamic_image::metadata,
-                R"doc(
+            .def("get_metadata", &compressed_py::dynamic_image::get_metadata, R"doc(
 Retrieve the metadata stored on the image. If the image was created via one of the `read()` methods this will be populated with 
 the image metadata which will store additional information.
-            )doc"
-                )
-            );
+            )doc");
     }
 
 } // compressed_py
