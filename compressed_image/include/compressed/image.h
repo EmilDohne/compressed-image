@@ -1572,7 +1572,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				{
 					schunks.push_back(blosc2::schunk<T>(block_size, chunk_size_aligned));
 					contexts.push_back(blosc2::create_compression_context<T>(
-						std::thread::hardware_concurrency() / 2,
+						std::thread::hardware_concurrency(),
 						compression_codec,
 						comp_level_adjusted,
 						block_size

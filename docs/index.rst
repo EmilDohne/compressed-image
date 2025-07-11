@@ -102,6 +102,7 @@ Contents
    :maxdepth: 2
 
    code-ref/main.rst
+   concepts/compression.rst
    benchmarks.rst
   
 
