@@ -103,6 +103,7 @@ jobs:
       shell: bash
 
     - name: Upload logs
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: vcpkg-bootstrap.log

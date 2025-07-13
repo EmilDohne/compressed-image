@@ -42,5 +42,5 @@ test-command = "py -m pytest {project}/python/test"
 [tool.cibuildwheel.windows]
 # This is a workaround for not being able to use {wheel_tag} in cibuildhweel tool step so we reuse the
 # same dir for builds which we clear in-between builds.
-before-build = "if exist build\\wheel_generation rmdir /s /q build\\wheel_generation && pip install delvewheel"
+before-build = "pip install delvewheel"
 repair-wheel-command = "delvewheel repair --add-path build/wheel_generation/python/Release --wheel-dir {dest_dir} {wheel}"
