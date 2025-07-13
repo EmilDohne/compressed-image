@@ -76,7 +76,6 @@ jobs:
     - name: Setup macos dependencies
       if: matrix.os_dist.os == 'macos-latest'
       run: |
-          brew install ninja
           brew install autoconf
           brew install libtool
           brew install automake
@@ -90,8 +89,8 @@ jobs:
 
     - uses: pypa/cibuildwheel@v2.23.1
       env:
-        VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
-        VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
+        # VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
+        # VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
         CC: gcc-13
         CXX: g++-13
         CIBW_ARCHS: auto64
