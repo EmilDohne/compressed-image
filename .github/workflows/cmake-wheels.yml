@@ -36,6 +36,10 @@ jobs:
 
 
   build_wheels:
+    permissions:
+      actions: read
+      contents: read
+
     name: Wheels on ${{ matrix.os_dist.os }}-${{ matrix.os_dist.dist }}
     runs-on: ${{ matrix.os_dist.os }}
     strategy:
