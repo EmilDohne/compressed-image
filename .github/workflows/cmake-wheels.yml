@@ -101,14 +101,7 @@ jobs:
     - name: Verify clean directory
       run: git diff --exit-code
       shell: bash
-
-    - name: Upload logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: vcpkg-bootstrap.log
-        path: /project/build/wheel_generation/vcpkg-bootstrap.log
-
+      
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
