@@ -36,9 +36,9 @@ jobs:
 
 
   build_wheels:
-    # permissions:
-    #   actions: read
-    #   contents: read
+    permissions:
+      actions: read
+      contents: read
 
     name: Wheels on ${{ matrix.os_dist.os }}-${{ matrix.os_dist.dist }}
     runs-on: ${{ matrix.os_dist.os }}
@@ -81,16 +81,16 @@ jobs:
           brew install automake
       
 
-    # - name: Restore vcpkg cache
-    #   id: vcpkg-cache
-    #   uses: TAServers/vcpkg-cache@v3
-    #   with:
-    #     token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Restore vcpkg cache
+      id: vcpkg-cache
+      uses: TAServers/vcpkg-cache@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - uses: pypa/cibuildwheel@v2.23.1
       env:
-        # VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
-        # VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
+        VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
+        VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
         CC: gcc-13
         CXX: g++-13
         CIBW_ARCHS: auto64
