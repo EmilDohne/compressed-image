@@ -46,23 +46,23 @@ jobs:
       fail-fast: false
       matrix:
          os_dist: [
-          {os: ubuntu-latest, dist: cp38-manylinux_x86_64},
-          {os: ubuntu-latest, dist: cp39-manylinux_x86_64},
-          {os: ubuntu-latest, dist: cp310-manylinux_x86_64},
-          {os: ubuntu-latest, dist: cp311-manylinux_x86_64},
-          {os: ubuntu-latest, dist: cp312-manylinux_x86_64},
+          # {os: ubuntu-latest, dist: cp38-manylinux_x86_64},
+          # {os: ubuntu-latest, dist: cp39-manylinux_x86_64},
+          # {os: ubuntu-latest, dist: cp310-manylinux_x86_64},
+          # {os: ubuntu-latest, dist: cp311-manylinux_x86_64},
+          # {os: ubuntu-latest, dist: cp312-manylinux_x86_64},
           {os: ubuntu-latest, dist: cp313-manylinux_x86_64},
           
-          {os: windows-latest, dist: cp38-win_amd64},
-          {os: windows-latest, dist: cp39-win_amd64},
-          {os: windows-latest, dist: cp310-win_amd64},
-          {os: windows-latest, dist: cp311-win_amd64},
-          {os: windows-latest, dist: cp312-win_amd64},
+          # {os: windows-latest, dist: cp38-win_amd64},
+          # {os: windows-latest, dist: cp39-win_amd64},
+          # {os: windows-latest, dist: cp310-win_amd64},
+          # {os: windows-latest, dist: cp311-win_amd64},
+          # {os: windows-latest, dist: cp312-win_amd64},
           {os: windows-latest, dist: cp313-win_amd64},
 
-          {os: macos-latest, dist: cp310-macosx_arm64},
-          {os: macos-latest, dist: cp311-macosx_arm64},
-          {os: macos-latest, dist: cp312-macosx_arm64},
+          # {os: macos-latest, dist: cp310-macosx_arm64},
+          # {os: macos-latest, dist: cp311-macosx_arm64},
+          # {os: macos-latest, dist: cp312-macosx_arm64},
           {os: macos-latest, dist: cp313-macosx_arm64}
           ]
 
@@ -101,6 +101,13 @@ jobs:
     - name: Verify clean directory
       run: git diff --exit-code
       shell: bash
+
+    - name: Upload logs
+      uses: actions/upload-artifact@v4
+      if: ${{ matrix.os_dist.os }} == "ubuntu-latest"
+      with:
+        name: vcpkg-bootstrap.log
+        path: /project/build/wheel_generation/vcpkg-bootstrap.log
 
     - name: Upload wheels
       uses: actions/upload-artifact@v4

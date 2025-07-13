@@ -338,7 +338,6 @@ namespace compressed_py
 		{
 			return std::visit([](auto&& ch_ptr) -> py::array
 				{
-					using T = typename std::decay_t<decltype(*ch_ptr)>::value_type;
 					auto decompressed = ch_ptr->get_decompressed();
 
 					// This will handle converting it into a 2d numpy array.
