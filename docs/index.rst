@@ -18,7 +18,7 @@ allowing for very memory-efficient representations of these. This library acts a
 in-memory and reading them from disk on-demand. 
 
 It trades a bit of performance for significantly lower memory usage. For more detailed
-information please have a look at the benchmark section :ref:`cimg_benchmarks`
+information please have a look at the benchmark section :ref:`benchmarks`
 
 It is written entirely using C++20 while also providing pre-built python binaries that are pip-installable.
 

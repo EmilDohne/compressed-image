@@ -56,7 +56,6 @@ namespace compressed_py
                 desc.c_str()
             )
         );
-        return py::dtype::of<double>();
     }
 
 } // compressed_py

@@ -3,6 +3,9 @@
 
 .. _benchmarks:
 
+benchmarks
+#######################
+
 As the ``compressed-image`` library is intended for high-performance computing, the performance and memory usage is one of
 the foremost concerns.
 
@@ -16,11 +19,13 @@ Each of the benchmarks were repeated 5 times and verified on two different machi
 the following machine was used:
 
 CPU: AMD Ryzen 9950x
+
 RAM: 96GB DDR4 3200MHz
+
 Drive: Samsung 980 1TB NVMe
 
-In-memory compression
-#######################
+Graphs
+*******************
 
 Below you can see some graphs comparing both the execution time and average memory usage comparing ``compressed-image``
 and `OpenImageIO <https://github.com/AcademySoftwareFoundation/OpenImageIO>`_ during read of files. 
@@ -29,13 +34,13 @@ As can be seen, while speed is largely equal, if not slightly favoring the ``com
 usage during the read is significantly lower. This allows much larger images to be pulled into memory at once at very
 comparable performance.
 
-.. figure:: images/bench/oiio_vs_compressed.png
-	A graph showing the relationship of decoding speed using OpenImageIO vs compressed::image showing roughly
-	equal performance
+.. image:: images/bench/oiio_vs_compressed.png
+	:alt: A graph showing the relationship of decoding speed using OpenImageIO vs compressed::image showing roughly
+	      equal performance
 
-.. figure:: images/bench/oiio_vs_compressed_mem_usage.png
-	A graph showing the relationship of memory usage during read using OpenImageIO vs compressed::image showing
-	significantly lower usage with compressed::image
+.. image:: images/bench/oiio_vs_compressed_mem_usage.png
+	:alt: A graph showing the relationship of memory usage during read using OpenImageIO vs compressed::image showing
+		  significantly lower usage with compressed::image
 
 
 These memory savings can largely be attributed to the chunking of data, only ever loading a slice of an image into memory
@@ -43,11 +48,8 @@ while compressing the data as we go. This is also the primary reason why the rea
 ``OpenImageIO``. **Compressing data on the fly is cheaper than having to allocate all of it.** In fact, the read() methods
 of ``compressed-image`` use OIIO under the hood.
 
-.. figure:: images/chunked_image.jpg
-	:scale: 50 %
-	:alt: An image showing the chunking process of an image.
-
-	Illustration of how an image may be chunked in memory, being split into chunks of discrete scanlines.
+.. image:: images/chunked_image.jpg
+	:alt: Illustration of how an image may be chunked in memory, being split into chunks of discrete scanlines.
 
 
 Where's the catch?
@@ -59,15 +61,15 @@ While read (and in the future write) performance is largely similar as it is mem
 the images later does invoke the cost of de- and re-compressing the data which you would not have to pay if you had the same
 data in memory as an uncompressed buffer.
 
-.. figure:: images/bench/oiio_vs_compressed_modification.png
-	A graph showing the relationship of modification speed using OpenImageIO vs compressed::image showing significantly
-	slower speeds modifying with compressed::image
+.. image:: images/bench/oiio_vs_compressed_modification.png
+	:alt: A graph showing the relationship of modification speed using OpenImageIO vs compressed::image showing significantly
+		  slower speeds modifying with compressed::image
 
 However, as before, the memory usage during these operations is still significantly reduced.
 
-.. figure:: images/bench/oiio_vs_compressed_modification_mem_usage.png
-	A graph showing the relationship of memory usage during modification using OpenImageIO vs compressed::image showing
-	significantly lower usage with compressed::image
+.. image:: images/bench/oiio_vs_compressed_modification_mem_usage.png
+	:alt: A graph showing the relationship of memory usage during modification using OpenImageIO vs compressed::image showing
+	      significantly lower usage with compressed::image
 
 
 What can we do?
