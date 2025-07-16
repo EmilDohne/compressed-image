@@ -43,7 +43,7 @@ future):
 - ``zstd``
 	- Unlike the other codecs mentioned here, zstd optimizes for compression ratio, trading off speed. This should be used
 	  when in a heavily memory-constrained environment where performance is less important. You can expect
-	  ~20-100x compression ratios at low-moderate compression/decompression speed.
+	  ~5-10x compression ratios at low-moderate compression/decompression speed.
 
 Blocks and Chunks
 *******************
@@ -51,4 +51,16 @@ Blocks and Chunks
 While going through the ``compressed::image`` and ``compressed::channel`` methods you will often see a mention of **blocks** 
 and **chunks**.
 
-As hinted above, these are small sub-buffers
+As hinted above, these are small sub-buffers in the larger compressed channel. Only the chunks are exposed while the blocks
+are an internal implementation detail allowing for parallelization over blocks within chunks.
+
+Typically, you will not have to tweak either the block or chunk size as it has been tweaked to work well across a variety 
+of images. But as always, measure, don't rely on intuition!
+
+Lossy Compression
+*******************
+
+The ``compressed-image`` api does not currently support lossy compression as the goal is to provide a 1-to-1 interface 
+between the uncompressed and compressed data, allowing for frequent de- and re-compression.
+
+If you feel like a compression codec is missing, please don't hesitate to create an issue on the github page for it.
