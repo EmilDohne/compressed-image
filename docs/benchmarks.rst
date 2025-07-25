@@ -87,5 +87,5 @@ For more information, please refer to: :ref:`compressed_image`.
 
 .. note:: 
 
-	These callbacks will also come to the python API as well as the write functions in future releases.
+	These callbacks will also come to the python api as well as the write functions in future releases.
 

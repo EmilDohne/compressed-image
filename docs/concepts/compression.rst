@@ -3,7 +3,7 @@
 
 .. _in_mem_compression:
 
-In-memory compression
+in-memory compression
 #######################
 
 The ``compressed-image`` project uses lossless in-memory compression to make handling large amounts of data more manageable
@@ -36,7 +36,7 @@ future):
 	- Custom flavor of lz (Lempel-Ziv) based on FastLZ.
 - ``lz4`` 
 	- LZ4 is a compression algorithm optimized for encoding/decoding speed with moderate compression ratios. This is the
-	  default used by the ``compressed-image`` api in most cases (but that is user configurable)
+	  default used by the ``compressed-image`` api (but that is user configurable)
 - ``lz4hc``
 	- This compression codec is an extension of ``lz4`` trying to squeeze more compression out of the data at a lower compression
 	  speed but matching ``lz4`` in decompression speed.

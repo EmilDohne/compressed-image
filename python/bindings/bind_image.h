@@ -73,16 +73,14 @@ the `compression_codec`, `compression_level`, `block_size`, `chunk_size` paramet
                    and should roughly fit into the L1 cache of your CPU for best performance.
                    The blocks are not transparent to the user of the API, the lowest level that
                    can be accessed is `chunks`.
-:param chunk_size: The chunk size used internally in the 3d container, this is the next-highest 
-                   level after blocks. Defaults to 4MB. This value should be chosen to both:
-                   - Be small enough to allow for efficient extraction, since this is the lowest
-                     level we can access just shy of accessing the full channel. If this is too
-                     big you will have to decompress more than you may need to access rendering
-                     the memory savings moot.
-                   - Be big enough to fully saturate all of your cores when divided by block_size.
-                     By default this can easily saturate up to 128 cores.
-                   Similar to the `block_size` parameter this value has been optimized for a variety
-                   of systems so usually shouldnt be touched.
+:param chunk_size: Chunk size used internally (next level after blocks). Defaults to `4 * 1024 * 1024`.
+
+                   This value should be:
+                   
+                   - **Small enough** to allow efficient partial extraction (e.g., for region-of-interest).
+                   - **Large enough** to saturate available cores when divided by `block_size`.
+                   
+                   These defaults are tuned for good performance on a wide range of systems.
             )doc")
             .def_static("read",
                 py::overload_cast<
@@ -131,16 +129,14 @@ with the image metadata.
                    and should roughly fit into the L1 cache of your CPU for best performance.
                    The blocks are not transparent to the user of the API, the lowest level that
                    can be accessed is `chunks`.
-:param chunk_size: The chunk size used internally in the 3d container, this is the next-highest 
-                   level after blocks. Defaults to 4MB. This value should be chosen to both:
-                   - Be small enough to allow for efficient extraction, since this is the lowest
-                     level we can access just shy of accessing the full channel. If this is too
-                     big you will have to decompress more than you may need to access rendering
-                     the memory savings moot.
-                   - Be big enough to fully saturate all of your cores when divided by block_size.
-                     By default this can easily saturate up to 128 cores.
-                   Similar to the `block_size` parameter this value has been optimized for a variety
-                   of systems so usually shouldnt be touched.
+:param chunk_size: Chunk size used internally (next level after blocks). Defaults to `4 * 1024 * 1024`.
+
+                   This value should be:
+                   
+                   - **Small enough** to allow efficient partial extraction (e.g., for region-of-interest).
+                   - **Large enough** to saturate available cores when divided by `block_size`.
+                   
+                   These defaults are tuned for good performance on a wide range of systems.
             )doc")
 
             .def_static("read",
@@ -194,16 +190,14 @@ with the image metadata.
                    and should roughly fit into the L1 cache of your CPU for best performance.
                    The blocks are not transparent to the user of the API, the lowest level that
                    can be accessed is `chunks`.
-:param chunk_size: The chunk size used internally in the 3d container, this is the next-highest 
-                   level after blocks. Defaults to 4MB. This value should be chosen to both:
-                   - Be small enough to allow for efficient extraction, since this is the lowest
-                     level we can access just shy of accessing the full channel. If this is too
-                     big you will have to decompress more than you may need to access rendering
-                     the memory savings moot.
-                   - Be big enough to fully saturate all of your cores when divided by block_size.
-                     By default this can easily saturate up to 128 cores.
-                   Similar to the `block_size` parameter this value has been optimized for a variety
-                   of systems so usually shouldnt be touched.
+:param chunk_size: Chunk size used internally (next level after blocks). Defaults to `4 * 1024 * 1024`.
+
+                   This value should be:
+                   
+                   - **Small enough** to allow efficient partial extraction (e.g., for region-of-interest).
+                   - **Large enough** to saturate available cores when divided by `block_size`.
+                   
+                   These defaults are tuned for good performance on a wide range of systems.
             )doc")
 
             .def_static("read",
@@ -257,16 +251,14 @@ with the image metadata.
                    and should roughly fit into the L1 cache of your CPU for best performance.
                    The blocks are not transparent to the user of the API, the lowest level that
                    can be accessed is `chunks`.
-:param chunk_size: The chunk size used internally in the 3d container, this is the next-highest 
-                   level after blocks. Defaults to 4MB. This value should be chosen to both:
-                   - Be small enough to allow for efficient extraction, since this is the lowest
-                     level we can access just shy of accessing the full channel. If this is too
-                     big you will have to decompress more than you may need to access rendering
-                     the memory savings moot.
-                   - Be big enough to fully saturate all of your cores when divided by block_size.
-                     By default this can easily saturate up to 128 cores.
-                   Similar to the `block_size` parameter this value has been optimized for a variety
-                   of systems so usually shouldnt be touched.
+:param chunk_size: Chunk size used internally (next level after blocks). Defaults to `4 * 1024 * 1024`.
+
+                   This value should be:
+                   
+                   - **Small enough** to allow efficient partial extraction (e.g., for region-of-interest).
+                   - **Large enough** to saturate available cores when divided by `block_size`.
+                   
+                   These defaults are tuned for good performance on a wide range of systems.
             )doc")
 
             .def_static("dtype_from_file", &compressed_py::dynamic_image::dtype_from_file,
@@ -325,16 +317,14 @@ Add a channel to the image from the given uncompressed data. Compresses it and s
                    and should roughly fit into the L1 cache of your CPU for best performance.
                    The blocks are not transparent to the user of the API, the lowest level that
                    can be accessed is `chunks`.
-:param chunk_size: The chunk size used internally in the 3d container, this is the next-highest 
-                   level after blocks. Defaults to 4MB. This value should be chosen to both:
-                   - Be small enough to allow for efficient extraction, since this is the lowest
-                     level we can access just shy of accessing the full channel. If this is too
-                     big you will have to decompress more than you may need to access rendering
-                     the memory savings moot.
-                   - Be big enough to fully saturate all of your cores when divided by block_size.
-                     By default this can easily saturate up to 128 cores.
-                   Similar to the `block_size` parameter this value has been optimized for a variety
-                   of systems so usually shouldnt be touched.
+:param chunk_size: Chunk size used internally (next level after blocks). Defaults to `4 * 1024 * 1024`.
+
+                   This value should be:
+                   
+                   - **Small enough** to allow efficient partial extraction (e.g., for region-of-interest).
+                   - **Large enough** to saturate available cores when divided by `block_size`.
+                   
+                   These defaults are tuned for good performance on a wide range of systems.
             )doc")
 
             .def("remove_channel", &compressed_py::dynamic_image::remove_channel,

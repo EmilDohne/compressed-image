@@ -44,15 +44,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	/// The data is compressed in memory and we store it as part of a blosc2 super-chunk which is essentially a 3d array of 
 	/// super-chunk -> chunk -> block. Where having the block size fit into L1 cache and the Chunk size into L3 cache is desirable
 	/// as each block can be handled by a single cpu core while the chunk fits well within shared L3 memory.
-	/// 
-	/// \tparam _Block_Size 
-	///		The size of the blocks stored inside the chunks, defaults to 32KB which is enough to comfortably fit into the L1 cache
-	///		of most modern CPUs. If you know your cpu can handle larger blocks feel free to up this number.
-	/// 
-	/// \tparam _Chunk_Size 
-	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
-	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
-	///		upped which might give better compression ratios. Must be a multiple of sizeof(T).
 	template <typename T>
 	struct image : public std::ranges::view_interface<image<T>>
 	{

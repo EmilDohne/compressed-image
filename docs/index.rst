@@ -27,8 +27,15 @@ Features
 
 - Storing images as compressed buffers
 - Reading files from disk with low memory usage
-- Modification without having to decompress the entire image
+- Random access decompression without having to decompress the entire image
 - Lazy image/channel representations with extremely low memory footprints
+- Cross-platform support
+- Interoperability with NumPy
+
+When should you use this?
+==========================
+
+
 
 Performance
 ===========
@@ -56,18 +63,18 @@ with the channels
 
     .. code-block:: cpp
 
-        #include <compress/image.h>
+		#include <compress/image.h>
 
-        auto image = compressed::image<uint8_t>::read("/some/file/path");
+		auto image = compressed::image<uint8_t>::read("/some/file/path");
 		auto channel_r = image.channel("R"); // could also get it via image.channel(0)
 
 		// Iterate over the chunks in the channel, this will decompress the chunk and recompress it on the fly.
 		for (auto chunk_r : channel_r)
 		{
 			std::for_each(std::execution::par_unseq, chunk_r.begin(), chunk_r.end(), [](auto& pixel)
-				{
-					// perform some computation on the chunk in parallel
-				});
+			{
+				// perform some computation on the chunk in parallel
+			});
 		}
 
 		// Otherwise you can also get the image data directly as a full channel. Although this is less memory efficient
@@ -77,7 +84,7 @@ with the channels
 
     .. code-block:: python
             
-        import compressed_image as cimg
+		import compressed_image as cimg
 
 		image = cimg.Image.read("/some/file/path")
 		channel_r: cimg.Channel = image[0]
@@ -103,11 +110,14 @@ Contents
 
    code-ref/main.rst
    concepts/compression.rst
+   developer/main.rst
+   examples/main.rst
    benchmarks.rst
   
 
 
 :ref:`genindex`
+
 License
 =======
 
