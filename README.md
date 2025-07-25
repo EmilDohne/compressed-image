@@ -11,14 +11,33 @@ It is written entirely using C++20 while also providing pre-built python binarie
 
 ## Features
 
-- Storing images as losslessly compressed buffers
-- Reading files from disk with low memory usage
-- Modification without having to decompress the entire image
+- Storing images as compressed buffers
+- Support for multiple compressions algorithms such as `lz4`, `zstd`, `blosclz` etc.
+- Reading files from disk in compressed chunks for low memory usage
+- Random access decompression without having to decompress the entire image
 - Lazy image/channel representations with extremely low memory footprints
+- Cross-platform support
+- Interoperability with NumPy
+
+
+## When should you use this?
+
+This library is for you if you want to optimize memory usage in your application and still work 
+efficiently with image data. It's especially useful when:
+
+- You need to keep many images in memory at once but don't want to pay the full memory cost.
+- You're working with high-resolution images or large datasets and want to avoid I/O bottlenecks.
+- You want fast, random access to image chunks without having to decompress the entire image up front.
+- You're building tools, pipelines, or applications that process images frequently but can't afford the memory footprint of uncompressed data.
+- You're using Python or C++ and want seamless, cross-language support without changing your workflow too much.
+
+If you're hitting memory limits or just want a smarter way to handle images 
+in-memory without sacrificing speed, `compressed-image` was built for that.
+
 
 ## Performance
 
-The ``compressed-image`` library is aimed at high performance computing allowing you to store many images in-memory
+The `compressed-image` library is aimed at high performance computing allowing you to store many images in-memory
 simultaneously while not having to pay the associated memory cost. It performs equal or faster during image reads
 with significantly lower memory usage
 
@@ -37,6 +56,7 @@ with the channels
 #include <compress/image.h>
 
 auto image = compressed::image<uint8_t>::read("/some/file/path");
+// Retrieve the red channel from the image
 auto channel_r = image.channel("R"); // could also get it via image.channel(0)
 
 // Iterate over the chunks in the channel, this will decompress the 
