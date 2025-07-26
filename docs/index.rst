@@ -18,7 +18,7 @@ allowing for very memory-efficient representations of these. This library acts a
 in-memory and reading them from disk on-demand. 
 
 It trades a bit of performance for significantly lower memory usage. For more detailed
-information please have a look at the benchmark section :ref:`benchmarks`
+information please have a look at the :ref:`benchmarks` section.
 
 It is written entirely using C++20 while also providing pre-built python binaries that are pip-installable.
 
@@ -27,10 +27,10 @@ Features
 
 - Storing images as compressed buffers
 - Support for multiple compressions algorithms such as ``lz4``, ``zstd``, ``blosclz`` etc.
-- Reading files from disk in compressed chunks for low memory usage
-- Random access decompression without having to decompress the entire image
+- Reading files directly from disk into compressed chunks for low memory usage
+- Random access compression/decompression without having to decompress the entire image
 - Lazy image/channel representations with extremely low memory footprints
-- Cross-platform support
+- Cross-platform support (linux, windows, macos)
 - Interoperability with NumPy
 
 When should you use this?
@@ -43,7 +43,6 @@ efficiently with image data. It's especially useful when:
 - You're working with high-resolution images or large datasets and want to avoid I/O bottlenecks.
 - You want fast, random access to image chunks without having to decompress the entire image up front.
 - You're building tools, pipelines, or applications that process images frequently but can't afford the memory footprint of uncompressed data.
-- You're using Python or C++ and want seamless, cross-language support without changing your workflow too much.
 
 If you're hitting memory limits or just want a smarter way to handle images 
 in-memory without sacrificing speed, ``compressed-image`` was built for that.
@@ -68,7 +67,7 @@ Quickstart
 ==========
 
 This is a simple example of getting you up and running with compressed-image, loading a file from disk and then interacting
-with the channels
+with the channels. For more detailed examples have a look at the :ref:`examples`
 
 .. tab:: c++
 

@@ -1,6 +1,7 @@
 ..
   Copyright Contributors to the compressed-image project.
 
+.. _examples:
 
 examples
 -------------------
