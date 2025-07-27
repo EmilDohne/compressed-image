@@ -86,7 +86,7 @@ jobs:
       uses: TAServers/vcpkg-cache@v3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        prefix: ${{ matrix.os_dist.dist }}_wheels_vcpkg
+        prefix: ${{ matrix.os_dist.os }}_wheels_vcpkg
 
     - uses: pypa/cibuildwheel@v2.23.1
       env:
