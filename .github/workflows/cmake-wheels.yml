@@ -86,9 +86,11 @@ jobs:
       uses: TAServers/vcpkg-cache@v3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+        prefix: ${{ matrix.os_dist.dist }}_wheels_vcpkg
 
     - uses: pypa/cibuildwheel@v2.23.1
       env:
+        VCPKG_BUILD_TYPE: "release" # Only build release libraries to cut down on build times.
         VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
         VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
         CC: gcc-13
