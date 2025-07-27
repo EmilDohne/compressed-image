@@ -1,0 +1,2 @@
+add_executable(lazy_channels main.cpp)
+target_link_libraries(lazy_channels PRIVATE compressed_image)

@@ -495,9 +495,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			return image<T>::read(
 				std::move(input_ptr),
-				subimage,
 				std::forward<PostProcess>(postprocess),
 				spec.channelnames,
+				subimage,
 				compression_codec,
 				compression_level,
 				block_size,
@@ -1040,6 +1040,63 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			));
 		}
 
+
+		/// Remove a channel by its index.
+		/// 
+		/// \param index The index of the channel to remove.
+		/// \throws std::out_of_range if the index is out of bounds.
+		void remove_channel(size_t index)
+		{
+			// Extract the channel and let it exit the scope to destruct
+			auto channel = this->extract_channel(index);
+		}
+
+		/// Remove a channel by its name.
+		/// 
+		/// \param name The name of the channel to remove.
+		/// \throws std::out_of_range if the channel name is invalid.
+		void remove_channel(const std::string_view name)
+		{
+			// Extract the channel and let it exit the scope to destruct
+			auto channel = this->extract_channel(name);
+		}
+
+		/// Extracts a channel by its index.
+		/// 
+		/// Remove the channel from the image and gives you full control over the channel. Also erases
+		/// its channel name.
+		/// 
+		/// \param index The index of the channel to retrieve.
+		/// \return The channel object.
+		/// \throws std::out_of_range if the index is out of bounds.
+		compressed::channel<T> extract_channel(size_t index)
+		{
+			if (index >= m_Channels.size())
+			{
+				throw std::out_of_range("Channel index out of range");
+			}
+			auto ret = std::move(m_Channels[index]);
+
+			m_Channels.erase(m_Channels.begin() + index);
+			m_ChannelNames.erase(m_ChannelNames.begin() + index);
+
+			return std::move(ret);
+		}
+
+		/// Extracts a channel by its name.
+		/// 
+		/// Remove the channel from the image and gives you full control over the channel. Also erases
+		/// its channel name.
+		/// 
+		/// \param name The name of the channel to retrieve.
+		/// \return The channel object.
+		/// \throws std::out_of_range if the channel name is invalid.
+		compressed::channel<T> extract_channel(const std::string_view name)
+		{
+			size_t index = get_channel_offset(name);
+			return extract_channel(index);
+		}
+
 		/// \brief Prints statistical information about the image file structure.
 		/// 
 		/// This function outputs various details about the compressed image, 
@@ -1126,42 +1183,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		// ---------------------------------------------------------------------------------------------------------------------
 		// Accessors
 		// ---------------------------------------------------------------------------------------------------------------------
-
-		/// Extracts a channel by its index.
-		/// 
-		/// Remove the channel from the image and gives you full control over the channel. Also erases
-		/// its channel name.
-		/// 
-		/// \param index The index of the channel to retrieve.
-		/// \return The channel object.
-		/// \throws std::out_of_range if the index is out of bounds.
-		compressed::channel<T> extract_channel(size_t index)
-		{
-			if (index >= m_Channels.size())
-			{
-				throw std::out_of_range("Channel index out of range");
-			}
-			auto ret = std::move(m_Channels[index]);
-
-			m_Channels.erase(m_Channels.begin() + index);
-			m_ChannelNames.erase(m_ChannelNames.begin() + index);
-
-			return std::move(ret);
-		}
-
-		/// Extracts a channel by its name.
-		/// 
-		/// Remove the channel from the image and gives you full control over the channel. Also erases
-		/// its channel name.
-		/// 
-		/// \param name The name of the channel to retrieve.
-		/// \return The channel object.
-		/// \throws std::out_of_range if the channel name is invalid.
-		compressed::channel<T> extract_channel(const std::string_view name)
-		{
-			size_t index = get_channel_offset(name);
-			return extract_channel(index);
-		}
 
 		/// Retrieves a reference to a channel by its index.
 		/// 
@@ -1404,6 +1425,23 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				chunk_size = channel.chunk_size();
 			}
 			return chunk_size;
+		}
+
+		size_t block_size() const
+		{
+			size_t block_size = 0;
+			for (const auto& channel : m_Channels)
+			{
+				if (block_size != 0 && channel.block_size() != block_size)
+				{
+					throw std::runtime_error(
+						"Validation Error: Channels in image do not all have the same block size. This is currently"
+						" unsupported."
+					);
+				}
+				block_size = channel.block_size();
+			}
+			return block_size;
 		}
 
 	private:

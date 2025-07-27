@@ -33,7 +33,8 @@ COMPRESSED_IMAGE_EXTENDED_WARNINGS = true
 archs = "auto64"
 manylinux-x86_64-image = "quay.io/pypa/manylinux_2_34_x86_64:latest"
 test-requires = "pytest"
-test-command = "python -m pytest {project}/python/test"
+# Run our unittests as well as the python examples to ensure these actually work.
+test-command = "python -u {project}/examples/lazy_channels/main.py && python -u {project}/examples/modifying_image/main.py && python -u {project}/examples/read_from_file/main.py && python -m pytest {project}/python/test"
 
 # cibuildhweel by default repairs wheels only on linux and macos but doesn't on windows. It is
 # however recommended in their docs to run delvewheel which will handle this for us as well

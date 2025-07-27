@@ -86,7 +86,10 @@ if (COMPRESSED_IMAGE_BUILD_TESTS)
 endif()
 
 if (COMPRESSED_IMAGE_BUILD_EXAMPLES)
-    add_subdirectory(examples/initialize_from_file)
+    add_subdirectory(examples/read_from_file)
+    add_subdirectory(examples/read_with_postprocess)
+    add_subdirectory(examples/lazy_channels)
+    add_subdirectory(examples/modifying_image)
 endif()
 
 if (COMPRESSED_IMAGE_BUILD_BENCHMARKS)

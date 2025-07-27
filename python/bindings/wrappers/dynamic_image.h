@@ -426,6 +426,15 @@ namespace compressed_py
 			);
 		}
 
+		size_t block_size() const
+		{
+			return std::visit([](auto&& img_ptr)
+			{
+				return img_ptr->block_size();
+			}, base_variant_class::m_ClassVariant
+			);
+		}
+
 		size_t chunk_size() const
 		{
 			return std::visit([](auto&& img_ptr)

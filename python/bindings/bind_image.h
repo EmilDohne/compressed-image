@@ -456,6 +456,10 @@ list must be == len(channel).
 Update the number of threads used internally for compression/decompression. By default this will use all available system threads.
             )doc")
 
+            .def("block_size", &compressed_py::dynamic_image::block_size,
+            R"doc(
+Get the block size used for compression, this is the same across all channels.
+            )doc")
             .def("chunk_size", &compressed_py::dynamic_image::chunk_size,
                 R"doc(
 Get the chunk size used for compression, this is the same across all channels.
