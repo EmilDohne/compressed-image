@@ -116,8 +116,7 @@ jobs:
         # Copy vcpkg cache *back out* to host after wheel is built
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
             echo "Copying vcpkg cache back to host..."
-            mkdir -p /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache
-            cp -r /project/.vcpkg-cache/* /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/ || true
+            docker cp /project/.vcpkg-cache/ /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/ || true
             auditwheel repair -w {dest_dir} {wheel}
 
     - name: Verify clean directory
