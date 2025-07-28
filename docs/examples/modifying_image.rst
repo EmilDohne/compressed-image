@@ -2,9 +2,9 @@
   Copyright Contributors to the compressed-image project.
 
 
-.. _read_from_file:
+.. _modifying_image:
 
-example: `Read from file`
+example: `Modify image structure`
 ====================================
 
 
@@ -14,7 +14,7 @@ example: `Read from file`
 
 	- :cpp:struct:`compressed::image` 
 
-	.. literalinclude:: ../../examples/read_from_file/main.cpp
+	.. literalinclude:: ../../examples/modifying_image/main.cpp
 	   :language: cpp
 
 .. tab:: Python
@@ -24,5 +24,5 @@ example: `Read from file`
 	- :class:`compressed_image.Image`
 	
 
-	.. literalinclude:: ../../examples/read_from_file/main.py
+	.. literalinclude:: ../../examples/modifying_image/main.py
 	   :language: python

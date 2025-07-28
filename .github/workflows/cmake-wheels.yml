@@ -110,13 +110,22 @@ jobs:
             echo "Copying vcpkg cache into container..."
             mkdir -p /project/.vcpkg-cache
             if [ -d /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache ]; then
-                cp -r /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/* /project/.vcpkg-cache/ || true
+                cp -r /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/* /project/.vcpkg-cache/
+                COUNT=$(find /project/.vcpkg-cache -type f | wc -l)
+                echo "Copied $COUNT files"
             fi
+            echo "VCPKG_BINARY_SOURCES: $VCPKG_BINARY_SOURCES"
 
         # Copy vcpkg cache *back out* to host after wheel is built
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
             echo "Copying vcpkg cache back to host..."
-            docker cp /project/.vcpkg-cache/ /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/ || true
+            mkdir -p /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache
+            if [ "$(find /project/.vcpkg-cache -type f | wc -l)" -gt 0 ]; then
+                cp -r /project/.vcpkg-cache/* /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/
+            else
+                echo "No files to copy back from vcpkg cache"
+            fi
+            echo "Repairing wheel..."
             auditwheel repair -w {dest_dir} {wheel}
 
     - name: Verify clean directory

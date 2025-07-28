@@ -62,6 +62,8 @@ or recompression.
         channel.set_chunk(channel.num_chunks() -1, final_buffer)
 
 
+.. _lazy_channel_doc:
+
 Lazy channels
 **************
 

@@ -2,9 +2,9 @@
   Copyright Contributors to the compressed-image project.
 
 
-.. _read_from_file:
+.. _lazy_channels:
 
-example: `Read from file`
+example: `Lazily evaluated channels`
 ====================================
 
 
@@ -13,8 +13,10 @@ example: `Read from file`
 	Relevant documentation links:
 
 	- :cpp:struct:`compressed::image` 
+	- :cpp:struct:`compressed::channel` 
+	- :ref:`lazy_channel_doc`
 
-	.. literalinclude:: ../../examples/read_from_file/main.cpp
+	.. literalinclude:: ../../examples/lazy_channels/main.cpp
 	   :language: cpp
 
 .. tab:: Python
@@ -22,7 +24,9 @@ example: `Read from file`
 	Relevant documentation links:
 
 	- :class:`compressed_image.Image`
+	- :class:`compressed_image.Channel`
+	- :ref:`lazy_channel_doc`
 	
 
-	.. literalinclude:: ../../examples/read_from_file/main.py
+	.. literalinclude:: ../../examples/lazy_channels/main.py
 	   :language: python
