@@ -120,6 +120,7 @@ jobs:
         CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
             echo "Printing vcpkg root"
             ls -la /output/.vcpkg-cache
+            ls -la ${{ steps.vcpkg-cache.outputs.path }}
             echo "Repairing wheel..."
             auditwheel repair -w {dest_dir} {wheel}
 
