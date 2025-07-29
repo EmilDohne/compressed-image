@@ -95,7 +95,7 @@ jobs:
         # Override the binary sources on linux only
         VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
         CIBW_ENVIRONMENT_LINUX: >
-            VCPKG_BINARY_SOURCES="clear;files,/project/.vcpkg-cache,readwrite"
+            VCPKG_BINARY_SOURCES="clear;files,/output/.vcpkg-cache,readwrite"
         CC: gcc-13
         CXX: g++-13
         CIBW_ARCHS: auto64
@@ -103,30 +103,26 @@ jobs:
         CIBW_BUILD: "${{ matrix.os_dist.dist }}"
 
         # Linux unlike windows/macos doesn't run cibuildwheel natively but rather in a container
-        # so to restore the vcpkg cache we need to manually copy things ovr
-        # 
-        # Copy vcpkg cache *into* container
+        # so to restore the vcpkg cache we need to manually copy things back and forth. We (ab)use the /output
+        # directory meant for wheels as that is copied back natively
         CIBW_BEFORE_ALL_LINUX: |
             echo "Copying vcpkg cache into container..."
-            mkdir -p /project/.vcpkg-cache
-            if [ -d /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache ]; then
-                cp -r /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/* /project/.vcpkg-cache/
-                COUNT=$(find /project/.vcpkg-cache -type f | wc -l)
+            mkdir -p /output/.vcpkg-cache
+            if [ -d ${{ github.workspace }}/.vcpkg-cache ]; then
+                cp -r ${{ github.workspace }}/.vcpkg-cache/* /output/.vcpkg-cache/
+                COUNT=$(find /output/.vcpkg-cache -type f | wc -l)
                 echo "Copied $COUNT files"
             fi
             echo "VCPKG_BINARY_SOURCES: $VCPKG_BINARY_SOURCES"
 
-        # Copy vcpkg cache *back out* to host after wheel is built
-        CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
-            echo "Copying vcpkg cache back to host..."
-            mkdir -p /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache
-            if [ "$(find /project/.vcpkg-cache -type f | wc -l)" -gt 0 ]; then
-                cp -r /project/.vcpkg-cache/* /host/home/runner/work/compressed-image/compressed-image/.vcpkg-cache/
-            else
-                echo "No files to copy back from vcpkg cache"
-            fi
-            echo "Repairing wheel..."
-            auditwheel repair -w {dest_dir} {wheel}
+    # Since in the previous step we cached our dependencies into /output/.vcpkg-cache, we now restore this into
+    # the directory expected by vcpkg-cache. The container copies from /output -> /wheelhouse
+    - name: Copy vcpkg cache (linux only)
+      if: matrix.os_dist.os == 'ubuntu-latest'
+      run: |
+        rm -rf ${{ steps.vcpkg-cache.outputs.path }}
+        mv ./wheelhouse/.vcpkg-cache ${{ steps.vcpkg-cache.outputs.path }}
+        ls -la ${{ steps.vcpkg-cache.outputs.path }}
 
     - name: Verify clean directory
       run: git diff --exit-code
