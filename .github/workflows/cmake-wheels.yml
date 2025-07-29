@@ -109,6 +109,8 @@ jobs:
         # so to restore the vcpkg cache we need to manually copy things back and forth. We (ab)use the /output
         # directory meant for wheels as that is copied back natively
         CIBW_BEFORE_ALL_LINUX: |
+            apt install zip
+            apt install unzip
             echo "Copying vcpkg cache into container..."
             echo "VCPKG_BUILD_TYPE: $VCPKG_BUILD_TYPE"
             echo "VCPKG_FEATURE_FLAG: $VCPKG_FEATURE_FLAG"
