@@ -109,12 +109,8 @@ jobs:
         # so to restore the vcpkg cache we need to manually copy things back and forth. We (ab)use the /output
         # directory meant for wheels as that is copied back natively
         CIBW_BEFORE_ALL_LINUX: |
-            dnf install zip
-            dnf install unzip
+            dnf install -y zip
             echo "Copying vcpkg cache into container..."
-            echo "VCPKG_BUILD_TYPE: $VCPKG_BUILD_TYPE"
-            echo "VCPKG_FEATURE_FLAG: $VCPKG_FEATURE_FLAG"
-            echo "VCPKG_BINARY_SOURCES: $VCPKG_BINARY_SOURCES"
             mkdir -p /output/.vcpkg-cache
             if [ -d ${{ github.workspace }}/.vcpkg-cache ]; then
                 cp -r ${{ github.workspace }}/.vcpkg-cache/* /output/.vcpkg-cache/
