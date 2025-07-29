@@ -112,8 +112,8 @@ jobs:
             dnf install -y unzip
             echo "Copying vcpkg cache into container..."
             mkdir -p /output/.vcpkg-cache
-            if [ -d ${{ github.workspace }}/.vcpkg-cache ]; then
-                cp -r ${{ github.workspace }}/.vcpkg-cache/* /output/.vcpkg-cache/
+            if [ -d /host${{ github.workspace }}/.vcpkg-cache ]; then
+                cp -r /host${{ github.workspace }}/.vcpkg-cache/* /output/.vcpkg-cache/
                 COUNT=$(find /output/.vcpkg-cache -type f | wc -l)
                 echo "Copied $COUNT files"
             fi
