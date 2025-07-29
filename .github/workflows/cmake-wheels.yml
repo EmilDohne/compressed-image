@@ -93,7 +93,6 @@ jobs:
         VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
         # Override the binary sources on linux only
         VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
-        CIBW_BUILD_VERBOSITY_LINUX: 2
         CIBW_ENVIRONMENT_LINUX: >
             VCPKG_FEATURE_FLAG="binarycaching"
             VCPKG_BINARY_SOURCES="clear;files,/output/.vcpkg-cache,readwrite"
@@ -115,7 +114,7 @@ jobs:
             if [ -d /host${{ github.workspace }}/.vcpkg-cache ]; then
                 cp -r /host${{ github.workspace }}/.vcpkg-cache/* /output/.vcpkg-cache/
                 COUNT=$(find /output/.vcpkg-cache -type f | wc -l)
-                echo "Copied $COUNT files"
+                echo "Copied $COUNT binary caches"
             fi
 
     # Since in the previous step we cached our dependencies into /output/.vcpkg-cache, we now restore this into
