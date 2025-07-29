@@ -94,6 +94,7 @@ jobs:
         VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
         # Override the binary sources on linux only
         VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
+        CIBW_BUILD_VERBOSITY_LINUX: 3
         CIBW_ENVIRONMENT_LINUX: >
             VCPKG_BUILD_TYPE="release"
             VCPKG_FEATURE_FLAG="binarycaching"
