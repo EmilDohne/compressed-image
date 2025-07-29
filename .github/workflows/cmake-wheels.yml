@@ -95,6 +95,8 @@ jobs:
         # Override the binary sources on linux only
         VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
         CIBW_ENVIRONMENT_LINUX: >
+            VCPKG_BUILD_TYPE="release"
+            VCPKG_FEATURE_FLAG="binarycaching"
             VCPKG_BINARY_SOURCES="clear;files,/output/.vcpkg-cache,readwrite"
         CC: gcc-13
         CXX: g++-13
@@ -114,6 +116,12 @@ jobs:
                 echo "Copied $COUNT files"
             fi
             echo "VCPKG_BINARY_SOURCES: $VCPKG_BINARY_SOURCES"
+
+        CIBW_REPAIR_WHEEL_COMMAND_LINUX: |
+            echo "Printing vcpkg root"
+            ls -la /output/.vcpkg-cache
+            echo "Repairing wheel..."
+            auditwheel repair -w {dest_dir} {wheel}
 
     # Since in the previous step we cached our dependencies into /output/.vcpkg-cache, we now restore this into
     # the directory expected by vcpkg-cache. The container copies from /output -> /wheelhouse
