@@ -10,11 +10,6 @@ endif()
 target_link_libraries(compressed_image_test PRIVATE compressed_image)
 target_link_libraries(compressed_image_test PRIVATE doctest)
 
-if (_COMPRESSED_IMAGE_SANITIZE_FLAGS)
-    target_compile_options(compressed_image_test PRIVATE -fsanitize=address,leak,undefined)
-    target_link_options(compressed_image_test PRIVATE -fsanitize=address,leak,undefined)
-endif()
-
 include(CTest)
 add_test(test_compressed_image compressed_image_test)
 

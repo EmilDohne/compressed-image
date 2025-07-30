@@ -46,6 +46,11 @@ jobs:
              compiler: gcc-13
              compilercxx: g++-13     
              multiline-separator: \
+           - name: MacOS ARM AppleClang
+             os: macos-latest
+             compiler: clang
+             compilercxx: clang++
+             multiline-separator: \
 
     steps:
     - uses: actions/checkout@v4
