@@ -7,35 +7,20 @@
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
+
 	namespace container
 	{
 
 		/// Represents a chunked view into a larger image, providing access to a decompressed segment of the image or channel.
 		/// 
-		/// This structure acts as a lightweight view into a portion of an image, particularly when working with compressed
-		/// image storage. It allows efficient iteration over the decompressed chunk while providing methods to determine 
+		/// This structure acts as a lightweight view into a chunk within the context of an image.
+		/// It allows efficient iteration over the decompressed chunk while providing methods to determine 
 		/// the global X and Y coordinates relative to the full image.
 		/// 
 		/// The chunk is retrieved by dereferencing a `compressed::iterator`, and is used in scenarios like iterating over
-		/// image channels and processing decompressed data in smaller segments.
-		/// 
-		/// ## Example Usage:
-		/// 
-		/// \code{.cpp}
-		/// compressed::image<T> image = ...;
-		/// for (auto& chunk : image.channel_ref("r"))
-		/// {
-		///     for (auto& [index, pixel] : std::views::enumerate(chunk))
-		///     {
-		///         size_t x = chunk.x(index);
-		///         size_t y = chunk.y(index);
-		///         pixel = (x + y * image.width()) / image.size();
-		///     }
-		/// }
-		/// \endcode
+		/// image channels and processing decompressed data in smaller segments
 		/// 
 		/// \tparam T The data type stored in the chunk (e.g., pixel values).
-		/// \tparam ChunkSize The fixed size of each chunk, defaulting to `s_default_chunksize`.
 		template <typename T>
 		struct chunk_span : public std::ranges::view_interface<chunk_span<T>>
 		{

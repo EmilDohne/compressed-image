@@ -122,8 +122,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				throw std::runtime_error(
 					std::format(
 						"Unable to align chunk size to scanlines as the size of a scanline exceeds the chunk size."
-						" Got a scanline size of {:L} while the max size of the chunks is {:L}"
-						, width, chunk_size
+						" Got a scanline size of {:L} x {:L} (sizeof(T)) while the max size of the chunks is {:L}"
+						, width, sizeof(T), chunk_size
 					)
 				);
 			}

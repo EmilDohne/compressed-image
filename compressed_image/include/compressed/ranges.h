@@ -46,6 +46,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					return std::apply([](auto&... e) { return reference(*e...); }, data_);
 				}
 
+				reference operator*() const 
+				{
+					return std::apply([](auto&... e) { return reference(*e...); }, data_);
+				}
+
 				iterator& operator++()
 				{
 					std::apply([](auto&... e) { ((++e), ...); }, data_);

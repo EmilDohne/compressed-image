@@ -8,10 +8,10 @@ find_package(Sphinx REQUIRED)
 get_target_property(COMPRESSED_IMAGE_PUBLIC_HEADERS compressed_image INTERFACE_INCLUDE_DIRECTORIES)
 
 set(DOXYGEN_INPUT_DIR ${PROJECT_SOURCE_DIR}/compressed_image)
-set(DOXYGEN_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/docs)
+set(DOXYGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/docs)
 set(DOXYGEN_INDEX_FILE ${DOXYGEN_OUTPUT_DIR}/html/index.html)
 set(DOXYFILE_IN ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in)
-set(DOXYFILE_OUT ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
+set(DOXYFILE_OUT ${CMAKE_BINARY_DIR}/Doxyfile)
 
 #Replace variables inside @@ with the current values
 # --------------------------------------------------------------------------
@@ -28,6 +28,7 @@ add_custom_command(OUTPUT ${DOXYGEN_INDEX_FILE}
                    VERBATIM)
 
 add_custom_target(Doxygen ALL DEPENDS ${DOXYGEN_INDEX_FILE})
+
 
 
 # Generate Sphinx data

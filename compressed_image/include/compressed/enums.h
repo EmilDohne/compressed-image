@@ -17,10 +17,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// that can be used when storing or transmitting compressed images.
 		enum class codec
 		{
-			blosclz, ///< BloscLZ: Lightweight, fast compression optimized for high-speed decompression.
-			lz4,     ///< LZ4: Extremely fast compression and decompression with moderate compression ratio.
-			lz4hc,   ///< LZ4HC: High-compression variant of LZ4 with slower compression but similar fast decompression.
-			zstd,	 ///
+			blosclz, ///< Lightweight, fast compression optimized for high-speed decompression.
+			lz4,     ///< Extremely fast compression and decompression with moderate compression ratio.
+			lz4hc,   ///< High-compression variant of LZ4 with slower compression but similar fast decompression.
+			zstd,	 ///< Zstandard compression providing high compression ratios with decent speed.
 		};
 
 
@@ -35,13 +35,25 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				return OIIO::TypeDesc::UINT8;
 			}
+			else if constexpr (std::is_same_v<T, int8_t>)
+			{
+				return OIIO::TypeDesc::INT8;
+			}
 			else if constexpr (std::is_same_v<T, uint16_t>)
 			{
 				return OIIO::TypeDesc::UINT16;
 			}
+			else if constexpr (std::is_same_v<T, int16_t>)
+			{
+				return OIIO::TypeDesc::INT16;
+			}
 			else if constexpr (std::is_same_v<T, uint32_t>)
 			{
 				return OIIO::TypeDesc::UINT32;
+			}
+			else if constexpr (std::is_same_v<T, int32_t>)
+			{
+				return OIIO::TypeDesc::INT32;
 			}
 			else if constexpr (std::is_same_v<T, float>)
 			{

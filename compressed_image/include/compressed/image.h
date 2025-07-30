@@ -11,7 +11,7 @@
 #include <filesystem>
 
 #include <blosc2.h>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #ifdef COMPRESSED_IMAGE_OIIO_AVAILABLE
 #include <OpenImageIO/imageio.h>
@@ -44,18 +44,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	/// The data is compressed in memory and we store it as part of a blosc2 super-chunk which is essentially a 3d array of 
 	/// super-chunk -> chunk -> block. Where having the block size fit into L1 cache and the Chunk size into L3 cache is desirable
 	/// as each block can be handled by a single cpu core while the chunk fits well within shared L3 memory.
-	/// 
-	/// \tparam _Block_Size 
-	///		The size of the blocks stored inside the chunks, defaults to 32KB which is enough to comfortably fit into the L1 cache
-	///		of most modern CPUs. If you know your cpu can handle larger blocks feel free to up this number.
-	/// 
-	/// \tparam _Chunk_Size 
-	///		The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. This should be tweaked
-	///		to be no larger than the size of the usual images you are expecting to compress for optimal performance but this could be 
-	///		upped which might give better compression ratios. Must be a multiple of sizeof(T).
 	template <typename T>
 	struct image : public std::ranges::view_interface<image<T>>
 	{
+		using value_type = T;
 
 		image() = default;
 		image(image&&) = default;
@@ -64,6 +56,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		image& operator=(const image&) = delete;
 		~image() = default;
 
+
 		/// Constructs an image object with the specified channels, dimensions, and optional compression parameters.
 		/// 
 		/// This constructor creates an image from a given set of channels. The channel names can optionally be specified. 
@@ -71,7 +64,110 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// 
 		/// Example:
 		/// \code{.cpp}
-		/// std::vector<std::vector<const uint8_t>> channels = ...;
+		/// std::vector<std::span<const uint8_t>> channels = ...;
+		/// compressed::image<uint8_t> my_image(channels, 1920, 1080, {"r", "g", "b"}, codec::lz4, 5);
+		/// \endcode
+		/// 
+		/// \param channels A vector of spans containing the image channels (each channel is a 2D array of pixel data).
+		///					on construction these will be compressed thus the data can be safely freed after this function.
+		/// \param width The width of the image in pixels.
+		/// \param height The height of the image in pixels.
+		/// \param channel_names (Optional) A list of channel names, must match the number of channels provided. 
+		///					     If omitted or incorrect, channel names are ignored.
+		/// \param compression_codec (Optional) The codec used for compression, default is `codec::lz4`.
+		/// \param compression_level (Optional) The compression level, default is `9`.
+		/// \param block_size The size of the blocks stored inside the chunks, defaults to 32KB which is enough to 
+		///					  comfortably fit into the L1 cache of most modern CPUs. If you know your cpu can handle 
+		///					  larger blocks feel free to up this number.
+		/// \param chunk_size The size of each individual chunk, defaults to 4MB which is enough to hold a 2048x2048 channel. 
+		///					  This should be tweaked to be no larger than the size of the usual images you are expecting  
+		///					  to compress for optimal performance but this could be upped which might give better compression
+		///					  ratios. Must be a multiple of sizeof(T).
+		/// \throws std::runtime_error if a channel fails to be inserted.
+		image(
+			std::vector<std::span<const T>> channels,
+			size_t width,
+			size_t height,
+			std::vector<std::string> channel_names = {},
+			enums::codec compression_codec = enums::codec::lz4,
+			size_t compression_level = 9,
+			size_t block_size = s_default_blocksize,
+			size_t chunk_size = s_default_chunksize
+		)
+		{
+			_COMPRESSED_PROFILE_FUNCTION();
+			m_Width = width;
+			m_Height = height;
+			m_ChannelNames = channel_names;
+			auto comp_level_adjusted = util::ensure_compression_level(compression_level);
+
+			// c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
+			assert(chunk_size < std::numeric_limits<int32_t>::max());
+			assert(block_size < chunk_size);
+			if (channel_names.size() != channels.size() && channel_names.size() != 0)
+			{
+				std::cout << std::format(
+					"Invalid channelnames passed to image constructor, required them to match the number of" \
+					" channels in the channels parameter.Expected {} items but instead got {} names. Ignoring channel names",
+					channels.size(), channel_names.size()) << std::endl;
+
+				m_ChannelNames = {};
+			}
+
+			// Iterate all channels and start creating channels for it.
+			size_t channel_idx = 0;
+			for (const auto& _channel : channels)
+			{
+				try
+				{
+					// Generate the channel and append it.
+					m_Channels.push_back(compressed::channel<T>(
+						_channel,
+						width,
+						height,
+						compression_codec,
+						comp_level_adjusted,
+						block_size,
+						chunk_size
+					));
+				}
+				catch (const std::exception& e)
+				{
+					if (m_ChannelNames.size() > 0)
+					{
+						throw std::runtime_error(
+							std::format(
+								"Failed to insert channel '{}' at position {}. Full error: \n{}",
+								m_ChannelNames[channel_idx],
+								channel_idx,
+								e.what()
+							)
+						);
+					}
+					else
+					{
+						throw std::runtime_error(
+							std::format(
+								"Failed to insert channel at position {}. Full error: \n{}",
+								channel_idx,
+								e.what()
+							)
+						);
+					}
+				}
+				++channel_idx;
+			}
+		}
+
+
+		/// Constructs an image object with the specified channels, dimensions, and optional compression parameters.
+		/// 
+		/// This constructor creates an image from a given set of channels. The channel names can optionally be specified. 
+		/// The image is then compressed using the provided codec and compression level.
+		/// 
+		/// Example:
+		/// \code{.cpp}
+		/// std::vector<std::vector<uint8_t>> channels = ...;
 		/// compressed::image<uint8_t> my_image(channels, 1920, 1080, {"r", "g", "b"}, codec::lz4, 5);
 		/// \endcode
 		/// 
@@ -197,6 +293,33 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					channels.size(), channel_names.size()) << std::endl;
 
 				m_ChannelNames = {};
+			}
+
+			size_t counter = 0;
+			for (auto& channel : channels)
+			{
+				if (channel.width() != width)
+				{
+					throw std::invalid_argument(
+						std::format(
+							"Invalid channel passed to compressed::image constructor at index {}. It's width does not"
+							" equal {} but instead is {}",
+							counter, width, channel.width()
+						)
+					);
+				}
+				if (channel.height() != height)
+				{
+					throw std::invalid_argument(
+						std::format(
+							"Invalid channel passed to compressed::image constructor at index {}. It's height does not"
+							" equal {} but instead is {}",
+							counter, height, channel.height()
+						)
+					);
+				}
+
+				++counter;
 			}
 			m_Channels = std::move(channels);
 		}
@@ -372,9 +495,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			return image<T>::read(
 				std::move(input_ptr),
-				subimage,
 				std::forward<PostProcess>(postprocess),
 				spec.channelnames,
+				subimage,
 				compression_codec,
 				compression_level,
 				block_size,
@@ -816,11 +939,39 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// \param name (Optional) Channel name of the channel to be inserted. If no channel names are set this argument is ignored.
 		void add_channel(compressed::channel<T> _channel, std::optional<std::string> name = std::nullopt)
 		{
-			m_Channels.push_back(std::move(_channel));
-			if (m_ChannelNames.size() > 0)
+			if (_channel.width() != this->width())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its width does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						this->width(), _channel.width()
+					)
+				);
+			}
+			if (_channel.height() != this->height())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its height does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						this->height(), _channel.height()
+					)
+				);
+			}
+
+			if (name.has_value() && m_ChannelNames.size() == m_Channels.size())
+			{
+				m_ChannelNames.push_back(name.value());
+			}
+			else if (m_ChannelNames.size() > 0)
 			{
 				m_ChannelNames.push_back(name.value_or(""));
 			}
+
+			m_Channels.push_back(std::move(_channel));
 		}
 
 		/// Adds a channel to the image.
@@ -845,9 +996,41 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t height,
 			std::optional<std::string> name = std::nullopt,
 			enums::codec compression_codec = enums::codec::lz4,
-			size_t compression_level = 5
+			uint8_t compression_level = 5
 		)
 		{
+			if (width != this->width())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its width does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						width, this->width()
+					)
+				);
+			}
+			if (height != this->height())
+			{
+				throw std::invalid_argument(
+					std::format(
+						"Cannot add channel '{}' to the image as its height does not match that of the image."
+						" Expected {:L} pixels but instead got {:L} pixels",
+						name.value_or(""),
+						height, this->height()
+					)
+				);
+			}
+
+			if (name.has_value() && m_ChannelNames.size() == m_Channels.size())
+			{
+				m_ChannelNames.push_back(name.value());
+			}
+			else if (m_ChannelNames.size() > 0)
+			{
+				m_ChannelNames.push_back(name.value_or(""));
+			}
+
 			m_Channels.push_back(compressed::channel(
 				std::span<const T>(data.begin(), data.end()),
 				width,
@@ -855,98 +1038,28 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				compression_codec,
 				compression_level
 			));
-			if (m_ChannelNames.size() > 0)
-			{
-				m_ChannelNames.push_back(name.value_or(""));
-			}
 		}
 
-		/// \brief Prints statistical information about the image file structure.
+
+		/// Remove a channel by its index.
 		/// 
-		/// This function outputs various details about the compressed image, 
-		/// including dimensions, number of channels, compression ratio, and metadata.
-		/// 
-		/// Example output:
-		/// 
-		///		Statistics for image buffer:
-		///		 Width:             1024
-		///		 Height:            768
-		///		 Channels:          3
-		///		 Channelnames:      [R, G, B]
-		///		 --------------
-		///		 Compressed Size:   123456 bytes
-		///		 Uncompressed Size: 3145728 bytes
-		///		 Compression ratio: 25.5x
-		///		 Num Chunks:        512
-		///		 Metadata:
-		///		 {
-		///		    "author": "User",
-		///		    "timestamp": "2024-03-15"
-		///		 }
-		void print_statistics()
+		/// \param index The index of the channel to remove.
+		/// \throws std::out_of_range if the index is out of bounds.
+		void remove_channel(size_t index)
 		{
-			size_t compressed_size = 0;
-			size_t uncompressed_size = 0;
-			size_t num_chunks = 0;
-			for (const auto& channel : m_Channels)
-			{
-				compressed_size += channel.compressed_size();
-				uncompressed_size += channel.uncompressed_size();
-				num_chunks += channel.num_chunks();
-			}
-
-			std::cout << "Statistics for image buffer:" << std::endl;
-			std::cout << " Width:             " << m_Width << std::endl;
-			std::cout << " Height:            " << m_Height << std::endl;
-			std::cout << " Channels:          " << m_Channels.size() << std::endl;
-			std::cout << " Channelnames:      [";
-
-			for (size_t i = 0; i < m_ChannelNames.size(); ++i)
-			{
-				std::cout << m_ChannelNames[i];
-				if (i < m_ChannelNames.size() - 1)
-				{
-					std::cout << ", ";
-				}
-			}
-
-			std::cout << "]" << std::endl;
-			std::cout << " --------------     " << std::endl;
-			std::cout << " Compressed Size:   " << compressed_size << std::endl;
-			std::cout << " Uncompressed Size: " << uncompressed_size << std::endl;
-			std::cout << " Compression ratio: " << static_cast<double>(uncompressed_size) / compressed_size << "x" << std::endl;
-			std::cout << " Num Chunks:        " << num_chunks << std::endl;
-			std::cout << " Metadata:          " << "\n " << m_Metadata.dump(4) << std::endl;
+			// Extract the channel and let it exit the scope to destruct
+			auto channel = this->extract_channel(index);
 		}
 
-
-		/// Return the compression ratio over all channels.
-		double compression_ratio() const noexcept
+		/// Remove a channel by its name.
+		/// 
+		/// \param name The name of the channel to remove.
+		/// \throws std::out_of_range if the channel name is invalid.
+		void remove_channel(const std::string_view name)
 		{
-			size_t total_uncompressed = 1;
-			size_t total_compressed = 1;
-			for (const auto& channel : m_Channels)
-			{
-				total_compressed += channel.compressed_size();
-				total_uncompressed += channel.uncompressed_size();
-			}
-			return static_cast<double>(total_uncompressed) / total_compressed;
+			// Extract the channel and let it exit the scope to destruct
+			auto channel = this->extract_channel(name);
 		}
-
-
-		// ---------------------------------------------------------------------------------------------------------------------
-		// Iterators
-		// ---------------------------------------------------------------------------------------------------------------------
-
-		auto begin() noexcept { return m_Channels.begin(); }
-		auto begin() const noexcept { return m_Channels.begin(); }
-		auto end() noexcept { return m_Channels.end(); }
-		auto end() const noexcept { return m_Channels.end(); }
-
-		
-		// ---------------------------------------------------------------------------------------------------------------------
-		// Accessors
-		// ---------------------------------------------------------------------------------------------------------------------
 
 		/// Extracts a channel by its index.
 		/// 
@@ -983,6 +1096,93 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			size_t index = get_channel_offset(name);
 			return extract_channel(index);
 		}
+
+		/// \brief Prints statistical information about the image file structure.
+		/// 
+		/// This function outputs various details about the compressed image, 
+		/// including dimensions, number of channels, compression ratio, and metadata.
+		/// 
+		/// Example output:
+		/// 
+		///		Statistics for image buffer:
+		///		 Width:             1024
+		///		 Height:            768
+		///		 Channels:          3
+		///		 Channelnames:      [R, G, B]
+		///		 --------------
+		///		 Compressed Size:   123456 bytes
+		///		 Uncompressed Size: 3145728 bytes
+		///		 Compression ratio: 25.5x
+		///		 Num Chunks:        512
+		///		 Metadata:
+		///		 {
+		///		    "author": "User",
+		///		    "timestamp": "2024-03-15"
+		///		 }
+		void print_statistics()
+		{
+			size_t compressed_size = 0;
+			size_t uncompressed_size = 0;
+			size_t num_chunks = 0;
+			for (const auto& channel : m_Channels)
+			{
+				compressed_size += channel.compressed_bytes();
+				uncompressed_size += channel.uncompressed_size();
+				num_chunks += channel.num_chunks();
+			}
+
+			std::cout << "Statistics for image buffer:" << std::endl;
+			std::cout << " Width:             " << m_Width << std::endl;
+			std::cout << " Height:            " << m_Height << std::endl;
+			std::cout << " Channels:          " << m_Channels.size() << std::endl;
+			std::cout << " Channelnames:      [";
+
+			for (size_t i = 0; i < m_ChannelNames.size(); ++i)
+			{
+				std::cout << m_ChannelNames[i];
+				if (i < m_ChannelNames.size() - 1)
+				{
+					std::cout << ", ";
+				}
+			}
+
+			std::cout << "]" << std::endl;
+			std::cout << " --------------     " << std::endl;
+			std::cout << " Compressed Size:   " << compressed_size << std::endl;
+			std::cout << " Uncompressed Size: " << uncompressed_size << std::endl;
+			std::cout << " Compression ratio: " << static_cast<double>(uncompressed_size) / compressed_size << "x" << std::endl;
+			std::cout << " Num Chunks:        " << num_chunks << std::endl;
+			std::cout << " Metadata:          " << "\n " << m_Metadata.dump(4) << std::endl;
+		}
+
+
+		/// Return the compression ratio over all channels.
+		double compression_ratio() const noexcept
+		{
+			size_t total_uncompressed = 1;
+			size_t total_compressed = 1;
+			for (const auto& channel : m_Channels)
+			{
+				total_compressed += channel.compressed_bytes();
+				total_uncompressed += channel.uncompressed_size();
+			}
+			return static_cast<double>(total_uncompressed) / total_compressed;
+		}
+
+
+		// ---------------------------------------------------------------------------------------------------------------------
+		// Iterators
+		// ---------------------------------------------------------------------------------------------------------------------
+
+		auto begin() noexcept { return m_Channels.begin(); }
+		auto begin() const noexcept { return m_Channels.begin(); }
+		auto end() noexcept { return m_Channels.end(); }
+		auto end() const noexcept { return m_Channels.end(); }
+
+		
+		// ---------------------------------------------------------------------------------------------------------------------
+		// Accessors
+		// ---------------------------------------------------------------------------------------------------------------------
 
 		/// Retrieves a reference to a channel by its index.
 		/// 
@@ -1225,6 +1425,23 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				chunk_size = channel.chunk_size();
 			}
 			return chunk_size;
+		}
+
+		size_t block_size() const
+		{
+			size_t block_size = 0;
+			for (const auto& channel : m_Channels)
+			{
+				if (block_size != 0 && channel.block_size() != block_size)
+				{
+					throw std::runtime_error(
+						"Validation Error: Channels in image do not all have the same block size. This is currently"
+						" unsupported."
+					);
+				}
+				block_size = channel.block_size();
+			}
+			return block_size;
 		}
 
 	private:

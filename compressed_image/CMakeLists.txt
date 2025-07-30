@@ -5,14 +5,13 @@ target_include_directories(compressed_image INTERFACE "include")
 target_link_libraries(compressed_image INTERFACE  
 	blosc2_static 
 	blosc2_include 
-	nlohmann_json_include 
+	nlohmann_json 
 	OpenImageIO::OpenImageIO
 )
 
 if (MSVC)
 	target_compile_options(compressed_image INTERFACE /utf-8 /MP /DNOMINMAX)
 endif()
-
 
 if (COMPRESSED_IMAGE_HAVE_OIIO)
 	target_compile_definitions(compressed_image INTERFACE COMPRESSED_IMAGE_OIIO_AVAILABLE)

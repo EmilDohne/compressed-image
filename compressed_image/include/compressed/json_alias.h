@@ -2,7 +2,7 @@
 
 #include "macros.h"
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {

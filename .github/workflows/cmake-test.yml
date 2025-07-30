@@ -17,6 +17,10 @@ env:
 
 jobs:
   test:
+    permissions:
+      actions: read
+      contents: read
+
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -42,6 +46,12 @@ jobs:
              compiler: gcc-13
              compilercxx: g++-13
              multiline-separator: \
+           - name: MacOS ARM AppleClang
+             os: macos-latest
+             compiler: clang
+             compilercxx: clang++
+             extra_cxxflags: -fexperimental-library
+             multiline-separator: \
 
     steps:
     - uses: actions/checkout@v4
@@ -56,21 +66,30 @@ jobs:
           brew install autoconf
           brew install libtool
           brew install automake
+          brew install onedpl
 
-    - name: Initialize vcpkg
-      uses: lukka/run-vcpkg@v11
+    - name: Restore vcpkg cache
+      id: vcpkg-cache
+      uses: TAServers/vcpkg-cache@v3
       with:
-        vcpkgDirectory: '${{ github.workspace }}/thirdparty/vcpkg'
+        token: ${{ secrets.GITHUB_TOKEN }}
+        prefix: ${{ matrix.os }}_${{ matrix.compilercxx }}_test_vcpkg
 
     - name: Configure CMake ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:
+        VCPKG_FEATURE_FLAGS: "binarycaching" # Possibly redundant, but explicitly sets the binary caching feature flag
+        VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
         CC: ${{ matrix.compiler }}
         CXX: ${{ matrix.compilercxx }}
       run: |
         cmake -B ${{github.workspace}}/build        ${{ matrix.multiline-separator}}
             -DCMAKE_OSX_ARCHITECTURES="arm64"       ${{ matrix.multiline-separator}}
+            ${{ matrix.extra_cxxflags && format('-DCMAKE_CXX_FLAGS={0}', matrix.extra_cxxflags) }} ${{ matrix.multiline-separator}}
             -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}  ${{ matrix.multiline-separator}}
-            -DCOMPRESSED_IMAGE_BUILD_DOCS=OFF       ${{ matrix.multiline-separator}}
+            -DCOMPRESSED_DETERMINE_MAIN_PROJECT=OFF ${{ matrix.multiline-separator}}
+            -DCOMPRESSED_IMAGE_USE_VCPKG=ON         ${{ matrix.multiline-separator}}
+            -DCOMPRESSED_IMAGE_BUILD_TESTS=ON       ${{ matrix.multiline-separator}}
+            -DCOMPRESSED_IMAGE_EXTENDED_WARNINGS=ON ${{ matrix.multiline-separator}}
             -D_COMPRESSED_IMAGE_SANITIZE_FLAGS=ON
 
     - name: Build ${{ matrix.os }}-${{ matrix.compilercxx }}
