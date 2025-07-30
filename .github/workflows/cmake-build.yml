@@ -65,6 +65,7 @@ jobs:
           brew install autoconf
           brew install libtool
           brew install automake
+          brew install onedpl
 
     - name: Restore vcpkg cache
       id: vcpkg-cache
