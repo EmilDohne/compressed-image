@@ -46,7 +46,7 @@ jobs:
       uses: TAServers/vcpkg-cache@v3
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        prefix: ${{ matrix.os_dist.os }}_valgrind_vcpkg
+        prefix: ${{ matrix.os }}_${{ matrix.compilercxx }}_valgrind_vcpkg
 
     - name: Configure CMake ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:
