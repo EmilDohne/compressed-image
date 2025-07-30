@@ -43,7 +43,7 @@ endif()
 
 # Enable AppleClang support by turning on experimental library support
 if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    target_compile_options(my_target PRIVATE -fexperimental-library)
+    target_compile_options(compressed_image INTERFACE -fexperimental-library)
 endif()
 
 # Enable sanitizers unless on macOS (not supported) or Windows (github runners run out of memory). 
