@@ -84,7 +84,6 @@ jobs:
       run: |
         cmake -B ${{github.workspace}}/build        ${{ matrix.multiline-separator}}
             -DCMAKE_OSX_ARCHITECTURES="arm64"       ${{ matrix.multiline-separator}}
-            # Required for MacOS AppleClang
             ${{ matrix.extra_cxxflags && format('-DCMAKE_CXX_FLAGS={0}', matrix.extra_cxxflags) }} ${{ matrix.multiline-separator}}
             -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}  ${{ matrix.multiline-separator}}
             -DCOMPRESSED_DETERMINE_MAIN_PROJECT=OFF ${{ matrix.multiline-separator}}
