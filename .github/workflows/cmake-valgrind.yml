@@ -59,8 +59,7 @@ jobs:
             -DCOMPRESSED_DETERMINE_MAIN_PROJECT=OFF \
             -DCOMPRESSED_IMAGE_USE_VCPKG=ON         \
             -DCOMPRESSED_IMAGE_BUILD_TESTS=ON       \
-            -DCOMPRESSED_IMAGE_EXTENDED_WARNINGS=ON \
-            -D_COMPRESSED_IMAGE_SANITIZE_FLAGS=ON
+            -DCOMPRESSED_IMAGE_EXTENDED_WARNINGS=ON
 
     - name: Build ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:
