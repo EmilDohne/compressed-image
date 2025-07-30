@@ -78,7 +78,10 @@ jobs:
         cmake -B ${{github.workspace}}/build        ${{ matrix.multiline-separator}}
             -DCMAKE_OSX_ARCHITECTURES="arm64"       ${{ matrix.multiline-separator}}
             -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}  ${{ matrix.multiline-separator}}
-            -DCOMPRESSED_IMAGE_BUILD_DOCS=OFF
+            -DCOMPRESSED_DETERMINE_MAIN_PROJECT=OFF ${{ matrix.multiline-separator}}
+            -DCOMPRESSED_IMAGE_USE_VCPKG=ON         ${{ matrix.multiline-separator}}
+            -DCOMPRESSED_IMAGE_BUILD_EXAMPLES=ON    ${{ matrix.multiline-separator}}
+            -DCOMPRESSED_IMAGE_BUILD_TESTS=ON
 
     - name: Build ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:
