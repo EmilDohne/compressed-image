@@ -17,6 +17,10 @@ env:
 
 jobs:
   build:
+    permissions:
+      actions: read
+      contents: read
+
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
