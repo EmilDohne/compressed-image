@@ -120,6 +120,7 @@ Contents
    :maxdepth: 2
 
    code-ref/main.rst
+   best_practices.rst
    concepts/compression.rst
    developer/main.rst
    examples/main.rst

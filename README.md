@@ -95,4 +95,5 @@ channel_r_decompressed = channel_r.get_decompressed()
 
 ### Documentation
 
-The complete user-facing documentation is hosted on [readthedocs](https://compressed-image.readthedocs.io/) where you can additionally find more information on benchmarks and technical class documentation.
+The complete user-facing documentation is hosted on [readthedocs](https://compressed-image.readthedocs.io/) where you can 
+find more information on benchmarks and technical class documentation.

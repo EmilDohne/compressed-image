@@ -10,3 +10,5 @@ code reference
 
    image.rst
    channel.rst
+   enums.rst
+   iterators.rst

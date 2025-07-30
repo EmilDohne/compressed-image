@@ -17,10 +17,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// that can be used when storing or transmitting compressed images.
 		enum class codec
 		{
-			blosclz, ///< BloscLZ: Lightweight, fast compression optimized for high-speed decompression.
-			lz4,     ///< LZ4: Extremely fast compression and decompression with moderate compression ratio.
-			lz4hc,   ///< LZ4HC: High-compression variant of LZ4 with slower compression but similar fast decompression.
-			zstd,	 ///
+			blosclz, ///< Lightweight, fast compression optimized for high-speed decompression.
+			lz4,     ///< Extremely fast compression and decompression with moderate compression ratio.
+			lz4hc,   ///< High-compression variant of LZ4 with slower compression but similar fast decompression.
+			zstd,	 ///< Zstandard compression providing high compression ratios with decent speed.
 		};
 
 
