@@ -24,7 +24,7 @@ auto main() -> int
 	// up more memory and being slower
 	//
 	// So instead of:
-	for (auto chunk : channel_zeros)
+	for ([[maybe_unused]] auto chunk : channel_zeros)
 	{
 		// modify the chunk
 	}
