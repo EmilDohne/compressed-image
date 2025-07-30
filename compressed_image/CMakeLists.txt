@@ -41,11 +41,6 @@ if (COMPRESSED_IMAGE_EXTENDED_WARNINGS)
 	endif()
 endif()
 
-# Enable AppleClang support by turning on experimental library support
-if(APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    target_compile_options(compressed_image INTERFACE -fexperimental-library)
-endif()
-
 # Enable sanitizers unless on macOS (not supported) or Windows (github runners run out of memory). 
 # These are for our CI runs only and should be ignored by users.
 if (_COMPRESSED_IMAGE_SANITIZE_FLAGS AND NOT APPLE)
