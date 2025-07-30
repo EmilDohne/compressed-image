@@ -54,28 +54,24 @@ jobs:
         VCPKG_BINARY_SOURCES: "clear;files,${{ steps.vcpkg-cache.outputs.path }},readwrite"
         CC: ${{ matrix.compiler }}
         CXX: ${{ matrix.compilercxx }}
-        CFLAGS: ${{ matrix.cflags }}
-        CXXFLAGS: ${{ matrix.cxxflags }}
       run: |
         cmake -B ${{github.workspace}}/build        \
             -DCOMPRESSED_DETERMINE_MAIN_PROJECT=OFF \
             -DCOMPRESSED_IMAGE_USE_VCPKG=ON         \
             -DCOMPRESSED_IMAGE_BUILD_TESTS=ON       \
+            -DCOMPRESSED_IMAGE_EXTENDED_WARNINGS=ON \
             -D_COMPRESSED_IMAGE_SANITIZE_FLAGS=ON
 
     - name: Build ${{ matrix.os }}-${{ matrix.compilercxx }}
       env:
         CC: ${{ matrix.compiler }}
         CXX: ${{ matrix.compilercxx }}
-        CFLAGS: ${{ matrix.cflags }}
-        CXXFLAGS: ${{ matrix.cxxflags }}
       run: |
           cmake --build ${{github.workspace}}/build \
             --config ${{env.BUILD_TYPE}} \
             --parallel $(getconf _NPROCESSORS_ONLN || sysctl -n hw.ncpu || echo %NUMBER_OF_PROCESSORS%)
       
     - name: Run Valgrind
-      if: matrix.os == 'ubuntu-24.04'
       working-directory: ${{github.workspace}}/build/test
       run: |
         sudo apt-get update
