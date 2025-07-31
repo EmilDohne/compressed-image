@@ -4,8 +4,20 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "compressed-image"
-version = "1.0.0"
+version = "1.0.1"
+description = "Fast and memory-efficient, compressed in-memory image storage for C++ and Python."
+authors = [{name = "Emil Dohne", email="emildohne@gmail.com"}]
+maintainers = [{name = "Emil Dohne", email="emildohne@gmail.com"}]
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+requires-python = ">= 3.9"
 dependencies = ["numpy"]
+
+[project.urls]
+Homepage = "https://compressed-image.readthedocs.io/en/latest/"
+Source = "https://github.com/EmilDohne/compressed-image"
+Documentation = "https://compressed-image.readthedocs.io/en/latest/"
+Issues = "https://github.com/EmilDohne/compressed-image/issues"
 
 [tool.scikit-build]
 # This is admittedly a bit hacky but on windows the automatic wheel repair did not appear
