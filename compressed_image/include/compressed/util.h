@@ -115,6 +115,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		size_t align_chunk_to_scanlines_elems(size_t width, size_t chunk_size)
 		{
+			// Avoid division by zero, for an empty channel we use a chunk size equivalent to the input data.
+			if (width == 0)
+			{
+				return chunk_size;
+			}
+
 			// The flooring here is intentional, we want to exclude any partial scanlines.
 			size_t num_scanlines = chunk_size / sizeof(T) / width;
 			if (num_scanlines == 0)

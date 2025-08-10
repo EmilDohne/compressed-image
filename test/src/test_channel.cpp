@@ -43,6 +43,22 @@ TEST_CASE("Initialize channel from incorrect span"
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
+TEST_CASE("Empty channel creation")
+{
+	auto vec = std::vector<uint8_t>(0);
+
+	auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 0, 0);
+	
+	CHECK(channel.uncompressed_size() == 0);
+	CHECK(channel.width() == 0);
+	CHECK(channel.height() == 0);
+
+	auto decompressed = channel.get_decompressed();
+	CHECK(decompressed.size() == 0);
+}
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
 TEST_CASE("Roundtrip channel creation")
 {
 	auto vec = std::vector<uint8_t>(50);
