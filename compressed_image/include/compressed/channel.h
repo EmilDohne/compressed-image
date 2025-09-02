@@ -533,6 +533,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			return std::visit([&](auto& schunk)
 				{
+					if (buffer.size() != schunk.chunk_elements(chunk_idx))
+					{
+						throw std::invalid_argument(
+							std::format(
+								"Invalid chunk passed to `set_chunk`. Expected this to contain exactly {} elements."
+								" Instead it holds {}. This is likely due to having not correctly checked the number"
+								" of elements.",
+								schunk.chunk_elements(chunk_idx),
+								buffer.size()
+							)
+						)
+					}
+
 					return schunk.set_chunk(m_CompressionContext, buffer, chunk_idx);
 				}, *m_Schunk);
 		}
