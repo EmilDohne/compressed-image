@@ -543,7 +543,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 								schunk.chunk_elements(chunk_idx),
 								buffer.size()
 							)
-						)
+						);
 					}
 
 					return schunk.set_chunk(m_CompressionContext, buffer, chunk_idx);
