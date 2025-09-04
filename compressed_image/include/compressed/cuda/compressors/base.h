@@ -58,8 +58,16 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// A single compressed chunk holding either device or host memory, depending on the storage location
 		struct compressed_chunk
 		{
-			std::variant<util::default_init_vector<std::byte>, cuda_device_ptr_async<std::byte>> data;
+			/// \brief The compressed data, either stored on host as a std::vector or as a device buffer.
+			std::variant<util::default_init_vector<std::byte>, cuda_device_buffer_async<std::byte>> data;
+
+			/// \brief The uncompressed block sizes of all the blocks inside `data`
+			std::vector<size_t> block_sizes{};
+
+			/// \brief Where the data is stored, on host or on device
 			cuda::enums::storage_location location{};
+
+			/// \brief The compression codec used for the chunk.
 			NAMESPACE_COMPRESSED_IMAGE::enums::codec codec{};
 		};
 		
@@ -102,18 +110,30 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					// Ensure the block size does not exceed the max the compressor allows for.
 					block_size = this->fit_block_size(block_size);
 
+					// Compute the total number of blocks as well as a vector of all the block sizes
+					const size_t num_blocks = (data.size() * sizeof(T) + block_size - 1) / block_size;
+					auto block_sizes = this->generate_block_sizes(data.size() * sizeof(T), block_size, num_blocks);
+
 					// Allocate the buffer for `data` on the device and memcpy over. Note that we do this using the 
 					// asynchronous API giving us two benefits:
 					// - Other threads (streams) may do other operations in-between
 					// - It uses the cudaMallocAsync/cudaMallocFree under the hood which is memory-pooled speeding up
-					//   the allocations tremendously as we do not have to 
-					auto device_data = make_device_buffer_async<T>(data.size());
+					//   the allocations tremendously as we can re-use other previously freed memory!
+					auto device_uncompressed_data = make_device_buffer_async<T>(data.size());
 					cuda_api::instance().memcpy_async(
-						device_data.get_raw(),
+						device_uncompressed_data.get_raw(),
 						static_cast<void*>(data.data()),
-						device_data.bytes(),
+						device_uncompressed_data.bytes(),
 						cudaMemcpyHostToDevice
 					);
+
+
+					auto device_block_pointers = this->generate_device_block_pointers(
+						device_uncompressed_data, 
+						block_size, 
+						num_blocks
+					);
+					auto device_block_sizes = cuda_device_buffer_async<size_t>::from_host(block_sizes);
 				};
 
 				/// \brief The max block size allowed for a given compressor. Implementation defined.
@@ -126,6 +146,39 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				};
 
 			private:
+
+				/// \brief Generate a buffer (vector) containing pointers into the individual blocks 
+				///
+				/// These pointers index into the device memory from `device_buffer`
+				/// 
+				/// \param device_buffer The device memory buffer which holds the uncompressed data
+				/// \param block_size The size of a single block
+				/// \param num_blocks The number of blocks `device_buffer` stores
+				cuda_device_buffer_async<void> generate_device_block_pointers(
+					const cuda_device_buffer_async<T>& device_buffer,
+					const size_t block_size,
+					const size_t num_blocks
+				)
+				{
+					std::vector<void*> ptrs(num_blocks);
+
+					auto device_base_ptr = static_cast<char*>(device_buffer.get_raw());
+					for (size_t i = 0; i < num_blocks; ++i)
+					{
+						ptrs[i] = device_base_ptr + block_size * i;
+					}
+
+					// Now that we have this memory on the host, we memcpy it over
+					auto device_buffer = make_device_buffer_async<void>(num_blocks);
+					cuda_api::instance().memcpy_async(
+						device_buffer.get_raw(),
+						static_cast<void*>(ptrs.data()),
+						device_buffer.bytes(),
+						cudaMemcpyHostToDevice
+					);
+
+					return std::move(device_buffer);
+				}
 
 				/// \brief Compute a vector of all the block sizes of the uncompressed data
 				///

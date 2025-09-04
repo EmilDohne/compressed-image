@@ -51,6 +51,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			using cuda_memcpy_t			= decltype(&cudaMemcpy);
 			using cuda_memcpy_async_t	= decltype(&cudaMemcpyAsync);
 
+			using cuda_device_get_default_mem_pool_t	= decltype(&cudaDeviceGetDefaultMemPool);
+			using cuda_mempool_set_attribute_t			= decltype(&cudaMemPoolSetAttribute);
+
 			using cuda_get_error_str_t	= decltype(&cudaGetErrorString);
 
 			/// \brief Access the singleton instance
@@ -123,6 +126,15 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				cuda_call(cuda_memcpy_async_, "cudaMemcpyAsync", dst, src, count, kind, stream);
 			}
 
+			/// \brief Set the maximum memory pool size for the given device to avoid e.g. stream synchronization freeing 
+			///		   the whole pool
+			void set_mem_pool_size(int device, uint64_t threshold = std::numeric_limits<uint64_t>::max())
+			{
+				cudaMemPool_t mempool{};
+				cuda_call(cuda_device_get_default_mem_pool_, "cudaDeviceGetDefaultMemPool", &mempool, device);
+				cuda_call(cuda_mempool_set_attribute_, "cudaMemPoolSetAttribute", cudaMemPoolAttrReleaseThreshold, &threshold);
+			}
+
 			/// \brief Returns a human-readable string for the given CUDA error code
 			/// \param err The CUDA error code
 			/// \return std::string containing the error message
@@ -165,6 +177,17 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				cuda_memcpy_ = proc::get_symbol<cuda_memcpy_t>(handle_, "cudaMemcpy", cuda_name);
 				cuda_memcpy_async_ = proc::get_symbol<cuda_memcpy_async_t>(handle_, "cudaMemcpy", cuda_name);
 
+				cuda_device_get_default_mem_pool_ = proc::get_symbol<cuda_device_get_default_mem_pool_t>(
+						handle_, 
+						"cudaDeviceGetDefaultMemPool", 
+						cuda_name
+					);
+				cuda_mempool_set_attribute_ = proc::get_symbol<cuda_mempool_set_attribute_t>(
+					handle_,
+					"cudaMemPoolSetAttribute",
+					cuda_name
+				);
+
 				cuda_get_error_str_ = proc::get_symbol<cuda_get_error_str_t>(handle_, "cudaGetErrorString", cuda_name);
 			}
 
@@ -194,6 +217,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			cuda_memcpy_t cuda_memcpy_ = nullptr;
 			cuda_memcpy_async_t cuda_memcpy_async_ = nullptr;
+
+			cuda_device_get_default_mem_pool_t cuda_device_get_default_mem_pool_ = nullptr;
+			cuda_mempool_set_attribute_t cuda_mempool_set_attribute_ = nullptr;
 
 			cuda_get_error_str_t cuda_get_error_str_ = nullptr;
 

@@ -100,8 +100,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			cuda_device_ptr_async<T> data = nullptr;
 			size_t size{};
 
-			T* get() { return this->data.get(); }
-			void* get_raw() { return static_cast<void*>(this->get()); }
+			T* get() noexcept { return this->data.get(); }
+			const T* get() const noexcept { return this->data.get(); }
+			void* get_raw() noexcept { return static_cast<void*>(this->get()); }
+			const void* get_raw() const noexcept { return static_cast<const void*>(this->get()); }
 
 			size_t bytes() const noexcept { return this->size * sizeof(T); }
 		};
@@ -115,8 +117,32 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			cuda_device_ptr_async<T> data = nullptr;
 			size_t size{};
 
-			T* get() { return this->data.get(); }
-			void* get_raw() { return static_cast<void*>(this->get()); }
+			/// \brief Generate a device buffer (using asynchronous memory ops) from a host buffer copying the data.
+			///
+			/// \param buffer The buffer to use as a size reference and to generate the device pointer from
+			static cuda_device_ptr_async from_host(std::span<T> buffer)
+			{
+				void* raw = nullptr;
+				cuda_api::instance().malloc_async(raw, count * sizeof(T), stream);
+				auto buffer = cuda_device_buffer_async<T>{
+					cuda_device_ptr_async<T>(static_cast<T*>(raw), device_deleter_async{ stream }),
+					count
+				};
+
+				cuda_api::instance().memcpy_async(
+					buffer.get_raw(),
+					static_cast<void*>(buffer.data()),
+					buffer.bytes(),
+					cudaMemcpyHostToDevice
+				);
+
+				return std::move(buffer);
+			}
+
+			T* get() noexcept { return this->data.get(); }
+			const T* get() const noexcept { return this->data.get(); }
+			void* get_raw() noexcept { return static_cast<void*>(this->get()); }
+			const void* get_raw() const noexcept { return static_cast<const void*>(this->get()); }
 
 			size_t bytes() const noexcept { return this->size * sizeof(T); }
 		};
@@ -139,7 +165,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		inline cuda_device_buffer<T> make_device_buffer(size_t count)
 		{
 			auto managed_ptr = make_device_mem<T>(count);
-			return cuda_device_buffer<T>{std::move(managed_ptr), count}
+			return cuda_device_buffer<T>{std::move(managed_ptr), count};
 		}
 
 		template <typename T = void>
@@ -151,10 +177,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		template <typename T = void>
-		inline cuda_device_buffer<T> make_device_buffer_async(size_t count, cudaStream_t stream = cudaStreamPerThread)
+		inline cuda_device_buffer_async<T> make_device_buffer_async(size_t count, cudaStream_t stream = cudaStreamPerThread)
 		{
 			auto managed_ptr = make_device_mem_async<T>(count);
-			return cuda_device_buffer_async<T>{std::move(managed_ptr), count}
+			return cuda_device_buffer_async<T>{std::move(managed_ptr), count};
 		}
 
 		template <typename T = void>
