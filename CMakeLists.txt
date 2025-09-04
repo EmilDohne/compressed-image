@@ -54,15 +54,22 @@ add_subdirectory (thirdparty/c-blosc2)
 
 # Add target for blosc2 headers
 add_library(blosc2_include INTERFACE)
-target_include_directories(blosc2_include SYSTEM INTERFACE thirdparty/c-blosc2/include)
+target_include_directories(blosc2_include SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/c-blosc2/include>
+    $<INSTALL_INTERFACE:include>
+)
+
 
 # JSON module for parsing/storing metadata
 add_subdirectory(thirdparty/json)
 
+# Pull nvcomp (headers + dll/so target)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/FetchNvcomp.cmake)
+
 # Include the local vcpkg toolchain, if requested, otherwise it is up to the user
 # to provide a valid OpenImageIO library (that can be found via find_package)
 if (COMPRESSED_IMAGE_USE_VCPKG)
-    include("${PROJECT_SOURCE_DIR}/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/thirdparty/vcpkg/scripts/buildsystems/vcpkg.cmake")
 endif()
 
 find_package(OpenImageIO CONFIG QUIET)
@@ -71,7 +78,7 @@ if (OpenImageIO_FOUND)
     set(COMPRESSED_IMAGE_HAVE_OIIO TRUE)
 else()
     message(WARNING "OpenImageIO not found, some features will not be available")
-    set(COMPRESSED_IMAGE_HAVE_OIIO TRUE)
+    set(COMPRESSED_IMAGE_HAVE_OIIO FALSE)
 endif()
 
 # Projects

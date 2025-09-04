@@ -1,0 +1,169 @@
+/*
+Wrapper around cuda memory allocation/deallocation using std::unique_ptr to manage freeing memory appropriately
+again instead of having to do this by hand
+*/
+#pragma once
+
+#include <memory>
+
+#include <cuda_runtime.h>
+
+#include "compressed/macros.h"
+#include "compressed/cuda/cuda.h"
+
+
+namespace NAMESPACE_COMPRESSED_IMAGE
+{
+
+	namespace cuda
+	{
+
+		namespace detail
+		{
+		
+
+			struct device_deleter 
+			{
+				void operator()(void* ptr) const noexcept 
+				{
+					if (ptr) 
+					{
+						try 
+						{
+							cuda_api::instance().free(ptr);
+						}
+						catch (...) 
+						{
+							// suppress exceptions in destructors
+						}
+					}
+				}
+			};
+
+			struct device_deleter_async 
+			{
+				// Must be the same stream used for construction, use the factory functions to ensure this holds
+				cudaStream_t stream = cudaStreamPerThread;
+
+				void operator()(void* ptr) const noexcept 
+				{
+					if (ptr) 
+					{
+						try 
+						{
+							cuda_api::instance().free_async(ptr, stream);
+						}
+						catch (...) 
+						{
+							// suppress exceptions in destructors
+						}
+					}
+				}
+			};
+
+			struct host_deleter 
+			{
+				void operator()(void* ptr) const noexcept 
+				{
+					if (ptr) 
+					{
+						try
+						{
+							cuda_api::instance().free_host(ptr);
+						}
+						catch (...)
+						{
+							// suppress exceptions in destructors
+						}
+					}
+				}
+			};
+
+		} // namespace detail
+
+		// -------------------------------------------------------------------------
+		// Smart pointer aliases (void*, untyped)
+		// -------------------------------------------------------------------------
+		using cuda_device_mem = std::unique_ptr<void, detail::device_deleter>;
+		using cuda_device_mem_async = std::unique_ptr<void, detail::device_deleter_async>;
+		using cuda_host_mem = std::unique_ptr<void, detail::host_deleter>;
+
+		// -------------------------------------------------------------------------
+		// Allocation helpers (typed)
+		// -------------------------------------------------------------------------
+		template <typename T>
+		using cuda_device_ptr = std::unique_ptr<T, device_deleter>;
+
+		template <typename T>
+		struct cuda_device_buffer
+		{
+			cuda_device_ptr_async<T> data = nullptr;
+			size_t size{};
+
+			T* get() { return this->data.get(); }
+			void* get_raw() { return static_cast<void*>(this->get()); }
+
+			size_t bytes() const noexcept { return this->size * sizeof(T); }
+		};
+
+		template <typename T>
+		using cuda_device_ptr_async = std::unique_ptr<T, device_deleter_async>;
+
+		template <typename T>
+		struct cuda_device_buffer_async
+		{
+			cuda_device_ptr_async<T> data = nullptr;
+			size_t size{};
+
+			T* get() { return this->data.get(); }
+			void* get_raw() { return static_cast<void*>(this->get()); }
+
+			size_t bytes() const noexcept { return this->size * sizeof(T); }
+		};
+
+		template <typename T>
+		using cuda_host_ptr = std::unique_ptr<T, host_deleter>;
+
+		// -------------------------------------------------------------------------
+		// Factory functions, use these whenever possible!
+		// -------------------------------------------------------------------------
+		template <typename T = void>
+		inline cuda_device_ptr<T> make_device_mem(size_t count) 
+		{
+			void* raw = nullptr;
+			cuda_api::instance().malloc(raw, count * sizeof(T));
+			return cuda_device_ptr<T>(static_cast<T*>(raw));
+		}
+
+		template <typename T = void>
+		inline cuda_device_buffer<T> make_device_buffer(size_t count)
+		{
+			auto managed_ptr = make_device_mem<T>(count);
+			return cuda_device_buffer<T>{std::move(managed_ptr), count}
+		}
+
+		template <typename T = void>
+		inline cuda_device_ptr_async<T> make_device_mem_async(size_t count, cudaStream_t stream = cudaStreamPerThread) 
+		{
+			void* raw = nullptr;
+			cuda_api::instance().malloc_async(raw, count * sizeof(T), stream);
+			return cuda_device_ptr_async<T>(static_cast<T*>(raw), device_deleter_async{ stream });
+		}
+
+		template <typename T = void>
+		inline cuda_device_buffer<T> make_device_buffer_async(size_t count, cudaStream_t stream = cudaStreamPerThread)
+		{
+			auto managed_ptr = make_device_mem_async<T>(count);
+			return cuda_device_buffer_async<T>{std::move(managed_ptr), count}
+		}
+
+		template <typename T = void>
+		inline cuda_host_ptr<T> make_host_mem(size_t count) {
+			void* raw = nullptr;
+			cuda_api::instance().malloc_host(raw, count * sizeof(T), stream);
+			return cuda_host_ptr<T>(static_cast<T*>(raw));
+		}
+
+	}
+
+} // namespace NAMESPACE_COMPRESSED_IMAGE

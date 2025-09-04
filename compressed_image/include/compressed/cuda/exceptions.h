@@ -23,10 +23,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		};
 
 		/// \brief Exception thrown when a CUDA function cannot be found in the library
-		class function_not_found : public std::runtime_error
+		class symbol_not_found : public std::runtime_error
 		{
 		public:
-			explicit function_not_found(std::string_view msg)
+			explicit symbol_not_found(std::string_view msg)
 				: std::runtime_error(std::string(msg))
 			{
 			}

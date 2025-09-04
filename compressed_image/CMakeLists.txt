@@ -1,12 +1,17 @@
 ﻿project(CompressedImage)
 
 add_library(compressed_image INTERFACE)
-target_include_directories(compressed_image INTERFACE "include")
+target_include_directories(compressed_image INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(compressed_image INTERFACE  
 	blosc2_static 
 	blosc2_include 
 	nlohmann_json 
 	OpenImageIO::OpenImageIO
+	compressed::nvcomp_headers
+    compressed::nvcomp
 )
 
 if (MSVC)

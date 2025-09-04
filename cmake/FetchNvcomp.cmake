@@ -1,40 +1,55 @@
 # FetchNvcomp.cmake
-# Standalone CMake file to fetch nvcomp headers and provide an INTERFACE target
+# Fetch NVCOMP headers and static library, provide namespaced targets:
+#   compressed::nvcomp_headers
+#   compressed::nvcomp (static)
+# Fully install-friendly, no DLL copying needed.
 
 include(FetchContent)
 
-# Determine platform-specific URL and archive
+# --- Platform-specific URL, archive, paths ---
 if(WIN32)
     set(NVCOMP_URL "https://developer.download.nvidia.com/compute/nvcomp/redist/nvcomp/windows-x86_64/nvcomp-windows-x86_64-5.0.0.6_cuda11-archive.zip")
-    set(NVCOMP_INCLUDE_DIR "nvcomp-windows-x86_64-5.0.0.6_cuda11-archive/include")
+    set(NVCOMP_LIB_SUBDIR "lib/nvcomp_static.lib")
     set(NVCOMP_SHA256 "5C2E1EE55398F47D28806EB7C53ACA33B9E22D6D5B3ACEC86BBC4253C7E6D1D3")
-    set(NVCOMP_PLATFORM "Windows")
 elseif(UNIX)
     set(NVCOMP_URL "https://developer.download.nvidia.com/compute/nvcomp/redist/nvcomp/linux-x86_64/nvcomp-linux-x86_64-5.0.0.6_cuda11-archive.tar.xz")
-    set(NVCOMP_INCLUDE_DIR "nvcomp-linux-x86_64-5.0.0.6_cuda11-archive/include")
+    set(NVCOMP_LIB_SUBDIR "lib/libnvcomp_static.a")
     set(NVCOMP_SHA256 "64F5F7CC622F36006C503EE5A3F9D730B5C6CC49E4FAB0FC0507C1272D5EFA7B")
-    set(NVCOMP_PLATFORM "Linux")
 else()
     message(FATAL_ERROR "Unsupported platform for NVCOMP")
 endif()
 
-message(STATUS "Fetching NVCOMP headers for ${NVCOMP_PLATFORM}...")
-# Fetch NVCOMP archive
+# --- Fetch NVCOMP archive ---
+message(STATUS "Fetching nvcomp for ${CMAKE_SYSTEM_NAME}...")
 FetchContent_Declare(
-    nvcomp_headers
+    _nvcomp_src
     URL ${NVCOMP_URL}
-    URL_HASH SHA256=NVCOMP_SHA256
+    URL_HASH SHA256=${NVCOMP_SHA256}
 )
+FetchContent_MakeAvailable(_nvcomp_src)
 
-message(STATUS "Downloading and extracting NVCOMP headers (this may take a moment)...")
-FetchContent_MakeAvailable(nvcomp_headers)
-message(STATUS "NVCOMP headers are now available at ${nvcomp_headers_SOURCE_DIR}/${NVCOMP_INCLUDE_DIR}")
+# --- Headers interface ---
+add_library(compressed_nvcomp_headers INTERFACE)
+target_include_directories(compressed_nvcomp_headers INTERFACE
+    $<BUILD_INTERFACE:${_nvcomp_src_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+add_library(compressed::nvcomp_headers ALIAS compressed_nvcomp_headers)
+message(STATUS "Set nvcomp include dir to ${_nvcomp_src_SOURCE_DIR}/include")
 
+# --- Imported static library ---
+add_library(compressed_nvcomp STATIC IMPORTED GLOBAL)
+set_target_properties(compressed_nvcomp PROPERTIES
+    IMPORTED_LOCATION "${_nvcomp_src_SOURCE_DIR}/${NVCOMP_LIB_SUBDIR}"
+    INTERFACE_INCLUDE_DIRECTORIES "${_nvcomp_src_SOURCE_DIR}/include"
+)
+add_library(compressed::nvcomp ALIAS compressed_nvcomp)
 
-# Create an INTERFACE target for NVCOMP headers
-add_library(nvcomp_headers INTERFACE)
-target_include_directories(
-    nvcomp_headers 
-    INTERFACE
-    ${nvcomp_headers_SOURCE_DIR}/${NVCOMP_INCLUDE_DIR}
+# --- Install headers and library ---
+install(DIRECTORY ${_nvcomp_src_SOURCE_DIR}/include/
+    DESTINATION include
+)
+install(FILES
+    "${_nvcomp_src_SOURCE_DIR}/${NVCOMP_LIB_SUBDIR}"
+    DESTINATION lib
 )

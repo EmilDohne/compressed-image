@@ -253,7 +253,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 
 			/// The total compressed size of the schunk
-			virtual size_t csize() const noexcept override
+			size_t csize() const noexcept override
 			{
 				size_t _size = 0;
 				for (const auto& chunk : this->m_Chunks)

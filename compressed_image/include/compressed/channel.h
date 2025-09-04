@@ -11,6 +11,8 @@
 #include "blosc2.h"
 #include "nlohmann/json.hpp"
 
+#include "compressed/cuda/compressors/base.h"
+
 #include "macros.h"
 #include "enums.h"
 #include "fwd.h"
@@ -35,7 +37,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		using iterator = channel_iterator<T>;
 		using const_iterator = channel_iterator<const T>;
 
-		channel(channel&& other)
+		channel(channel&& other) noexcept
 		{
 			m_Schunk = std::move(other.m_Schunk);
 			m_Codec = other.m_Codec;
@@ -46,7 +48,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_Width = other.m_Width;
 			m_Height = other.m_Height;
 		};
-		channel& operator=(channel&& other)
+		channel& operator=(channel&& other) noexcept
 		{
 			if (this != &other)
 			{
