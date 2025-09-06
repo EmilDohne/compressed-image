@@ -11,8 +11,6 @@
 #include "blosc2.h"
 #include "nlohmann/json.hpp"
 
-#include "compressed/cuda/compressors/base.h"
-
 #include "macros.h"
 #include "enums.h"
 #include "fwd.h"
