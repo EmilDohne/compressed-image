@@ -1,9 +1,9 @@
 ﻿project(CompressedImage)
 
 add_library(compressed_image INTERFACE)
-target_include_directories(compressed_image INTERFACE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+target_include_directories(compressed_image INTERFACE 
+	include
+	${CUDAToolkit_INCLUDE_DIRS}
 )
 target_link_libraries(compressed_image INTERFACE  
 	blosc2_static 

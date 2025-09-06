@@ -9,7 +9,7 @@ again instead of having to do this by hand
 #include <cuda_runtime.h>
 
 #include "compressed/macros.h"
-#include "compressed/cuda/cuda.h"
+#include "compressed/cuda/cuda_hook.h"
 
 
 namespace NAMESPACE_COMPRESSED_IMAGE
@@ -120,7 +120,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \brief Generate a device buffer (using asynchronous memory ops) from a host buffer copying the data.
 			///
 			/// \param buffer The buffer to use as a size reference and to generate the device pointer from
-			static cuda_device_ptr_async from_host(std::span<T> buffer)
+			static cuda_device_buffer_async from_host(std::span<T> buffer)
 			{
 				void* raw = nullptr;
 				cuda_api::instance().malloc_async(raw, count * sizeof(T), stream);
@@ -137,6 +137,36 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				);
 
 				return std::move(buffer);
+			}
+
+			void to_host(std::span<T> buffer)
+			{
+				if (buffer.size() != this->size)
+				{
+					throw std::invalid_argument(
+						std::format(
+							"Cuda: Invalid buffer passed to `to_host` function. Expected exactly {} elements but instead"
+							" got {}.",
+							this->size,
+							buffer.size()
+						)
+					);
+				}
+
+				cuda_api::instance().memcpy_async(
+					static_cast<void*>(buffer.data()),
+					this->get_raw(),
+					this->size * sizeof(T),
+					cudaMemcpyHostToDevice
+				)
+			}
+
+			/// \brief allocate and memcpy the compressed data back to the host.
+			util::default_init_vector<T> to_host()
+			{
+				util::default_init_vector<T> buffer(this->size);
+				this->to_host(std::span<T>(buffer.begin(), buffer.end()));
+				return buffer;
 			}
 
 			T* get() noexcept { return this->data.get(); }

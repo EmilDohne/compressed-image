@@ -44,6 +44,8 @@ option(_COMPRESSED_IMAGE_SANITIZE_FLAGS "Internal CI flag for enabling sanitizer
 # Add thirdparty libraries
 # --------------------------------------------------------------------------
 
+find_package(CUDAToolkit REQUIRED)
+
 # Add c-blosc2
 set(DEACTIVATE_ZLIB ON)
 set(BUILD_TESTS OFF)
