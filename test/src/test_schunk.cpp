@@ -59,13 +59,6 @@ TEST_CASE("Schunk: initialize with data")
 				CHECK(decompressed.size() == 4096);
 				CHECK(decompressed == data);
 			}
-			SUBCASE("Check blosc2 schunk result")
-			{
-				// we also expect the right result converting to schunk
-				auto raw_schunk = super_chunk.to_schunk();
-				CHECK(raw_schunk->nchunks == 4096 * sizeof(T) / 256);
-				CHECK(raw_schunk->nbytes / sizeof(T) == 4096);
-			}
 			SUBCASE("Get chunk")
 			{
 				auto chunk = super_chunk.chunk(decomp_ctx, 0);

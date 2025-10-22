@@ -2,7 +2,6 @@
 # Fetch NVCOMP headers and static library, provide namespaced targets:
 #   compressed::nvcomp_headers
 #   compressed::nvcomp (static)
-# Fully install-friendly, no DLL copying needed.
 
 include(FetchContent)
 

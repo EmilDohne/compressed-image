@@ -276,39 +276,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return decompress(context.get(), buffer, chunk);
 		}
 
-		/// Append the chunk into the super-chunk. The chunk in this case does not need to be refitted as its actual
-		/// size since c-blosc will read the size from its header bytes.
-		inline size_t append_chunk(schunk_ptr& schunk, std::span<std::byte> chunk)
-		{
-			detail::init_filters();
-			// We don't expose the copy parameter as internally in c-blosc if the chunk was compressed at all (i.e. compressed size < 
-			// uncompressed size) the chunk gets realloc'd anyways effectively copying it.
-			auto nchunks = blosc2_schunk_append_chunk(
-				schunk.get(),
-				reinterpret_cast<uint8_t*>(chunk.data()),
-				true // copy
-			);
-
-			if (nchunks < 0)
-			{
-				throw std::runtime_error(std::format("Unable to append chunk into super-chunk with the following blosc2 error code {}", nchunks));
-			}
-
-			return nchunks;
-		}
-
-		/// Create a default schunk with BLOSC2_CPARAMS_DEFAULTS and BLOSC2_DPARAMS_DEFAULTS
-		inline blosc2::schunk_ptr create_default_schunk()
-		{
-			detail::init_filters();
-			auto cparams = BLOSC2_CPARAMS_DEFAULTS;
-			auto dparams = BLOSC2_DPARAMS_DEFAULTS;
-			blosc2_storage storage = BLOSC2_STORAGE_DEFAULTS;
-			storage.cparams = &cparams;
-			storage.dparams = &dparams;
-			return blosc2::schunk_ptr(blosc2_schunk_new(&storage));
-		}
-
 		/// Create blosc2 compression parameters for the given input.
 		template <typename T>
 		blosc2_cparams create_blosc2_cparams(schunk_ptr& schunk, size_t nthreads, enums::codec codec, uint8_t compression_level, size_t block_size)

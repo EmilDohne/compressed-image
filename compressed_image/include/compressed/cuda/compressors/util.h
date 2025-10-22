@@ -47,6 +47,47 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					return NVCOMP_TYPE_BITS; // fallback default
 			}
 
+
+			/// \brief Convert a nvcompStatus_t object into a human-readable string for printing.
+			/// \param status The status to convert 
+			/// \return A human-readable string explaining the error.
+			constexpr inline std::string_view status_t_to_string(const nvcompStatus_t& status) noexcept
+			{
+				switch (status)
+				{
+				case nvcompStatus_t::nvcompSuccess:
+					return "success";
+				case nvcompStatus_t::nvcompErrorInvalidValue:
+					return "invalid value";
+				case nvcompStatus_t::nvcompErrorNotSupported:
+					return "not supported";
+				case nvcompStatus_t::nvcompErrorCannotDecompress:
+					return "cannot decompress";
+				case nvcompStatus_t::nvcompErrorBadChecksum:
+					return "bad checksum";
+				case nvcompStatus_t::nvcompErrorCannotVerifyChecksums:
+					return "cannot verify checksums";
+				case nvcompStatus_t::nvcompErrorOutputBufferTooSmall:
+					return "output buffer too small";
+				case nvcompStatus_t::nvcompErrorWrongHeaderLength:
+					return "wrong header length";
+				case nvcompStatus_t::nvcompErrorAlignment:
+					return "alignment error";
+				case nvcompStatus_t::nvcompErrorChunkSizeTooLarge:
+					return "chunk size too large";
+				case nvcompStatus_t::nvcompErrorCannotCompress:
+					return "cannot compress";
+				case nvcompStatus_t::nvcompErrorWrongInputLength:
+					return "wrong input length";
+				case nvcompStatus_t::nvcompErrorCudaError:
+					return "CUDA error";
+				case nvcompStatus_t::nvcompErrorInternal:
+					return "internal error";
+				default:
+					return "unknown error";
+				}
+			}
+
 		} // namespace util
 
 	} // namespace cuda

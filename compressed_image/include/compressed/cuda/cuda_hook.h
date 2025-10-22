@@ -13,6 +13,7 @@ Note: This header should only ever be included on a machine that also has the cu
 #include <string>
 #include <string_view>
 #include <utility>
+#include <limits>
 
 #include <cuda_runtime.h>
 
@@ -142,7 +143,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		};
 
 		// ===========================================================
-		// Implementation (inline, since header-only)
+		// Implementation
 		// ===========================================================
 
 		inline int cuda_api::device_count() const
@@ -235,8 +236,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			cudaMemPool_t mempool{};
 			cuda_call(get_mempool_fn_, "cudaDeviceGetDefaultMemPool", &mempool, device);
-			cuda_call(set_mempool_fn_, "cudaMemPoolSetAttribute", mempool,
-				cudaMemPoolAttrReleaseThreshold, &threshold);
+			cuda_call(
+				set_mempool_fn_, 
+				"cudaMemPoolSetAttribute", 
+				mempool,
+				cudaMemPoolAttrReleaseThreshold, 
+				&threshold
+			);
 		}
 
 		// --- private helpers ---
