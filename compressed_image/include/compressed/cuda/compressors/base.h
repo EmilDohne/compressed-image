@@ -67,13 +67,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// The options to use for decompression
 			decompression_options	decomp_options{};
 
-			/// The compression codec to be used. Must be one of the GPU codecs to be valid.
-			NAMESPACE_COMPRESSED_IMAGE::enums::codec codec{};
-
 			/// The block size used for compression. All blocks will have this size except for the last one which may
 			/// be smaller. The input is split into this many blocks. If the requested block size exceeds what the
 			/// compressor allows, it is internally reduced. A typical recommended value is 65536 (2^16).
 			size_t block_size = s_default_blocksize;
+
+			/// The compression codec to be used. Must be one of the GPU codecs to be valid.
+			NAMESPACE_COMPRESSED_IMAGE::enums::codec codec{};
 
 			/// The GPU device to use for compression/decompression.
 			int gpu_device = 0;
@@ -82,6 +82,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 		/// A single compressed chunk holding a collection of blocks inside it. Similar to a blosc2 chunk but instead 
 		/// of being stored as a single chunk
+		template <typename T>
 		struct compressed_chunk
 		{
 			/// \brief The compressed data, stored on host as a std::vector.
@@ -92,6 +93,25 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			/// \brief The compression context used for compression/decompression. Once set this may not be modified.
 			const nvcomp_context context{};
+
+			size_t csize() const
+			{
+				std::accumulate(this->blocks.begin(), this->blocks.end(), 0,
+					[](size_t sum, const auto& elem)
+					{
+						return sum + elem.size();
+					});
+			}
+
+			size_t size() const
+			{
+				return this->byte_size() / sizeof(T);
+			}
+
+			size_t byte_size() const
+			{
+				return std::accumulate(block_sizes.begin(), block_sizes.end(), 0);
+			}
 		};
 		
 
@@ -142,7 +162,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				/// \note Compression uses asynchronous CUDA operations with per-thread streams and
 				///       memory pooling. Data is synchronized before returning, but overlapping
 				///       work on other streams may proceed concurrently.
-				compressed_chunk compress(std::span<T> data, nvcomp_context context) const
+				compressed_chunk<T> compress(std::span<T> data, nvcomp_context context) const
 				{
 					// Set both the current stack device as well as unlocking the mem pool size allowing
 					// future calls to `compress` to take advantage of this memory pooling.
@@ -261,7 +281,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 					this->validate_per_block_statuses(device_statuses);
 
-					return compressed_chunk{ std::move(compressed_blocks), std::move(block_sizes), std::move(context) };
+					return compressed_chunk<T>{ 
+						std::move(compressed_blocks), 
+						std::move(block_sizes), 
+						std::move(context) 
+					};
 				};
 
 
@@ -277,7 +301,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				/// 
 				/// \throws std::runtime_error on CUDA or nvCOMP failure.
 				template <typename T>
-				void decompress(compressed_chunk& chunk, std::span<T> output) const
+				void decompress(compressed_chunk<T>& chunk, std::span<T> output) const
 				{
 					device_guard guard(chunk.context.gpu_device);
 					cuda_api::instance().set_mem_pool_size(chunk.context.gpu_device);

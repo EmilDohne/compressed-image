@@ -47,6 +47,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			}
 		}
 
+		template <typename T>
+		inline compressor_var make_compressor(const cuda::compressed_chunk<T>& chunk)
+		{
+			return make_compressor(chunk.context.codec);
+		}
+
 
 	} // namespace cuda
 

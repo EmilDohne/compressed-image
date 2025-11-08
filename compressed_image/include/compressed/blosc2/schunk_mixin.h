@@ -9,36 +9,84 @@
 #include "compressed/constants.h"
 #include "compressed/cuda/compressors/base.h"
 
+
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
-
-	
-
 
 	namespace detail
 	{
 
-		/// gpu/cpu compressed chunk representation where the vector of bytes is a blosc2 chunk that contains metadata
-		/// within while the cuda::compressed_chunk is a cuda chunk.
-		using chunk_variant = std::variant<std::vector<std::byte>, std::vector<cuda::compressed_chunk>>;
 
-		/// Opaque mixin around a blosc2 super-chunk with the intention of not using a `blosc2_schunk`
-		/// itself but instead of using it directly the chunks should be stored individually.
-		/// Subclassed by either a `schunk` or a `lazy_schunk` depending on the needs of the 
-		/// consumer.
-		template <typename T, typename ContainerType>
+		/// Mixin for representing a blosc2-style super-chunk for both cpu and gpu chunks.
+		/// The 
+		/// 
+		/// \tparam _gpu_container_type The type for a gpu compressed chunk
+		/// \tparam _cpu_container_type The type for a cpu compressed chunk
+		template <typename T, typename _gpu_container_type, typename _cpu_container_type>
 		struct schunk_mixin
 		{
+			using gpu_container = _gpu_container_type;
+			using cpu_container = _cpu_container_type;
+
 			virtual ~schunk_mixin() = default;
 
-			bool is_gpu_schunk();
+			/// Checks whether the chunk at `index` is a gpu/cpu chunk
+			///
+			/// \parm index The chunk index
+			/// 
+			/// \throws std::runtime_error if the chunk index is not valid
+			bool is_gpu_chunk(size_t index) const
+			{
+				if (index > m_Chunks.size() - 1)
+				{
+					throw std::runtime_error(
+						std::format(
+							"Invalid chunk index {}, can at most index up to {}",
+							index,
+							m_Chunks.size() - 1,
+						)
+					)
+				}
+
+				return std::holds_alternative<_gpu_container_type>(m_Chunks.at(index));
+			};
 
 			/// Generate an uncompressed vector from all of the chunks.
 			///
-			/// \param decompression_ctx the decompression context.
+			/// \param cpu_decompression_ctx the decompression context for all cpu based chunks.
+			/// \param gpu_decompression_ctx the decompression context for all gpu based chunks.
 			/// 
 			/// \returns a contiguous vector representing the uncompressed schunk.
-			virtual std::vector<T> to_uncompressed(blosc2::context_ptr& decompression_ctx) const = 0;
+			virtual std::vector<T> to_uncompressed(
+				blosc2::context_ptr& cpu_decompression_ctx,
+				cuda::nvcomp_context gpu_decompression_ctx
+			)
+			{
+				_COMPRESSED_PROFILE_FUNCTION();
+				auto num_elems = this->size();
+				std::vector<T> data(num_elems);
+
+				size_t data_offset = 0;
+				for (auto idx : std::views::iota(size_t{ 0 }, this->m_Chunks.size()))
+				{
+					size_t chunk_elems = this->chunk_elements(idx);
+
+					auto subspan = std::span<T>(data.data() + data_offset, chunk_elems);
+
+					if (this->is_gpu_chunk(idx))
+					{
+						this->chunk(gpu_decompression_ctx, subspan, idx);
+					}
+					else
+					{
+						this->chunk(cpu_decompression_ctx, subspan, idx);
+					}
+
+					data_offset += chunk_elems;
+				}
+
+				return data;
+			};
 
 			/// Retrieve the uncompressed chunk at `index`.
 			///
@@ -46,7 +94,23 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \param index the index of the chunk within the schunk.
 			/// 
 			/// \throws std::out_of_range if the index is not valid
-			virtual std::vector<T> chunk(blosc2::context_ptr& decompression_ctx, size_t index) const = 0;
+			virtual std::vector<T> chunk(blosc2::context_ptr& decompression_ctx, size_t index) const
+			{
+				return this->chunk(decompression_ctx.get(), index);
+			};
+
+			/// Retrieve the uncompressed gpu chunk at `index`.
+			///
+			/// \param decompression_ctx the decompression context
+			/// \param index the index of the chunk within the schunk.
+			/// 
+			/// \throws std::out_of_range if the index is not valid
+			virtual std::vector<T> chunk(cuda::nvcomp_context decompression_ctx, size_t index) const
+			{
+				std::vector<T> buffer(this->size());
+				this->chunk(decompression_ctx, index);
+				return buffer;
+			};
 
 			/// Retrieve the uncompressed chunk at `index`.
 			///
@@ -54,7 +118,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \param index the index of the chunk within the schunk.
 			/// 
 			/// \throws std::out_of_range if the index is not valid
-			virtual std::vector<T> chunk(blosc2::context_raw_ptr decompression_cx, size_t index) const = 0;
+			virtual std::vector<T> chunk(blosc2::context_raw_ptr decompression_cx, size_t index) const
+			{
+				std::vector<T> buffer(this->size());
+				this->chunk(decompression_ctx, index);
+				return buffer;
+			};
 
 			/// Retrieve the uncompressed chunk at `index`.
 			///
@@ -63,7 +132,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \param index the index of the chunk within the schunk.
 			/// 
 			/// \throws std::out_of_range if the index is not valid
-			virtual void chunk(blosc2::context_ptr& decompression_ctx, std::span<T> buffer, size_t index) const = 0;
+			virtual void chunk(blosc2::context_ptr& decompression_ctx, std::span<T> buffer, size_t index) const
+			{
+				this->chunk(decompression_ctx.get(), buffer, index);
+			};
+
+			/// Retrieve the uncompressed gpu chunk at `index`.
+			///
+			/// \param decompression_ctx the decompression context
+			/// \param buffer the buffer to fill the uncompressed data with. Must be at least max chunk size.
+			/// \param index the index of the chunk within the schunk.
+			/// 
+			/// \throws std::out_of_range if the index is not valid
+			virtual void chunk(cuda::nvcomp_context decompression_ctx, std::span<T> buffer, size_t index) const = 0;
 
 			/// Retrieve the uncompressed chunk at `index`.
 			///
@@ -97,25 +178,31 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			/// \param index the index of the chunk within the schunk.
 			/// 
 			/// \throws std::out_of_range if the index is not valid
-				virtual void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) = 0;
+			virtual void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) = 0;
 
-			/// Append to the schunk with the uncompressed data (compressing it).
-			///
-			/// \param compressed the compressed chunk
-			virtual void append_chunk(std::vector<std::byte> compressed) = 0;
-
-			/// Append to the schunk with the uncompressed data (compressing it).
+			/// Set the chunk at `index` to the uncompressed data (compressing it).
 			///
 			/// \param compression_ctx the compression context to use for compression.
 			/// \param uncompressed the uncompressed chunk
-				virtual void append_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed) = 0;
+			/// \param index the index of the chunk within the schunk.
+			/// 
+			/// \throws std::out_of_range if the index is not valid
+			virtual void set_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed, size_t index) = 0;
+
 
 			/// Append to the schunk with the uncompressed data (compressing it).
 			///
 			/// \param compression_ctx the compression context to use for compression.
 			/// \param uncompressed the uncompressed chunk
 			/// \param compression_buff the compression buffer to use for temporary storage.
-				virtual void append_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, std::span<std::byte> compression_buff) = 0;
+			virtual void append_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed, std::span<std::byte> compression_buff) = 0;
+
+			/// Append to the schunk with the uncompressed data (compressing it).
+			///
+			/// \param compression_ctx the compression context to use for compression.
+			/// \param uncompressed the uncompressed chunk
+			/// \param compression_buff the compression buffer to use for temporary storage.
+			virtual void append_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, std::span<std::byte> compression_buff) = 0;
 
 			/// Retrieve the number of elements (uncompressed) that the schunk stores.
 			///
@@ -188,25 +275,22 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				return size() * sizeof(T);
 			}
 
-			size_t max_chunk_size()
+			size_t max_chunk_size() const noexcept
 			{
 				return m_ChunkSize;
 			}
 
-			size_t max_block_size()
+			size_t max_block_size() const noexcept
 			{
 				return m_BlockSize;
 			}
 
 		protected:
-			std::vector<ContainerType> m_Chunks{};
+			std::vector<std::variant<_cpu_container_type, _gpu_container_type>> m_Chunks{};
 			/// The maximum size a chunk is constrained to, in bytes. This will dictate the size of all chunks from
 			///  0 - (this->m_Chunks.size() - 1). The last chunk may be any other size smaller than or equal to this value.
 			size_t m_ChunkSize = s_default_chunksize;
 			size_t m_BlockSize = s_default_blocksize;
-
-			/// @brief 
-			bool m_IsGpuSchunk = false;
 
 			/// Validate the chunk index throwing a std::out_of_range if the index is not valid.
 			void validate_chunk_index(size_t index) const

@@ -135,11 +135,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			return uncompressed;
 		}
 
-		std::vector<T> chunk(blosc2::context_ptr& decompression_ctx, size_t index) const override
-		{
-			return this->chunk(decompression_ctx.get(), index);
-		}
-
 		std::vector<T> chunk(blosc2::context_raw_ptr decompression_ctx, size_t index) const override
 		{
 			if (index > this->m_Chunks.size() - 1)
@@ -156,11 +151,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				return uncompressed;
 			}
 			return std::vector<T>(this->chunk_elements(index), std::get<T>(this->m_Chunks[index].value));
-		}
-
-		void chunk(blosc2::context_ptr& decompression_ctx, std::span<T> buffer, size_t index) const override
-		{
-			this->chunk(decompression_ctx.get(), buffer, index);
 		}
 
 		void chunk(blosc2::context_raw_ptr decompression_ctx, std::span<T> buffer, size_t index) const override

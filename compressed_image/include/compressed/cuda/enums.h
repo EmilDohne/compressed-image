@@ -11,7 +11,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 		namespace enums
 		{
-
 			/// \brief the storage location of a given compressing data buffer.
 			enum class storage_location
 			{
