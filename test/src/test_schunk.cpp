@@ -20,16 +20,13 @@ TEST_CASE("Schunk: initialize with chunk size")
 {
 	test_util::parametrize<uint8_t, uint16_t, uint32_t, float>([&]<typename T>([[maybe_unused]] T type)
 		{
-			compressed::blosc2::schunk<T> super_chunk(128, 4096);
+			compressed::detail::schunk<T> super_chunk(128, 4096);
 
 			auto ctx = compressed::blosc2::create_decompression_context(std::thread::hardware_concurrency());
 
 			// this schunk is empty so we expect no items
 			auto decompressed = super_chunk.to_uncompressed(ctx);
 			CHECK(decompressed.size() == 0);
-
-			// similarly converting to schunk should work, but be empty
-			auto raw_schunk = super_chunk.to_schunk();
 		});
 }
 
@@ -49,7 +46,7 @@ TEST_CASE("Schunk: initialize with data")
 				9,
 				128
 			);
-			compressed::blosc2::schunk<T> super_chunk(std::span<const T>(data), 64, 256, ctx);
+			compressed::detail::schunk<T> super_chunk(std::span<const T>(data), 64, 256, ctx);
 
 			auto decomp_ctx = compressed::blosc2::create_decompression_context(std::thread::hardware_concurrency());
 			SUBCASE("Check decompressed")
@@ -61,7 +58,7 @@ TEST_CASE("Schunk: initialize with data")
 			}
 			SUBCASE("Get chunk")
 			{
-				auto chunk = super_chunk.chunk(decomp_ctx, 0);
+				auto chunk = super_chunk.chunk(decomp_ctx, size_t{ 0 });
 				CHECK(chunk.size() == 256 / sizeof(T));
 			}
 		});

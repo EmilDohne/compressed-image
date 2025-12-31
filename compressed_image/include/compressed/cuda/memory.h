@@ -9,6 +9,7 @@ again instead of having to do this by hand
 #include <cuda_runtime.h>
 
 #include "compressed/macros.h"
+#include "compressed/util.h"
 #include "compressed/cuda/cuda_hook.h"
 
 
@@ -92,12 +93,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		// Allocation helpers (typed)
 		// -------------------------------------------------------------------------
 		template <typename T>
-		using cuda_device_ptr = std::unique_ptr<T, device_deleter>;
+		using cuda_device_ptr = std::unique_ptr<T, detail::device_deleter>;
 
 		template <typename T>
 		struct cuda_device_buffer
 		{
-			cuda_device_ptr_async<T> data = nullptr;
+			cuda_device_ptr<T> data = nullptr;
 			size_t size{};
 
 			T* get() noexcept { return this->data.get(); }
@@ -109,7 +110,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		};
 
 		template <typename T>
-		using cuda_device_ptr_async = std::unique_ptr<T, device_deleter_async>;
+		using cuda_device_ptr_async = std::unique_ptr<T, detail::device_deleter_async>;
 
 		template <typename T>
 		struct cuda_device_buffer_async
@@ -123,10 +124,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			static cuda_device_buffer_async from_host(std::span<T> buffer)
 			{
 				void* raw = nullptr;
-				cuda_api::instance().malloc_async(raw, count * sizeof(T), stream);
+				cuda_api::instance().malloc_async(raw, buffer.size() * sizeof(T), cudaStreamPerThread);
 				auto buffer = cuda_device_buffer_async<T>{
-					cuda_device_ptr_async<T>(static_cast<T*>(raw), device_deleter_async{ stream }),
-					count
+					cuda_device_ptr_async<T>(static_cast<T*>(raw), detail::device_deleter_async{ cudaStreamPerThread }),
+					buffer.size()
 				};
 
 				cuda_api::instance().memcpy_async(
@@ -158,11 +159,11 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					this->get_raw(),
 					this->size * sizeof(T),
 					cudaMemcpyHostToDevice
-				)
+				);
 			}
 
 			/// \brief allocate and memcpy the compressed data back to the host.
-			util::default_init_vector<T> to_host()
+			NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<T> to_host()
 			{
 				util::default_init_vector<T> buffer(this->size);
 				this->to_host(std::span<T>(buffer.begin(), buffer.end()));
@@ -178,7 +179,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		};
 
 		template <typename T>
-		using cuda_host_ptr = std::unique_ptr<T, host_deleter>;
+		using cuda_host_ptr = std::unique_ptr<T, detail::host_deleter>;
 
 		// -------------------------------------------------------------------------
 		// Factory functions, use these whenever possible!
@@ -203,7 +204,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{
 			void* raw = nullptr;
 			cuda_api::instance().malloc_async(raw, count * sizeof(T), stream);
-			return cuda_device_ptr_async<T>(static_cast<T*>(raw), device_deleter_async{ stream });
+			return cuda_device_ptr_async<T>(static_cast<T*>(raw), detail::device_deleter_async{ stream });
 		}
 
 		template <typename T = void>
@@ -216,7 +217,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T = void>
 		inline cuda_host_ptr<T> make_host_mem(size_t count) {
 			void* raw = nullptr;
-			cuda_api::instance().malloc_host(raw, count * sizeof(T), stream);
+			cuda_api::instance().malloc_host(raw, count * sizeof(T), cudaStreamPerThread);
 			return cuda_host_ptr<T>(static_cast<T*>(raw));
 		}
 

@@ -1596,10 +1596,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				// Create and initialize the contexts and schunks. These are pretty light weight so we don't need
 				// to worry about creating them outside of the loop/reusing them.
 				std::vector<blosc2::context_ptr> contexts;
-				std::vector<blosc2::schunk<T>> schunks;
+				std::vector<detail::schunk<T>> schunks;
 				for ([[maybe_unused]] auto _ : std::views::iota(0, nchannels))
 				{
-					schunks.push_back(blosc2::schunk<T>(block_size, chunk_size_aligned));
+					schunks.push_back(detail::schunk<T>(block_size, chunk_size_aligned));
 					contexts.push_back(blosc2::create_compression_context<T>(
 						std::thread::hardware_concurrency(),
 						compression_codec,
@@ -1742,7 +1742,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::vector<std::span<T>>& deinterleaved_buffer,
 			size_t scanlines_per_chunk,
 			std::vector<blosc2::context_ptr>& contexts,
-			std::vector<blosc2::schunk<T>>& schunks,
+			std::vector<detail::schunk<T>>& schunks,
 			util::default_init_vector<std::byte>& chunk_buffer,
 			PostProcess&& postprocess
 		)

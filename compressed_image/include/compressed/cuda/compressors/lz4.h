@@ -166,7 +166,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				auto status = nvcompBatchedLZ4DecompressAsync(
 					compressed_block_ptrs.data(),
-					compressed_block_sizes.data()
+					compressed_block_sizes.data(),
 					uncompressed_block_sizes.data(),
 					num_blocks,
 					scratch_space.data(),
@@ -174,7 +174,8 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					uncompressed_block_ptrs.data(),
 					std::get<nvcompBatchedLZ4DecompressOpts_t>(options),
 					block_statuses.data(),
-					cudaStreamPerThread);
+					cudaStreamPerThread
+				);
 
 				if (status != nvcompStatus_t::nvcompSuccess)
 				{

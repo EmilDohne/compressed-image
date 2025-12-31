@@ -70,7 +70,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// functions `zeros` and `full` are preferred.
 		channel()
 		{
-			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(blosc2::lazy_schunk<T>(0, 1, s_default_blocksize, s_default_chunksize));
+			m_Schunk = std::make_shared<schunk_var<T>>(detail::lazy_schunk<T>(0, 1, s_default_blocksize, s_default_chunksize));
 			m_CompressionContext = blosc2::create_compression_context<T>(
 				std::thread::hardware_concurrency() / 2,
 				enums::codec::lz4,
@@ -129,7 +129,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 			// Align the chunks to the scanlines, makes our lifes a lot easier on read/write.
 			auto chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(m_Width, chunk_size);
-			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(blosc2::schunk<T>(data, block_size, chunk_size_aligned, m_CompressionContext));
+			m_Schunk = std::make_shared<schunk_var<T>>(detail::schunk<T>(data, block_size, chunk_size_aligned, m_CompressionContext));
 		}
 
 
@@ -148,7 +148,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		///					  to compress for optimal performance but this could be upped which might give better compression
 		///					  ratios. Must be a multiple of sizeof(T).
 		channel(
-			blosc2::schunk_var<T> schunk,
+			schunk_var<T> schunk,
 			size_t width,
 			size_t height,
 			enums::codec compression_codec = enums::codec::lz4,
@@ -159,34 +159,34 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			m_Codec = compression_codec;
 			m_CompressionLevel = util::ensure_compression_level(compression_level);
 
-			if (std::holds_alternative<blosc2::schunk<T>>(schunk))
+			if (std::holds_alternative<detail::schunk<T>>(schunk))
 			{
-				if (std::get<blosc2::schunk<T>>(schunk).size() != width * height)
+				if (std::get<detail::schunk<T>>(schunk).size() != width * height)
 				{
 					throw std::invalid_argument(
 						std::format(
 							"Invalid schunk passed to compressed::channel constructor. Expected a size of {:L} but instead got {:L}",
 							width * height,
-							std::get<blosc2::schunk<T>>(schunk).size()
+							std::get<detail::schunk<T>>(schunk).size()
 						)
 					);
 				}
 			}
-			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(schunk))
+			else if (std::holds_alternative<detail::lazy_schunk<T>>(schunk))
 			{
-				if (std::get<blosc2::lazy_schunk<T>>(schunk).size() != width * height)
+				if (std::get<detail::lazy_schunk<T>>(schunk).size() != width * height)
 				{
 					throw std::invalid_argument(
 						std::format(
 							"Invalid schunk passed to compressed::channel constructor. Expected a size of {:L} but instead got {:L}",
 							width * height,
-							std::get<blosc2::schunk<T>>(schunk).size()
+							std::get<detail::schunk<T>>(schunk).size()
 						)
 					);
 				}
 			}
 
-			m_Schunk = std::make_shared<blosc2::schunk_var<T>>(std::move(schunk));
+			m_Schunk = std::make_shared<schunk_var<T>>(std::move(schunk));
 			m_Width = width;
 			m_Height = height;
 
@@ -276,7 +276,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			const size_t chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(width, chunk_size);
 			const size_t num_elements = width * height;
 
-			auto schunk = blosc2::lazy_schunk<T>(fill_value, num_elements, block_size, chunk_size_aligned);
+			auto schunk = detail::lazy_schunk<T>(fill_value, num_elements, block_size, chunk_size_aligned);
 			return channel(std::move(schunk), width, height, compression_codec, compression_level);
 		}
 
@@ -380,13 +380,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
 			}
 
-			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
+			if (std::holds_alternative<detail::schunk<T>>(*m_Schunk))
 			{
-				return std::get<blosc2::schunk<T>>(*m_Schunk).csize();
+				return std::get<detail::schunk<T>>(*m_Schunk).csize();
 			}
-			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(*m_Schunk))
+			else if (std::holds_alternative<detail::lazy_schunk<T>>(*m_Schunk))
 			{
-				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).csize();
+				return std::get<detail::lazy_schunk<T>>(*m_Schunk).csize();
 			}
 			return {};
 		}
@@ -401,13 +401,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				throw std::runtime_error("Channel instance is not properly initialized, unable to get decompressed data");
 			}
 
-			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
+			if (std::holds_alternative<detail::schunk<T>>(*m_Schunk))
 			{
-				return std::get<blosc2::schunk<T>>(*m_Schunk).size();
+				return std::get<detail::schunk<T>>(*m_Schunk).size();
 			}
-			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(*m_Schunk))
+			else if (std::holds_alternative<detail::lazy_schunk<T>>(*m_Schunk))
 			{
-				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).size();
+				return std::get<detail::lazy_schunk<T>>(*m_Schunk).size();
 			}
 			return {};
 		}
@@ -419,13 +419,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		{ 
 			assert(m_Schunk != nullptr);
 
-			if (std::holds_alternative<blosc2::schunk<T>>(*m_Schunk))
+			if (std::holds_alternative<detail::schunk<T>>(*m_Schunk))
 			{
-				return std::get<blosc2::schunk<T>>(*m_Schunk).num_chunks();
+				return std::get<detail::schunk<T>>(*m_Schunk).num_chunks();
 			}
-			else if (std::holds_alternative<blosc2::lazy_schunk<T>>(*m_Schunk))
+			else if (std::holds_alternative<detail::lazy_schunk<T>>(*m_Schunk))
 			{
-				return std::get<blosc2::lazy_schunk<T>>(*m_Schunk).num_chunks();
+				return std::get<detail::lazy_schunk<T>>(*m_Schunk).num_chunks();
 			}
 			return {};
 		}
@@ -578,7 +578,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 	private:
 		/// The storage for the internal data, stored contiguously in a compressed data format
-		blosc2::schunk_var_ptr<T> m_Schunk = nullptr;
+		schunk_var_ptr<T> m_Schunk = nullptr;
 		enums::codec m_Codec = enums::codec::lz4;
 
 		size_t m_Nthreads = std::thread::hardware_concurrency() / 2;

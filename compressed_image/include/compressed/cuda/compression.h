@@ -15,31 +15,33 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	namespace cuda
 	{
 
+		template <typename T>
 		using compressor_var = std::variant<
-			lz4_compressor,
-			snappy_compressor,
-			zstd_compressor,
-			deflate_compressor,
-			gdeflate_compressor,
-			cascaded_compressor>;
+			lz4_compressor<T>,
+			snappy_compressor<T>,
+			zstd_compressor<T>,
+			deflate_compressor<T>,
+			gdeflate_compressor<T>,
+			cascaded_compressor<T>>;
 
 
-		inline compressor_var make_compressor(NAMESPACE_COMPRESSED_IMAGE::enums::codec codec)
+		template <typename T>
+		compressor_var<T> make_compressor(NAMESPACE_COMPRESSED_IMAGE::enums::codec codec)
 		{
 			switch (codec)
 			{
 			case NAMESPACE_COMPRESSED_IMAGE::enums::codec::lz4_gpu:
-				return lz4_compressor{};
+				return lz4_compressor<T>{};
 			case NAMESPACE_COMPRESSED_IMAGE::enums::codec::snappy_gpu:
-				return snappy_compressor{};
+				return snappy_compressor<T>{};
 			case NAMESPACE_COMPRESSED_IMAGE::enums::codec::zstd_gpu:
-				return zstd_compressor{};
+				return zstd_compressor<T>{};
 			case NAMESPACE_COMPRESSED_IMAGE::enums::codec::deflate_gpu:
-				return deflate_compressor{};
+				return deflate_compressor<T>{};
 			case NAMESPACE_COMPRESSED_IMAGE::enums::codec::gdeflate_gpu:
-				return gdeflate_compressor{};
+				return gdeflate_compressor<T>{};
 			case NAMESPACE_COMPRESSED_IMAGE::enums::codec::cascaded_gpu:
-				return cascaded_compressor{};
+				return cascaded_compressor<T>{};
 			default:
 				throw std::invalid_argument(
 					std::format("Unknown or unsupported gpu codec: {}", static_cast<int>(codec))
@@ -48,7 +50,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		template <typename T>
-		inline compressor_var make_compressor(const cuda::compressed_chunk<T>& chunk)
+		compressor_var<T> make_compressor(const cuda::compressed_chunk<T>& chunk)
 		{
 			return make_compressor(chunk.context.codec);
 		}

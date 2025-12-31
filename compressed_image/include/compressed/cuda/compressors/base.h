@@ -6,6 +6,7 @@ Entry point for the various compressors of nvcomp
 
 #include <variant>
 #include <cstddef>
+#include <execution>
 #include <vector>
 
 #include <nvcomp.h>
@@ -23,6 +24,7 @@ Entry point for the various compressors of nvcomp
 
 #include "compressed/cuda/memory.h"
 #include "compressed/cuda/enums.h"
+#include "compressed/cuda/compressors/util.h"
 #include "compressed/cuda/cuda_hook.h"
 #include "compressed/cuda/gpu.h"
 
@@ -41,7 +43,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			nvcompBatchedGdeflateCompressOpts_t,
 			nvcompBatchedGzipCompressOpts_t,
 			nvcompBatchedSnappyCompressOpts_t,
-			nvcompBatchedZstdCompressOpts_t,
+			nvcompBatchedZstdCompressOpts_t
 		>;
 
 		/// \brief decompression options for the various nvcomp compressors.
@@ -52,7 +54,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			nvcompBatchedGdeflateDecompressOpts_t,
 			nvcompBatchedGzipDecompressOpts_t,
 			nvcompBatchedSnappyDecompressOpts_t,
-			nvcompBatchedZstdDecompressOpts_t,
+			nvcompBatchedZstdDecompressOpts_t
 		>;
 
 
@@ -86,13 +88,13 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		struct compressed_chunk
 		{
 			/// \brief The compressed data, stored on host as a std::vector.
-			std::vector<util::default_init_vector<std::byte>> blocks;
+			std::vector<NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>> blocks;
 
 			/// \brief The uncompressed block sizes of all the blocks inside `blocks`. Expressed as bytes
 			std::vector<size_t> block_sizes{};
 
 			/// \brief The compression context used for compression/decompression. Once set this may not be modified.
-			const nvcomp_context context{};
+			nvcomp_context context{};
 
 			size_t csize() const
 			{
@@ -170,7 +172,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					cuda_api::instance().set_mem_pool_size(context.gpu_device);
 
 					// Ensure the block size does not exceed the max the compressor allows for.
-					block_size = this->fit_block_size(context.block_size);
+					context.block_size = this->fit_block_size(context.block_size);
 					compression_options comp_options = context.comp_options;
 
 					// ##################################################################################
@@ -253,7 +255,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					// Copy the compressed data back to host
 					// ##################################################################################
 
-					std::vector<util::default_init_vector<std::byte>> compressed_blocks(num_blocks);
+					std::vector<NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>> compressed_blocks(num_blocks);
 					std::vector<size_t> compressed_bytes(num_blocks);
 					device_compressed_bytes.to_host(std::span<size_t>(compressed_bytes.begin(), compressed_bytes.end()));
 
@@ -262,7 +264,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 						{
 							// Allocate memory
 							auto& block = compressed_blocks.at(block_idx);
-							block = util::default_init_vector<std::byte>(compressed_bytes.at(block_idx));
+							block = NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>(compressed_bytes.at(block_idx));
 
 							// Copy from device back to host
 							cuda_api::memcpy_async(
@@ -301,7 +303,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				/// 
 				/// \throws std::runtime_error on CUDA or nvCOMP failure.
 				template <typename T>
-				void decompress(compressed_chunk<T>& chunk, std::span<T> output) const
+				void decompress(const compressed_chunk<T>& chunk, std::span<T> output) const
 				{
 					device_guard guard(chunk.context.gpu_device);
 					cuda_api::instance().set_mem_pool_size(chunk.context.gpu_device);
@@ -340,7 +342,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					for (size_t i = 0; i < num_blocks; ++i)
 					{
 						host_uncompressed_ptrs[i] = reinterpret_cast<void*>(device_output.get() + (offset_bytes / sizeof(T)));
-						offset_bytes += chunk.block_size;
+						offset_bytes += chunk.context.block_size;
 					}
 
 					auto device_uncompressed_ptrs = cuda_device_buffer_async<void>::from_host(host_uncompressed_ptrs);
@@ -350,7 +352,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 					// Allocate scratch buffer for decompression
 					// ##################################################################################
 					
-					auto device_temp = this->generate_temp_buffer(block_size, num_blocks, chunk.context.decomp_options);
+					auto device_temp = this->generate_temp_buffer(chunk.context.block_size, num_blocks, chunk.context.decomp_options);
 					auto device_statuses = make_device_buffer_async<nvcompStatus_t>(num_blocks);
 
 					// ##################################################################################
@@ -419,19 +421,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				void validate_per_block_statuses(cuda_device_buffer_async<nvcompStatus_t>& device_statuses) const
 				{
 					// Now that we have synchronized, we can check the statuses per-block
-					auto status_vector = util::default_init_vector<nvcompStatus_t>(device_statuses.size());
+					auto status_vector = NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<nvcompStatus_t>(device_statuses.size());
 
 					// Copy from device back to host
 					cuda_api::memcpy_async(
 						static_cast<void*>(status_vector.data()),
 						device_statuses.data(),
-						device_statuses.size(),
+						device_statuses.size,
 						cudaMemcpyDeviceToHost
 					);
 
 					// Aggregate errors instead of throwing immediately
 					std::vector<std::string> error_messages;
-					for (size_t i = 0; i < device_statuses.size(); ++i)
+					for (size_t i = 0; i < device_statuses.size; ++i)
 					{
 						if (status_vector[i] != nvcompStatus_t::nvcompSuccess)
 						{
@@ -439,7 +441,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 								std::format(
 									"block {} failed with nvcomp status: '{}'",
 									i,
-									util::status_t_to_string(status_vector[i])
+									cuda::util::status_t_to_string(status_vector[i])
 								)
 							);
 						}

@@ -412,7 +412,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		/// 
 		/// \throws std::runtime_error if we encounter a blosc2 error.
 		template <typename T>
-		size_t chunk_num_elements(const std::vector<std::byte>& chunk)
+		size_t chunk_num_elements(const std::span<const std::byte> chunk)
 		{
 			int32_t nbytes{};
 			int32_t cbytes{};

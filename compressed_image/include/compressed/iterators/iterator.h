@@ -28,7 +28,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		channel_iterator() = default;
 
 		channel_iterator(
-			blosc2::schunk_var_ptr<T> schunk,
+			schunk_var_ptr<T> schunk,
 			blosc2::context_raw_ptr compression_context,
 			blosc2::context_raw_ptr decompression_context,
 			size_t chunk_index,
@@ -205,7 +205,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		size_t m_DecompressionBufferSize = 0;	// The fitted size of the container (only holding the decompressed size)
 
 		/// Pointers to the blosc2 structs. The data is owned by the `channel` struct and we just have a view over it.
-		blosc2::schunk_var_ptr<T> m_Schunk;
+		schunk_var_ptr<T> m_Schunk;
 		blosc2::context_raw_ptr m_CompressionContext = nullptr;
 		blosc2::context_raw_ptr	m_DecompressionContext = nullptr;
 
