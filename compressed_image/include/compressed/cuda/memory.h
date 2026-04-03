@@ -95,19 +95,19 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		using cuda_device_ptr = std::unique_ptr<T, detail::device_deleter>;
 
-		template <typename T>
-		struct cuda_device_buffer
-		{
-			cuda_device_ptr<T> data = nullptr;
-			size_t size{};
+	    template <typename T>
+	    struct cuda_device_buffer
+	    {
+	        cuda_device_ptr<T> data = nullptr;
+	        size_t size{};
 
-			T* get() noexcept { return this->data.get(); }
-			const T* get() const noexcept { return this->data.get(); }
-			void* get_raw() noexcept { return static_cast<void*>(this->get()); }
-			const void* get_raw() const noexcept { return static_cast<const void*>(this->get()); }
+        	T* get() noexcept { return this->data.get(); }
+        	const T* get() const noexcept { return this->data.get(); }
+        	void* get_raw() noexcept { return static_cast<void*>(this->get()); }
+        	[[nodiscard]] const void* get_raw() const noexcept { return static_cast<const void*>(this->get()); }
 
-			size_t bytes() const noexcept { return this->size * sizeof(T); }
-		};
+        	[[nodiscard]] size_t bytes() const noexcept { return this->size * sizeof(T); }
+    };
 
 		template <typename T>
 		using cuda_device_ptr_async = std::unique_ptr<T, detail::device_deleter_async>;
@@ -115,7 +115,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T>
 		struct cuda_device_buffer_async
 		{
+			/// \brief the underlying raw device ptr.
 			cuda_device_ptr_async<T> data = nullptr;
+			/// \brief the number of elements in the device buffer (expressed as a multiple of T)
 			size_t size{};
 
 			/// \brief Generate a device buffer (using asynchronous memory ops) from a host buffer copying the data.
@@ -125,20 +127,25 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			{
 				void* raw = nullptr;
 				cuda_api::instance().malloc_async(raw, buffer.size() * sizeof(T), cudaStreamPerThread);
-				auto buffer = cuda_device_buffer_async<T>{
+				auto gpu_buffer = cuda_device_buffer_async<T>{
 					cuda_device_ptr_async<T>(static_cast<T*>(raw), detail::device_deleter_async{ cudaStreamPerThread }),
 					buffer.size()
 				};
 
-				cuda_api::instance().memcpy_async(
-					buffer.get_raw(),
-					static_cast<void*>(buffer.data()),
-					buffer.bytes(),
-					cudaMemcpyHostToDevice
-				);
+	            cuda_api::instance().memcpy_async(
+	                gpu_buffer.get_raw(),
+	                static_cast<void*>(gpu_buffer.data()),
+	                gpu_buffer.bytes(),
+	                cudaMemcpyHostToDevice
+	            );
 
-				return std::move(buffer);
-			}
+	            return std::move(gpu_buffer);
+	        }
+
+	        static cuda_device_buffer_async from_host(std::vector<T>& buffer)
+	        {
+	            return cuda_device_buffer_async::from_host(std::span<T>(buffer.begin(), buffer.end()));
+	        }
 
 			void to_host(std::span<T> buffer)
 			{
@@ -173,9 +180,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			T* get() noexcept { return this->data.get(); }
 			const T* get() const noexcept { return this->data.get(); }
 			void* get_raw() noexcept { return static_cast<void*>(this->get()); }
-			const void* get_raw() const noexcept { return static_cast<const void*>(this->get()); }
+			[[nodiscard]] const void* get_raw() const noexcept { return static_cast<const void*>(this->get()); }
 
-			size_t bytes() const noexcept { return this->size * sizeof(T); }
+			[[nodiscard]] size_t bytes() const noexcept { return this->size * sizeof(T); }
 		};
 
 		template <typename T>
@@ -210,14 +217,14 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		template <typename T = void>
 		inline cuda_device_buffer_async<T> make_device_buffer_async(size_t count, cudaStream_t stream = cudaStreamPerThread)
 		{
-			auto managed_ptr = make_device_mem_async<T>(count);
+			auto managed_ptr = make_device_mem_async<T>(count, stream);
 			return cuda_device_buffer_async<T>{std::move(managed_ptr), count};
 		}
 
 		template <typename T = void>
 		inline cuda_host_ptr<T> make_host_mem(size_t count) {
 			void* raw = nullptr;
-			cuda_api::instance().malloc_host(raw, count * sizeof(T), cudaStreamPerThread);
+			cuda_api::instance().malloc_host(raw, count * sizeof(T));
 			return cuda_host_ptr<T>(static_cast<T*>(raw));
 		}
 

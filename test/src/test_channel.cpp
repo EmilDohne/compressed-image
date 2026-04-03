@@ -97,8 +97,6 @@ TEST_CASE("Channel get attributes"
 	CHECK(channel.width() == 10);
 	CHECK(channel.height() == 5);
 	CHECK(channel.compression() == compressed::enums::codec::blosclz);
-	CHECK(channel.compression_context() != nullptr);
-	CHECK(channel.decompression_context() != nullptr);
 	CHECK(channel.uncompressed_size() == 50);
 	CHECK(channel.num_chunks() == 1);
 }

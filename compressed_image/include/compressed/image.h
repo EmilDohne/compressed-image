@@ -18,7 +18,6 @@
 #endif
 
 #include "macros.h"
-#include "fwd.h"
 #include "blosc2/wrapper.h"
 #include "blosc2/schunk.h"
 #include "blosc2/lazyschunk.h"
@@ -88,7 +87,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			std::vector<std::span<const T>> channels,
 			size_t width,
 			size_t height,
-			std::vector<std::string> channel_names = {},
+			const std::vector<std::string>& channel_names = {},
 			enums::codec compression_codec = enums::codec::lz4,
 			size_t compression_level = 9,
 			size_t block_size = s_default_blocksize,
@@ -897,7 +896,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 
 
 		/// \brief Read the metadata from the openimageio pointer into a json representation
-		/// \param input_ptr The input file to query
 		/// \return The metadata encoded as json. This does not recursively parse jsons!
 		static json_ordered read_oiio_metadata(const OIIO::ImageSpec& spec)
 		{
@@ -905,7 +903,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 		}
 
 		/// \brief Read the metadata from the file into a json representation
-		/// \param input_ptr The input file to query
 		/// 
 		/// \throws std::invalid_argument if the file does not exist on disk.
 		/// 

@@ -5,16 +5,14 @@
 #include "compressed/cuda/compressors/base.h"
 #include "compressed/cuda/compressors/util.h"
 
-namespace NAMESPACE_COMPRESSED_IMAGE
+namespace
+NAMESPACE_COMPRESSED_IMAGE
 {
-
 	namespace cuda
 	{
-
 		template <typename T>
 		struct deflate_compressor final : public detail::compressor<T>
 		{
-
 			NAMESPACE_COMPRESSED_IMAGE::enums::codec codec() const noexcept
 			{
 				return NAMESPACE_COMPRESSED_IMAGE::enums::codec::deflate_gpu;
@@ -33,7 +31,6 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			};
 
 		private:
-
 			size_t get_temp_bytes(
 				size_t block_size,
 				size_t num_blocks,
@@ -58,7 +55,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				cuda_device_buffer_async<size_t>& compressed_block_sizes,
 				cuda_device_buffer_async<nvcompStatus_t>& block_statuses,
 				const compression_options& options
-			) const 
+			) const
 			{
 			};
 
@@ -72,13 +69,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 				cuda_device_buffer_async<size_t>& uncompressed_block_sizes,
 				cuda_device_buffer_async<nvcompStatus_t>& block_statuses,
 				const decompression_options& options
-			) const 
+			) const
 			{
 			}
-
 		};
-
-
 	} // namespace cuda
-
 } // namespace NAMESPACE_COMPRESSED_IMAGE

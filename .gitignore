@@ -19,6 +19,8 @@ benchmark/images/*.tga
 # Release artifacts
 release/
 
+.idea/
+
 # Wheel Artifacts
 wheels/
 wheelhouse/
