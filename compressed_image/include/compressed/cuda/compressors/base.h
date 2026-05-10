@@ -420,6 +420,91 @@ NAMESPACE_COMPRESSED_IMAGE
                     return fitted;
                 };
 
+             private:
+                /// ##################################################################################
+                /// Pure virtual function, dependent on compressor.
+                /// ##################################################################################
+
+                /// \brief Retrieve the number of temporary device bytes needed for the compression/decompression procedure
+                ///
+                /// \param block_size The block size of one of the sub-streams
+                /// \param num_blocks The total number of blocks
+                /// \param options	  The compression/decompression options for which to get the number of temporary
+                ///					  bytes
+                virtual size_t get_temp_bytes(
+                    size_t block_size,
+                    size_t num_blocks,
+                    std::variant<compression_options, decompression_options> options
+                ) = 0;
+
+                /// \brief Retrieve the maximum size required for compressing a single block for the given options
+                ///
+                /// \param block_size The size of a single block
+                /// \param options	  The compression options which are used for compression.
+                virtual size_t block_max_compressed_size(size_t block_size, compression_options& options) = 0;
+
+
+                /// \brief Call the underlying compression implementation of the set of blocks.
+                ///
+                /// All memory allocation needs to happen before this point, as this assumes all of these buffers have
+                /// been allocated and filled
+                ///
+                /// \param block_size				The overall block size, all blocks except for the last should have
+                ///									this size.
+                /// \param num_blocks				The overall number of blocks
+                /// \param uncompressed_block_ptrs	The pointers to the start of each uncompressed block
+                /// \param uncompressed_block_sizes	The size of each uncompressed block
+                /// \param scratch_space			The scratch bytes used by the compressor during compression.
+                /// \param compressed_block_ptrs	To be filled out by the implementation, the pointers to the start
+                ///									of each (preallocated) compressed block
+                /// \param compressed_block_sizes	To be filled out by the implementation, the sizes of the compressed
+                ///									blocks.
+                /// \param block_statuses			The statuses per compressed block, these live on the GPU and must be
+                ///									copied back for introspection.
+                /// \param options					The compression options to use, must be valid for the current
+                ///									compressor.
+                virtual void compression_impl(
+                    size_t block_size,
+                    size_t num_blocks,
+                    const cuda_device_buffer_async<void*>& uncompressed_block_ptrs,
+                    const cuda_device_buffer_async<size_t>& uncompressed_block_sizes,
+                    cuda_device_buffer_async<std::byte>& scratch_space,
+                    cuda_device_buffer_async<void*>& compressed_block_ptrs,
+                    cuda_device_buffer_async<size_t>& compressed_block_sizes,
+                    cuda_device_buffer_async<nvcompStatus_t>& block_statuses,
+                    const compression_options& options
+                ) const = 0;
+
+                /// \brief Low-level device decompression implementation.
+                ///
+                /// This function should be implemented by the derived class for a specific
+                /// compression algorithm (e.g., lz, zstd). It operates entirely on device
+                /// memory and writes decompressed data into `uncompressed_block_ptrs`.
+                ///
+                /// \param block_size               The overall block size, all blocks except for the last should have
+                ///									this size.
+                /// \param num_blocks               The overall number of blocks
+                /// \param compressed_block_ptrs    Device buffer containing pointers to compressed blocks.
+                /// \param compressed_block_sizes   Device buffer containing sizes of compressed blocks.
+                /// \param scratch_space            Temporary device buffer allocated for decompression.
+                /// \param uncompressed_block_ptrs	The pointers to the start of each uncompressed block, filled out by
+                ///									this function
+                /// \param uncompressed_block_sizes	The size of each uncompressed block, filled out by this function.
+                /// \param block_statuses			The statuses per compressed block, these live on the GPU and must be
+                ///									copied back for introspection.
+                /// \param options                  Algorithm-specific decompression options.
+                virtual void decompression_impl(
+                    size_t block_size,
+                    size_t num_blocks,
+                    const cuda_device_buffer_async<void*>& compressed_block_ptrs,
+                    const cuda_device_buffer_async<size_t>& compressed_block_sizes,
+                    cuda_device_buffer_async<std::byte>& scratch_space,
+                    cuda_device_buffer_async<void*>& uncompressed_block_ptrs,
+                    cuda_device_buffer_async<size_t>& uncompressed_block_sizes,
+                    cuda_device_buffer_async<nvcompStatus_t>& block_statuses,
+                    const decompression_options& options
+                ) const = 0;
+
             private:
                 /// ##################################################################################
                 /// Generic functions across all compressors
@@ -558,91 +643,6 @@ NAMESPACE_COMPRESSED_IMAGE
                     }
                     return out;
                 }
-
-            private:
-                /// ##################################################################################
-                /// Pure virtual function, dependent on compressor.
-                /// ##################################################################################
-
-                /// \brief Retrieve the number of temporary device bytes needed for the compression/decompression procedure
-                ///
-                /// \param block_size The block size of one of the sub-streams
-                /// \param num_blocks The total number of blocks
-                /// \param options	  The compression/decompression options for which to get the number of temporary
-                ///					  bytes
-                virtual size_t get_temp_bytes(
-                    size_t block_size,
-                    size_t num_blocks,
-                    std::variant<compression_options, decompression_options> options
-                ) = 0;
-
-                /// \brief Retrieve the maximum size required for compressing a single block for the given options
-                ///
-                /// \param block_size The size of a single block
-                /// \param options	  The compression options which are used for compression.
-                virtual size_t block_max_compressed_size(size_t block_size, compression_options& options) = 0;
-
-
-                /// \brief Call the underlying compression implementation of the set of blocks.
-                ///
-                /// All memory allocation needs to happen before this point, as this assumes all of these buffers have
-                /// been allocated and filled
-                ///
-                /// \param block_size				The overall block size, all blocks except for the last should have
-                ///									this size.
-                /// \param num_blocks				The overall number of blocks
-                /// \param uncompressed_block_ptrs	The pointers to the start of each uncompressed block
-                /// \param uncompressed_block_sizes	The size of each uncompressed block
-                /// \param scratch_space			The scratch bytes used by the compressor during compression.
-                /// \param compressed_block_ptrs	To be filled out by the implementation, the pointers to the start
-                ///									of each (preallocated) compressed block
-                /// \param compressed_block_sizes	To be filled out by the implementation, the sizes of the compressed
-                ///									blocks.
-                /// \param block_statuses			The statuses per compressed block, these live on the GPU and must be
-                ///									copied back for introspection.
-                /// \param options					The compression options to use, must be valid for the current
-                ///									compressor.
-                virtual void compression_impl(
-                    size_t block_size,
-                    size_t num_blocks,
-                    const cuda_device_buffer_async<void*>& uncompressed_block_ptrs,
-                    const cuda_device_buffer_async<size_t>& uncompressed_block_sizes,
-                    cuda_device_buffer_async<std::byte>& scratch_space,
-                    cuda_device_buffer_async<void*>& compressed_block_ptrs,
-                    cuda_device_buffer_async<size_t>& compressed_block_sizes,
-                    cuda_device_buffer_async<nvcompStatus_t>& block_statuses,
-                    const compression_options& options
-                ) const = 0;
-
-                /// \brief Low-level device decompression implementation.
-                ///
-                /// This function should be implemented by the derived class for a specific
-                /// compression algorithm (e.g., lz, zstd). It operates entirely on device
-                /// memory and writes decompressed data into `uncompressed_block_ptrs`.
-                ///
-                /// \param block_size               The overall block size, all blocks except for the last should have
-                ///									this size.
-                /// \param num_blocks               The overall number of blocks
-                /// \param compressed_block_ptrs    Device buffer containing pointers to compressed blocks.
-                /// \param compressed_block_sizes   Device buffer containing sizes of compressed blocks.
-                /// \param scratch_space            Temporary device buffer allocated for decompression.
-                /// \param uncompressed_block_ptrs	The pointers to the start of each uncompressed block, filled out by
-                ///									this function
-                /// \param uncompressed_block_sizes	The size of each uncompressed block, filled out by this function.
-                /// \param block_statuses			The statuses per compressed block, these live on the GPU and must be
-                ///									copied back for introspection.
-                /// \param options                  Algorithm-specific decompression options.
-                virtual void decompression_impl(
-                    size_t block_size,
-                    size_t num_blocks,
-                    const cuda_device_buffer_async<void*>& compressed_block_ptrs,
-                    const cuda_device_buffer_async<size_t>& compressed_block_sizes,
-                    cuda_device_buffer_async<std::byte>& scratch_space,
-                    cuda_device_buffer_async<void*>& uncompressed_block_ptrs,
-                    cuda_device_buffer_async<size_t>& uncompressed_block_sizes,
-                    cuda_device_buffer_async<nvcompStatus_t>& block_statuses,
-                    const decompression_options& options
-                ) const = 0;
             };
         }
     } // namespace cuda

@@ -14,267 +14,293 @@
 
 #include "compressed/cuda/compression.h"
 
-namespace NAMESPACE_COMPRESSED_IMAGE
+namespace
+NAMESPACE_COMPRESSED_IMAGE
 {
-	namespace detail
-	{
+    namespace detail
+    {
+        template <typename T>
+        struct schunk final :
+            public detail::schunk_mixin<T>
+        {
+            using detail::schunk_mixin<T>::gpu_container;
+            using detail::schunk_mixin<T>::cpu_container;
 
-		template <typename T>
-		struct schunk final :
-			public detail::schunk_mixin<T>
-		{
-			using detail::schunk_mixin<T>::gpu_container;
-			using detail::schunk_mixin<T>::cpu_container;
+            using detail::schunk_mixin<T>::chunk_bytes;
+            using detail::schunk_mixin<T>::chunk;
+            using detail::schunk_mixin<T>::is_gpu_chunk;
+            using detail::schunk_mixin<T>::to_uncompressed;
 
-			using detail::schunk_mixin<T>::chunk_bytes;
-			using detail::schunk_mixin<T>::chunk;
-			using detail::schunk_mixin<T>::is_gpu_chunk;
-			using detail::schunk_mixin<T>::to_uncompressed;
+            schunk() = default;
 
-			schunk() = default;
+            schunk(schunk&& other) noexcept
+            {
+                this->m_Chunks = std::move(other.m_Chunks);
+                this->m_ChunkSize = other.m_ChunkSize;
+                this->m_BlockSize = other.m_BlockSize;
+            }
 
-			schunk(schunk&& other) noexcept
-			{
-				this->m_Chunks = std::move(other.m_Chunks);
-				this->m_ChunkSize = other.m_ChunkSize;
-				this->m_BlockSize = other.m_BlockSize;
-			}
-			schunk& operator=(schunk&& other) noexcept
-			{
-				if (this != &other)
-				{
-					this->m_Chunks = std::move(other.m_Chunks);
-					this->m_ChunkSize = other.m_ChunkSize;
-					this->m_BlockSize = other.m_BlockSize;
-				}
-				return *this;
-			}
-			schunk(const schunk& other) = default;
-			schunk& operator=(const schunk& other) = default;
+            schunk& operator=(schunk&& other) noexcept
+            {
+                if (this != &other)
+                {
+                    this->m_Chunks = std::move(other.m_Chunks);
+                    this->m_ChunkSize = other.m_ChunkSize;
+                    this->m_BlockSize = other.m_BlockSize;
+                }
+                return *this;
+            }
 
-
-			/// Initialize an empty schunk with just a schunk size. The data can then later
-			/// be filled with append_chunk for example.
-			schunk(size_t block_size, size_t chunk_size)
-			{
-				util::validate_chunk_size<T>(chunk_size, "schunk");
-				this->m_ChunkSize = chunk_size;
-				this->m_BlockSize = block_size;
-			}
-
-			/// Initialize a super-chunk from the given vector, compressing it
-			/// 
-			/// \param data The data to store
-			/// \param block_size The requested block size. It is up to the caller to ensure
-			///                   this is appropriately sized
-			/// \param chunk_size The requested chunk size. It is up to the caller to ensure
-			///                   this is appropriately sized (i.e. by using util::align_chunk_to_scanlines)
-			/// \param compression_ctx The compression context to be used for compressing the data.
-			schunk(std::span<const T> data, size_t block_size, size_t chunk_size, blosc2::context_ptr& compression_ctx)
-			{
-				util::validate_chunk_size<T>(chunk_size, "schunk");
-				this->m_BlockSize = block_size;
-				this->m_ChunkSize = chunk_size;
-
-				// Compression buffer we will continuously overwrite in our compression, the chunk data is then copied out
-				// of this on initialization.
-				util::default_init_vector<std::byte> compression_buffer(blosc2::min_compressed_size(chunk_size));
-				auto compression_span = std::span<std::byte>(compression_buffer);
-
-				size_t num_elements = data.size();
-				size_t num_bytes = num_elements * sizeof(T);
-
-				// Calculate all 'full' chunks and the final remainder (if any).
-				size_t num_full_chunks = num_bytes / this->chunk_bytes();
-				size_t remainder_bytes = num_bytes - (this->chunk_bytes() * num_full_chunks);
-
-				size_t data_offset = 0;
-				// Initialize the chunks by compressing them.
-				for ([[maybe_unused]] auto idx : std::views::iota(size_t{ 0 }, num_full_chunks))
-				{
-					auto subspan = std::span<const T>(data.data() + data_offset, this->chunk_elements());
-					auto csize = blosc2::compress<T>(compression_ctx, subspan, compression_span);
-
-					// copy over a new vector containing all the elements from the compression span.
-					this->m_Chunks.push_back(std::vector<std::byte>(compression_span.begin(), compression_span.begin() + csize));
-
-					data_offset += this->chunk_elements();
-				}
-				if (remainder_bytes > 0)
-				{
-					auto subspan = std::span<const T>(data.data() + data_offset, data.size() - data_offset);
-					auto csize = blosc2::compress<T>(compression_ctx, subspan, compression_span);
-
-					// copy over a new vector containing all the elements from the compression span.
-					this->m_Chunks.push_back(std::vector<std::byte>(compression_span.begin(), compression_span.begin() + csize));
-
-					// no need to move over the data_offset.
-				}
-			}
+            schunk(const schunk& other) = default;
+            schunk& operator=(const schunk& other) = default;
 
 
-			void chunk(std::span<T> buffer, size_t index) const override
-			{
-				this->validate_chunk_index(index);
-				if (!this->is_gpu_chunk(index))
-				{
-					throw std::runtime_error(
-						"Invalid function overload called for schunk::chunk. The given chunk is not a gpu"
-						" chunk but a cpu chunk."
-					);
-				}
-				const auto& chunk_data = std::get<gpu_container>(this->m_Chunks.at(index));
-				auto compressor = cuda::make_compressor<T>(chunk_data);
-				std::visit([&](auto& _compressor)
-					{
-						_compressor.decompress(chunk_data, std::span<T>(buffer));
-					}, compressor);
-			}
+            /// Initialize an empty schunk with just a schunk size. The data can then later
+            /// be filled with append_chunk for example.
+            schunk(size_t block_size, size_t chunk_size)
+            {
+                util::validate_chunk_size<T>(chunk_size, "schunk");
+                this->m_ChunkSize = chunk_size;
+                this->m_BlockSize = block_size;
+            }
 
-			void chunk(blosc2::context_raw_ptr decompression_ctx, std::span<T> buffer, size_t index) const override
-			{
-				this->validate_chunk_index(index);
-				if (this->is_gpu_chunk(index))
-				{
-					throw std::runtime_error(
-						"Invalid function overload called for schunk::chunk. The given chunk is not a cpu"
-						" chunk but a gpu chunk."
-					);
-				}
+            /// Initialize a super-chunk from the given vector, compressing it
+            ///
+            /// \param data The data to store
+            /// \param block_size The requested block size. It is up to the caller to ensure
+            ///                   this is appropriately sized
+            /// \param chunk_size The requested chunk size. It is up to the caller to ensure
+            ///                   this is appropriately sized (i.e. by using util::align_chunk_to_scanlines)
+            /// \param compression_ctx The compression context to be used for compressing the data.
+            schunk(std::span<const T> data, size_t block_size, size_t chunk_size, blosc2::context_ptr& compression_ctx)
+            {
+                util::validate_chunk_size<T>(chunk_size, "schunk");
+                this->m_BlockSize = block_size;
+                this->m_ChunkSize = chunk_size;
 
-				if (buffer.size() < this->chunk_elements(index))
-				{
-					throw std::invalid_argument(
-						std::format(
-							"Unable to decompress chunk at idx {} into buffer as the buffer needs to at least have the size {:L}."
-							" Instead got {:L}", index, this->chunk_elements(index), buffer.size()
-						)
-					);
-				}
+                // Compression buffer we will continuously overwrite in our compression, the chunk data is then copied out
+                // of this on initialization.
+                util::default_init_vector<std::byte> compression_buffer(blosc2::min_compressed_size(chunk_size));
+                auto compression_span = std::span<std::byte>(compression_buffer);
 
-				const auto& chunk_data = std::get<cpu_container>(this->m_Chunks.at(index));
-				auto chunk_span = std::span<const std::byte>(chunk_data.begin(), chunk_data.end());
-				blosc2::decompress(decompression_ctx, std::span<T>(buffer), chunk_span);
-			}
+                size_t num_elements = data.size();
+                size_t num_bytes = num_elements * sizeof(T);
 
-			void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) override
-			{
-				this->validate_chunk_index(index);
+                // Calculate all 'full' chunks and the final remainder (if any).
+                size_t num_full_chunks = num_bytes / this->chunk_bytes();
+                size_t remainder_bytes = num_bytes - (this->chunk_bytes() * num_full_chunks);
 
-				util::default_init_vector<std::byte> compression_buffer(blosc2::min_compressed_size(this->chunk_bytes()));
-				std::span<std::byte> compression_span(compression_buffer);
+                size_t data_offset = 0;
+                // Initialize the chunks by compressing them.
+                for ([[maybe_unused]] auto idx : std::views::iota(size_t{0}, num_full_chunks))
+                {
+                    auto subspan = std::span<const T>(data.data() + data_offset, this->chunk_elements());
+                    auto csize = blosc2::compress<T>(compression_ctx, subspan, compression_span);
 
-				auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_span);
+                    // copy over a new vector containing all the elements from the compression span.
+                    this->m_Chunks.push_back(
+                        util::default_init_vector<std::byte>(compression_span.begin(), compression_span.begin() + csize)
+                    );
 
-				// copy over a new vector containing all the elements from the compression span.
-				this->m_Chunks[index] = std::vector<std::byte>(compression_span.begin(), compression_span.begin() + csize);
-				this->validate_chunk_sizes();
-			}
+                    data_offset += this->chunk_elements();
+                }
+                if (remainder_bytes > 0)
+                {
+                    auto subspan = std::span<const T>(data.data() + data_offset, data.size() - data_offset);
+                    auto csize = blosc2::compress<T>(compression_ctx, subspan, compression_span);
 
-			void set_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed, size_t index) override
-			{
-				this->validate_chunk_index(index);
+                    // copy over a new vector containing all the elements from the compression span.
+                    this->m_Chunks.push_back(
+                        util::default_init_vector<std::byte>(
+                            compression_span.begin(),
+                            compression_span.begin() + csize
+                        )
+                    );
 
-				auto compressor = cuda::make_compressor<T>(compression_ctx.codec);
-				cuda::compressed_chunk<T> _chunk{};
-				std::visit([&](auto& _compressor)
-					{
-						_chunk = _compressor.compress(uncompressed, compression_ctx);
-					}, compressor);
+                    // no need to move over the data_offset.
+                }
+            }
 
-				this->m_Chunks[index] = std::move(_chunk);
-				this->validate_chunk_sizes();
-			}
 
-			void append_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, std::span<std::byte> compression_buff) override
-			{
-				if (compression_buff.size() < blosc2::min_compressed_size(this->chunk_bytes()))
-				{
-					throw std::runtime_error(
-						std::format(
-							"Error while appending chunk to super-chunk. Expected compression buffer to be at least"
-							" {:L} bytes but instead we got {:L} bytes", blosc2::min_compressed_size(this->chunk_bytes()),
-							compression_buff.size()
-						)
-					);
-				}
-				auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_buff);
-				assert(csize <= compression_buff.size());
-				// copy over a new vector containing all the elements from the compression span.
-				this->m_Chunks.push_back(cpu_chunk(compression_buff.begin(), compression_buff.begin() + csize));
-				this->validate_chunk_sizes();
-			}
+            void chunk(std::span<T> buffer, size_t index) const override
+            {
+                this->validate_chunk_index(index);
+                if (!this->is_gpu_chunk(index))
+                {
+                    throw std::runtime_error(
+                        "Invalid function overload called for schunk::chunk. The given chunk is not a gpu"
+                        " chunk but a cpu chunk."
+                    );
+                }
+                const auto& chunk_data = std::get<gpu_container>(this->m_Chunks.at(index));
+                auto compressor = cuda::make_compressor<T>(chunk_data);
+                std::visit(
+                    [&](auto& _compressor)
+                    {
+                        _compressor.decompress(chunk_data, std::span<T>(buffer));
+                    },
+                    compressor
+                );
+            }
 
-			void append_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed) override
-			{
-				auto compressor = cuda::make_compressor<T>(compression_ctx.codec);
+            void chunk(blosc2::context_raw_ptr decompression_ctx, std::span<T> buffer, size_t index) const override
+            {
+                this->validate_chunk_index(index);
+                if (this->is_gpu_chunk(index))
+                {
+                    throw std::runtime_error(
+                        "Invalid function overload called for schunk::chunk. The given chunk is not a cpu"
+                        " chunk but a gpu chunk."
+                    );
+                }
 
-				cuda::compressed_chunk<T> _chunk{};
-				std::visit([&](auto& _compressor)
-					{
-						_chunk = _compressor.compress(uncompressed, compression_ctx);
-					}, compressor);
+                if (buffer.size() < this->chunk_elements(index))
+                {
+                    throw std::invalid_argument(
+                        std::format(
+                            "Unable to decompress chunk at idx {} into buffer as the buffer needs to at least have the size {:L}."
+                            " Instead got {:L}",
+                            index,
+                            this->chunk_elements(index),
+                            buffer.size()
+                        )
+                    );
+                }
 
-				this->m_Chunks.push_back(std::move(_chunk));
-				this->validate_chunk_sizes();
-			}
+                const auto& chunk_data = std::get<cpu_container>(this->m_Chunks.at(index));
+                auto chunk_span = std::span<const std::byte>(chunk_data.begin(), chunk_data.end());
+                blosc2::decompress(decompression_ctx, std::span<T>(buffer), chunk_span);
+            }
 
-			size_t chunk_bytes(size_t index) const override
-			{
-				if (is_gpu_chunk(index))
-				{
-					const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
-					return _chunk.size();
-				}
-				const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
-				return blosc2::chunk_num_elements<T>(_chunk) * sizeof(T);
-			}
+            void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) override
+            {
+                this->validate_chunk_index(index);
 
-			/// The total compressed size of the schunk
-			size_t csize() const noexcept override
-			{
-				size_t _size = 0;
-				size_t index = 0;
-				for (const auto& chunk : this->m_Chunks)
-				{
-					if (is_gpu_chunk(index))
-					{
-						const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
-						_size += _chunk.csize();
-					}
-					else
-					{
-						const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
-						_size += _chunk.size();
-					}
-					++index;
-				}
-				return _size;
-			};
+                util::default_init_vector<std::byte> compression_buffer(
+                    blosc2::min_compressed_size(this->chunk_bytes())
+                );
+                std::span<std::byte> compression_span(compression_buffer);
 
-			size_t size() const noexcept override
-			{
-				size_t _size = 0;
-				size_t index = 0;
-				for (const auto& chunk : this->m_Chunks)
-				{
-					if (is_gpu_chunk(index))
-					{
-						const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
-						_size += _chunk.byte_size();
-					}
-					else
-					{
-						const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
-						_size += blosc2::chunk_num_elements<T>(_chunk) * sizeof(T);
-					}
-					++index;
-				}
-				return _size;
-			};
+                auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_span);
 
-		};
+                // copy over a new vector containing all the elements from the compression span.
+                this->m_Chunks[index] = util::default_init_vector<std::byte>(
+                    compression_span.begin(),
+                    compression_span.begin() + csize
+                );
+                this->validate_chunk_sizes();
+            }
 
-	} // detail
+            void set_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed, size_t index) override
+            {
+                this->validate_chunk_index(index);
 
+                auto compressor = cuda::make_compressor<T>(compression_ctx.codec);
+                cuda::compressed_chunk<T> _chunk{};
+                std::visit(
+                    [&](auto& _compressor)
+                    {
+                        _chunk = _compressor.compress(uncompressed, compression_ctx);
+                    },
+                    compressor
+                );
+
+                this->m_Chunks[index] = std::move(_chunk);
+                this->validate_chunk_sizes();
+            }
+
+            void append_chunk(blosc2::context_ptr& compression_ctx,
+                              std::span<T> uncompressed,
+                              std::span<std::byte> compression_buff) override
+            {
+                if (compression_buff.size() < blosc2::min_compressed_size(this->chunk_bytes()))
+                {
+                    throw std::runtime_error(
+                        std::format(
+                            "Error while appending chunk to super-chunk. Expected compression buffer to be at least"
+                            " {:L} bytes but instead we got {:L} bytes",
+                            blosc2::min_compressed_size(this->chunk_bytes()),
+                            compression_buff.size()
+                        )
+                    );
+                }
+                auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_buff);
+                assert(csize <= compression_buff.size());
+                // copy over a new vector containing all the elements from the compression span.
+                this->m_Chunks.push_back(cpu_chunk(compression_buff.begin(), compression_buff.begin() + csize));
+                this->validate_chunk_sizes();
+            }
+
+            void append_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed) override
+            {
+                auto compressor = cuda::make_compressor<T>(compression_ctx.codec);
+
+                cuda::compressed_chunk<T> _chunk{};
+                std::visit(
+                    [&](auto& _compressor)
+                    {
+                        _chunk = _compressor.compress(uncompressed, compression_ctx);
+                    },
+                    compressor
+                );
+
+                this->m_Chunks.push_back(std::move(_chunk));
+                this->validate_chunk_sizes();
+            }
+
+            size_t chunk_bytes(size_t index) const override
+            {
+                if (is_gpu_chunk(index))
+                {
+                    const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
+                    return _chunk.size();
+                }
+                const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
+                return blosc2::chunk_num_elements<T>(_chunk) * sizeof(T);
+            }
+
+            /// The total compressed size of the schunk
+            size_t csize() const noexcept override
+            {
+                size_t _size = 0;
+                size_t index = 0;
+                for ([[maybe_unused]] const auto& chunk : this->m_Chunks)
+                {
+                    if (is_gpu_chunk(index))
+                    {
+                        const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
+                        _size += _chunk.csize();
+                    }
+                    else
+                    {
+                        const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
+                        _size += _chunk.size();
+                    }
+                    ++index;
+                }
+                return _size;
+            };
+
+            [[nodiscard]] size_t size() const noexcept override
+            {
+                size_t _size = 0;
+                size_t index = 0;
+                for ([[maybe_unused]] const auto& chunk : this->m_Chunks)
+                {
+                    if (is_gpu_chunk(index))
+                    {
+                        const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
+                        _size += _chunk.byte_size();
+                    }
+                    else
+                    {
+                        const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
+                        _size += blosc2::chunk_num_elements<T>(_chunk) * sizeof(T);
+                    }
+                    ++index;
+                }
+                return _size;
+            };
+        };
+    } // detail
 } // NAMESPACE_COMPRESSED_IMAGE

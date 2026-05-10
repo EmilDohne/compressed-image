@@ -1,28 +1,21 @@
 #pragma once
 
 #include "compressed/macros.h"
-#include "compressed/cuda/cuda.h"
+#include "compressed/cuda/cuda_hook.h"
 
-namespace NAMESPACE_COMPRESSED_IMAGE
+namespace
+NAMESPACE_COMPRESSED_IMAGE::gpu
 {
-
-	namespace gpu
-	{
-
-		bool is_available() noexcept
-		{
-			try
-			{
-				auto& inst = cuda::cuda_api::instance();
-				return true;
-			}
-			catch (...)
-			{
-				return false;
-			}
-		}
-
-
-	} // namespace gpu
-
-} // namespace NAMESPACE_COMPRESSED_IMAGE
+    [[nodiscard]] inline bool is_available() noexcept
+    {
+        try
+        {
+            auto& inst = cuda::cuda_api::instance();
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+} // namespace NAMESPACE_COMPRESSED_IMAGE::gpu

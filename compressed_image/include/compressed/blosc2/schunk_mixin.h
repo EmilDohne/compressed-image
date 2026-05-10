@@ -140,7 +140,7 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \param index the index of the chunk within the schunk.
             ///
             /// \throws std::out_of_range if the index is not valid
-            virtual std::vector<T> chunk(cuda::nvcomp_context decompression_ctx, size_t index) const
+            virtual std::vector<T> chunk(const cuda::nvcomp_context decompression_ctx, size_t index) const
             {
                 std::vector<T> buffer(this->size());
                 this->chunk(decompression_ctx, index);
@@ -219,7 +219,8 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \param compression_ctx the compression context to use for compression.
             /// \param uncompressed the uncompressed chunk
             /// \param compression_buff the compression buffer to use for temporary storage.
-            virtual void append_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed,
+            virtual void append_chunk(blosc2::context_ptr& compression_ctx,
+                                      std::span<T> uncompressed,
                                       std::span<std::byte> compression_buff) = 0;
 
             /// Retrieve the number of elements (uncompressed) that the schunk stores.
@@ -233,7 +234,9 @@ NAMESPACE_COMPRESSED_IMAGE
                     throw std::runtime_error(
                         std::format(
                             "Internal Error: The chunk byte size is not cleanly divisible by the sizeof T."
-                            " Chunk size is {:L} while sizeof(T) is {}", _size, sizeof(T)
+                            " Chunk size is {:L} while sizeof(T) is {}",
+                            _size,
+                            sizeof(T)
                         )
                     );
                 }
@@ -253,7 +256,9 @@ NAMESPACE_COMPRESSED_IMAGE
                     throw std::runtime_error(
                         std::format(
                             "Internal Error: The chunk byte size is not cleanly divisible by the sizeof T."
-                            " Chunk size is {:L} while sizeof(T) is {}", _size, sizeof(T)
+                            " Chunk size is {:L} while sizeof(T) is {}",
+                            _size,
+                            sizeof(T)
                         )
                     );
                 }
@@ -316,8 +321,11 @@ NAMESPACE_COMPRESSED_IMAGE
                 if (index > m_Chunks.size() - 1)
                 {
                     throw std::out_of_range(
-                        std::format("Cannot access index {} in schunk. Total amount of chunks is {}", index,
-                                    m_Chunks.size())
+                        std::format(
+                            "Cannot access index {} in schunk. Total amount of chunks is {}",
+                            index,
+                            m_Chunks.size()
+                        )
                     );
                 }
             }
@@ -337,7 +345,9 @@ NAMESPACE_COMPRESSED_IMAGE
                                 " However, chunk {} instead has a chunk size of {:L}. Having a size different from the rest of the chunks"
                                 " is only supported for the last chunk (blosc2 limitation). Please ensure that all chunks are equally sized"
                                 " when modifying the super-chunk (excluding the last one).",
-                                this->chunk_bytes(), i, this->chunk_bytes(i)
+                                this->chunk_bytes(),
+                                i,
+                                this->chunk_bytes(i)
                             )
                         );
                     }
@@ -350,7 +360,8 @@ NAMESPACE_COMPRESSED_IMAGE
                         std::format(
                             "Error while validating chunk sizes; Expected the last chunk to be at most {:L} bytes,"
                             " instead got {:L} bytes.",
-                            this->chunk_bytes(), this->chunk_bytes(this->num_chunks() - 1)
+                            this->chunk_bytes(),
+                            this->chunk_bytes(this->num_chunks() - 1)
                         )
                     );
                 }
