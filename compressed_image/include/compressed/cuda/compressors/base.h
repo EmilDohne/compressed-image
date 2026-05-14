@@ -296,7 +296,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
                     cuda_api::instance().stream_synchronize(cudaStreamPerThread);
 
-                    compressor<T>::validate_per_block_statuses(device_statuses);
+                    this->validate_per_block_statuses(device_statuses);
 
                     return compressed_chunk<T>{
                         std::move(compressed_blocks),

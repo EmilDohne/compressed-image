@@ -17,12 +17,11 @@
 #include "scoped_timer.h"
 #include "compressed/json_alias.h"
 
-namespace NAMESPACE_COMPRESSED_IMAGE
+namespace
+NAMESPACE_COMPRESSED_IMAGE
 {
-
     namespace detail
     {
-
         /// \brief Create a mapping of contiguous begin-end pairs from the passed channel names
         /// 
         /// Takes the input channel names and constructs a list of (sorted) pairs for the begin and end channel ranges.
@@ -38,9 +37,9 @@ namespace NAMESPACE_COMPRESSED_IMAGE
         /// \param channelnames The channelnames to construct pairings for, invalid channelnames throw a std::out_of_range
         /// 
         /// \return A mapping of begin-end pairs for the channels
-        inline std::vector<std::pair<int, int>>get_contiguous_channels(
+        inline std::vector<std::pair<int, int>> get_contiguous_channels(
             const std::unique_ptr<OIIO::ImageInput>& input_ptr,
-            std::vector<std::string> channelnames
+            const std::vector<std::string> channelnames
         )
         {
             std::unordered_map<std::string, int> map_name_to_index;
@@ -57,7 +56,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
             }
 
             // Sort them to ensure we can map them correctly.
-            std::sort(indices.begin(), indices.end());
+            std::ranges::sort(indices);
 
             std::vector<std::pair<int, int>> result;
             if (indices.empty())
@@ -83,12 +82,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
         }
 
 
-
         // Utilities related to OIIO ParamValue (the internal metadata type) helping us convert them into json-able
         // types
         namespace param_value
         {
-
             /// \brief JSON-like types that we can store 
             enum class _JSONType
             {
@@ -116,18 +113,20 @@ namespace NAMESPACE_COMPRESSED_IMAGE
                     type == OIIO::TypeDesc::INT32 ||
                     type == OIIO::TypeDesc::UINT64 ||
                     type == OIIO::TypeDesc::INT64
-                    )
+                )
                 {
                     return _JSONType::_int;
                 }
-                else if (type == OIIO::TypeDesc::HALF || type == OIIO::TypeDesc::FLOAT || type == OIIO::TypeDesc::DOUBLE)
+                else if (type == OIIO::TypeDesc::HALF || type == OIIO::TypeDesc::FLOAT || type ==
+                    OIIO::TypeDesc::DOUBLE)
                 {
                     return _JSONType::_float;
                 }
 
                 throw std::invalid_argument(
                     std::format(
-                        "Unknown json type for param value: {}", pvalue.name().string()
+                        "Unknown json type for param value: {}",
+                        pvalue.name().string()
                     )
                 );
             }
@@ -240,10 +239,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
                 return out;
             }
         }
-
     } // detail
-
-
 } // NAMESPACE_COMPRESSED_IMAGE
 
 #endif // COMPRESSED_IMAGE_OIIO_AVAILABLE
