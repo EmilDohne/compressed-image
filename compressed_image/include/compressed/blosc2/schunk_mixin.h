@@ -7,6 +7,7 @@
 #include "compressed/macros.h"
 #include "wrapper.h"
 #include "compressed/constants.h"
+#include "compressed/context.h"
 #include "compressed/cuda/compressors/base.h"
 
 
@@ -60,13 +61,13 @@ NAMESPACE_COMPRESSED_IMAGE
 
             /// Generate an uncompressed vector from all of the chunks.
             ///
-            /// \param cpu_decompression_ctx the decompression context for all cpu based chunks.
-            /// \param gpu_decompression_ctx the decompression context for all gpu based chunks.
+            /// \param cpu_ctx the decompression context for all cpu based chunks.
+            /// \param gpu_ctx the decompression context for all gpu based chunks.
             ///
             /// \returns a contiguous vector representing the uncompressed schunk.
             virtual std::vector<T> to_uncompressed(
-                blosc2::context_ptr& cpu_decompression_ctx,
-                [[maybe_unused]] cuda::nvcomp_context gpu_decompression_ctx
+                cpu_compression_context& cpu_ctx,
+                gpu_compression_context gpu_ctx
             ) const
             {
                 _COMPRESSED_PROFILE_FUNCTION();
@@ -82,11 +83,22 @@ NAMESPACE_COMPRESSED_IMAGE
 
                     if (this->is_gpu_chunk(idx))
                     {
-                        this->chunk(subspan, idx);
+                        this->chunk(gpu_ctx, subspan, idx);
                     }
                     else
                     {
-                        this->chunk(cpu_decompression_ctx, subspan, idx);
+                        if (!cpu_ctx.decompression_ctx || !cpu_ctx.compression_ctx)
+                        {
+                            throw std::invalid_argument(
+                                std::format(
+                                    "Chunk {}: valid cpu decompression and compression contexts must be provided"
+                                    " for cpu chunks",
+                                    idx
+                                )
+                            );
+                        }
+
+                        this->chunk(cpu_ctx, subspan, idx);
                     }
 
                     data_offset += chunk_elems;
@@ -99,12 +111,12 @@ NAMESPACE_COMPRESSED_IMAGE
             ///
             /// This overload may only be called if the schunk contains no gpu chunks.
             ///
-            /// \param cpu_decompression_ctx the decompression context for the chunks
+            /// \param context the decompression context for the chunks
             ///
             /// \throws std::runtime_error if the schunk contains one or more gpu chunks.
             ///
             /// \returns a contiguous vector representing the uncompressed schunk.
-            std::vector<T> to_uncompressed(blosc2::context_ptr& cpu_decompression_ctx) const
+            std::vector<T> to_uncompressed(cpu_compression_context& context) const
             {
                 for (size_t i = 0; i < this->num_chunks(); ++i)
                 {
@@ -120,30 +132,58 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                     }
                 }
-                return this->to_uncompressed(cpu_decompression_ctx, cuda::nvcomp_context{});
+                return this->to_uncompressed(context, gpu_compression_context{cuda::nvcomp_context{}});
+            }
+
+            /// Generate an uncompressed vector from all of the chunks.
+            ///
+            /// This overload may only be called if the schunk contains no cpu chunks.
+            ///
+            /// \param context the decompression context for the chunks
+            ///
+            /// \throws std::runtime_error if the schunk contains one or more gpu chunks.
+            ///
+            /// \returns a contiguous vector representing the uncompressed schunk.
+            std::vector<T> to_uncompressed(gpu_compression_context context) const
+            {
+                for (size_t i = 0; i < this->num_chunks(); ++i)
+                {
+                    if (!is_gpu_chunk(i))
+                    {
+                        throw std::runtime_error(
+                            std::format(
+                                "Invalid overload of 'to_uncompressed' called. This overload may only be called if"
+                                " there are no CPU chunks. However, at least chunk {} is a cpu chunk. Please pass"
+                                " an explicit CPU decompressor.",
+                                i
+                            )
+                        );
+                    }
+                }
+                return this->to_uncompressed(cpu_compression_context{}, context);
             }
 
             /// Retrieve the uncompressed chunk at `index`.
             ///
-            /// \param decompression_ctx the decompression context ptr
+            /// \param context the decompression context
             /// \param index the index of the chunk within the schunk.
             ///
             /// \throws std::out_of_range if the index is not valid
-            virtual std::vector<T> chunk(blosc2::context_ptr& decompression_ctx, size_t index) const
+            virtual std::vector<T> chunk(cpu_compression_context& context, const size_t index) const
             {
-                return this->chunk(decompression_ctx.get(), index);
+                return this->chunk(context.decompression_ctx.get(), index);
             };
 
             /// Retrieve the uncompressed gpu chunk at `index`.
             ///
-            /// \param decompression_ctx the decompression context
+            /// \param context the decompression context
             /// \param index the index of the chunk within the schunk.
             ///
             /// \throws std::out_of_range if the index is not valid
-            virtual std::vector<T> chunk(const cuda::nvcomp_context decompression_ctx, size_t index) const
+            virtual std::vector<T> chunk(const cuda::nvcomp_context context, const size_t index) const
             {
                 std::vector<T> buffer(this->size());
-                this->chunk(decompression_ctx, index);
+                this->chunk(context, index);
                 return buffer;
             };
 
