@@ -89,18 +89,18 @@ NAMESPACE_COMPRESSED_IMAGE
 
             lazy_schunk(lazy_schunk&& other) noexcept
             {
-                this->m_Chunks = std::move(other.m_Chunks);
-                this->m_ChunkSize = other.m_ChunkSize;
-                this->m_BlockSize = other.m_BlockSize;
+                this->m_chunks = std::move(other.m_chunks);
+                this->m_chunk_size = other.m_chunk_size;
+                this->m_block_size = other.m_block_size;
             }
 
             lazy_schunk& operator=(lazy_schunk&& other) noexcept
             {
                 if (this != &other)
                 {
-                    this->m_Chunks = std::move(other.m_Chunks);
-                    this->m_ChunkSize = other.m_ChunkSize;
-                    this->m_BlockSize = other.m_BlockSize;
+                    this->m_chunks = std::move(other.m_chunks);
+                    this->m_chunk_size = other.m_chunk_size;
+                    this->m_block_size = other.m_block_size;
                 }
                 return *this;
             }
@@ -121,37 +121,37 @@ NAMESPACE_COMPRESSED_IMAGE
             lazy_schunk(const T value, const size_t num_elements, const size_t block_size, const size_t chunk_size)
             {
                 util::validate_chunk_size<T>(chunk_size, "lazy_schunk");
-                this->m_BlockSize = block_size;
-                this->m_ChunkSize = chunk_size;
+                this->m_block_size = block_size;
+                this->m_chunk_size = chunk_size;
 
                 size_t num_bytes = num_elements * sizeof(T);
 
                 // Calculate all 'full' chunks and the final remainder (if any).
-                size_t num_full_chunks = num_bytes / this->m_ChunkSize;
-                size_t remainder_bytes = num_bytes - (this->m_ChunkSize * num_full_chunks);
+                size_t num_full_chunks = num_bytes / this->m_chunk_size;
+                size_t remainder_bytes = num_bytes - (this->m_chunk_size * num_full_chunks);
 
                 // Initialize lazy chunks with the provided value of T
                 for ([[maybe_unused]] auto idx : std::views::iota(size_t{0}, num_full_chunks))
                 {
-                    detail::lazy_chunk<T, cpu_chunk> chunk = {value, this->m_ChunkSize / sizeof(T)};
-                    this->m_Chunks.push_back(std::move(chunk));
+                    detail::lazy_chunk<T, cpu_chunk> chunk = {value, this->m_chunk_size / sizeof(T)};
+                    this->m_chunks.push_back(std::move(chunk));
                 }
                 if (remainder_bytes > 0)
                 {
                     detail::lazy_chunk<T, gpu_chunk<T>> chunk = {value, remainder_bytes / sizeof(T)};
-                    this->m_Chunks.push_back(std::move(chunk));
+                    this->m_chunks.push_back(std::move(chunk));
                 }
             }
 
             size_t chunk_bytes(size_t index) const override
             {
-                if (index > this->m_Chunks.size() - 1)
+                if (index > this->m_chunks.size() - 1)
                 {
                     throw std::out_of_range(
                         std::format(
                             "Cannot access index {} in lazy-schunk. Total amount of chunks is {}",
                             index,
-                            this->m_Chunks.size()
+                            this->m_chunks.size()
                         )
                     );
                 }
@@ -161,7 +161,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     {
                         return chunk.num_elements * sizeof(T);
                     },
-                    this->m_Chunks[index]
+                    this->m_chunks[index]
                 );
             }
 
@@ -175,7 +175,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 std::vector<T> uncompressed(this->size(), this->lazy_chunk_value());
 
                 size_t offset = 0; // element offset
-                for (const auto& chunk : this->m_Chunks)
+                for (const auto& chunk : this->m_chunks)
                 {
                     if (std::holds_alternative<gpu_container>(chunk))
                     {
@@ -229,18 +229,18 @@ NAMESPACE_COMPRESSED_IMAGE
 
             std::vector<T> chunk(blosc2::context_raw_ptr decompression_ctx, size_t index) const override
             {
-                if (index > this->m_Chunks.size() - 1)
+                if (index > this->m_chunks.size() - 1)
                 {
                     throw std::out_of_range(
                         std::format(
                             "Cannot access index {} in lazy-schunk. Total amount of chunks is {}",
                             index,
-                            this->m_Chunks.size()
+                            this->m_chunks.size()
                         )
                     );
                 }
 
-                const auto& chunk_val = std::get<cpu_container>(this->m_Chunks.at(index));
+                const auto& chunk_val = std::get<cpu_container>(this->m_chunks.at(index));
 
                 if (std::holds_alternative<cpu_chunk>(chunk_val.value))
                 {
@@ -263,7 +263,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
 
                 // Either decompress from the compressed data or fill with the lazy chunks value
-                if (const auto& chunk_val = std::get<cpu_container>(this->m_Chunks.at(index)); std::holds_alternative<
+                if (const auto& chunk_val = std::get<cpu_container>(this->m_chunks.at(index)); std::holds_alternative<
                     cpu_chunk>(chunk_val.value))
                 {
                     const auto& compressed = std::get<cpu_chunk>(chunk_val.value);
@@ -296,7 +296,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
 
                 // Either decompress from the compressed data or fill with the lazy chunks value
-                if (const auto& chunk_val = std::get<gpu_container>(this->m_Chunks.at(index)); std::holds_alternative<
+                if (const auto& chunk_val = std::get<gpu_container>(this->m_chunks.at(index)); std::holds_alternative<
                     gpu_chunk<T>>(chunk_val.value))
                 {
                     auto chunk_container = std::get<gpu_chunk<T>>(chunk_val.value);
@@ -324,7 +324,9 @@ NAMESPACE_COMPRESSED_IMAGE
             {
                 this->validate_chunk_index(index);
 
-                util::default_init_vector<std::byte> compression_buffer(blosc2::min_compressed_size(this->m_ChunkSize));
+                util::default_init_vector<std::byte> compression_buffer(
+                    blosc2::min_compressed_size(this->m_chunk_size)
+                );
                 std::span<std::byte> compression_span(compression_buffer);
 
                 auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_span);
@@ -334,7 +336,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     cpu_chunk(compression_buffer.begin(), compression_buffer.begin() + csize),
                     uncompressed.size()
                 };
-                this->m_Chunks[index] = std::move(chunk);
+                this->m_chunks[index] = std::move(chunk);
                 this->validate_chunk_sizes();
             }
 
@@ -355,7 +357,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     std::move(_chunk),
                     uncompressed.size()
                 };
-                this->m_Chunks[index] = std::move(chunk);
+                this->m_chunks[index] = std::move(chunk);
                 this->validate_chunk_sizes();
             }
 
@@ -375,7 +377,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     std::move(_chunk),
                     uncompressed.size()
                 };
-                this->m_Chunks.push_back(std::move(chunk));
+                this->m_chunks.push_back(std::move(chunk));
                 this->validate_chunk_sizes();
             }
 
@@ -388,7 +390,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     cpu_chunk(compression_buff.begin(), compression_buff.begin() + csize),
                     uncompressed.size()
                 };
-                this->m_Chunks.push_back(std::move(chunk));
+                this->m_chunks.push_back(std::move(chunk));
                 this->validate_chunk_sizes();
             }
 
@@ -397,7 +399,7 @@ NAMESPACE_COMPRESSED_IMAGE
             size_t csize() const noexcept override
             {
                 size_t _csize = 0;
-                for (const auto& chunk : this->m_Chunks)
+                for (const auto& chunk : this->m_chunks)
                 {
                     std::visit(
                         [&](const auto& _chunk) -> void
@@ -421,7 +423,7 @@ NAMESPACE_COMPRESSED_IMAGE
             size_t size() const noexcept override
             {
                 size_t _size = 0;
-                for (const auto& chunk : this->m_Chunks)
+                for (const auto& chunk : this->m_chunks)
                 {
                     std::visit(
                         [&](const auto& _chunk) -> void
@@ -435,10 +437,10 @@ NAMESPACE_COMPRESSED_IMAGE
             }
 
         private:
-            /// Check whether this->m_Chunks contain any still-lazy chunks.
+            /// Check whether this->m_chunks contain any still-lazy chunks.
             bool has_lazy_chunk() const noexcept
             {
-                for (const auto& chunk : this->m_Chunks)
+                for (const auto& chunk : this->m_chunks)
                 {
                     if (std::holds_alternative<T>(chunk.value))
                     {
@@ -452,7 +454,7 @@ NAMESPACE_COMPRESSED_IMAGE
             /// this is a valid way of accessing this value. if no lazy chunk exists we simply return T{}
             T lazy_chunk_value() const noexcept
             {
-                for (const auto& chunk : this->m_Chunks)
+                for (const auto& chunk : this->m_chunks)
                 {
                     if (std::holds_alternative<T>(chunk.value))
                     {

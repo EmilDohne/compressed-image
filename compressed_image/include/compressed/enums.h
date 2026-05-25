@@ -35,6 +35,25 @@ NAMESPACE_COMPRESSED_IMAGE
             ///< (cuda) proprietary compression scheme built up by several simple compression schemes like rle, bitpacking and delta
         };
 
+        [[nodiscard]] constexpr std::string_view to_string(const codec value)
+        {
+            switch (value)
+            {
+            case codec::blosclz: return "blosclz";
+            case codec::lz4: return "lz4";
+            case codec::lz4hc: return "lz4hc";
+            case codec::zstd: return "zstd";
+            case codec::lz4_gpu: return "lz4_gpu";
+            case codec::snappy_gpu: return "snappy_gpu";
+            case codec::zstd_gpu: return "zstd_gpu";
+            case codec::deflate_gpu: return "deflate_gpu";
+            case codec::gdeflate_gpu: return "gdeflate_gpu";
+            case codec::cascaded_gpu: return "cascaded_gpu";
+            }
+
+            return "unknown";
+        }
+
         [[nodiscard]] inline bool is_gpu_codec(const codec codec)
         {
             if (codec == codec::blosclz || codec == codec::lz4 || codec == codec::lz4hc || codec == codec::zstd)

@@ -45,18 +45,18 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \throws std::runtime_error if the chunk index is not valid
             bool is_gpu_chunk(size_t index) const
             {
-                if (index > m_Chunks.size() - 1)
+                if (index > m_chunks.size() - 1)
                 {
                     throw std::runtime_error(
                         std::format(
                             "Invalid chunk index {}, can at most index up to {}",
                             index,
-                            m_Chunks.size() - 1
+                            m_chunks.size() - 1
                         )
                     );
                 }
 
-                return std::holds_alternative<_gpu_container_type>(m_Chunks.at(index));
+                return std::holds_alternative<_gpu_container_type>(m_chunks.at(index));
             };
 
             /// Generate an uncompressed vector from all of the chunks.
@@ -67,7 +67,7 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \returns a contiguous vector representing the uncompressed schunk.
             virtual std::vector<T> to_uncompressed(
                 cpu_compression_context& cpu_ctx,
-                gpu_compression_context gpu_ctx
+                [[maybe_unused]] gpu_compression_context gpu_ctx
             ) const
             {
                 _COMPRESSED_PROFILE_FUNCTION();
@@ -75,7 +75,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 std::vector<T> data(num_elems);
 
                 size_t data_offset = 0;
-                for (auto idx : std::views::iota(size_t{0}, this->m_Chunks.size()))
+                for (auto idx : std::views::iota(size_t{0}, this->m_chunks.size()))
                 {
                     size_t chunk_elems = this->chunk_elements(idx);
 
@@ -83,7 +83,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
                     if (this->is_gpu_chunk(idx))
                     {
-                        this->chunk(gpu_ctx, subspan, idx);
+                        this->chunk(subspan, idx);
                     }
                     else
                     {
@@ -98,7 +98,7 @@ NAMESPACE_COMPRESSED_IMAGE
                             );
                         }
 
-                        this->chunk(cpu_ctx, subspan, idx);
+                        this->chunk(cpu_ctx.decompression_ctx.get(), subspan, idx);
                     }
 
                     data_offset += chunk_elems;
@@ -322,7 +322,7 @@ NAMESPACE_COMPRESSED_IMAGE
             /// The number of chunks in the super-chunk
             size_t num_chunks() const noexcept
             {
-                return m_Chunks.size();
+                return m_chunks.size();
             }
 
             /// The total compressed size of the schunk in bytes
@@ -340,31 +340,31 @@ NAMESPACE_COMPRESSED_IMAGE
 
             size_t max_chunk_size() const noexcept
             {
-                return m_ChunkSize;
+                return m_chunk_size;
             }
 
             size_t max_block_size() const noexcept
             {
-                return m_BlockSize;
+                return m_block_size;
             }
 
         protected:
-            std::vector<std::variant<_cpu_container_type, _gpu_container_type>> m_Chunks{};
+            std::vector<std::variant<_cpu_container_type, _gpu_container_type>> m_chunks{};
             /// The maximum size a chunk is constrained to, in bytes. This will dictate the size of all chunks from
-            ///  0 - (this->m_Chunks.size() - 1). The last chunk may be any other size smaller than or equal to this value.
-            size_t m_ChunkSize = s_default_chunksize;
-            size_t m_BlockSize = s_default_blocksize;
+            ///  0 - (this->m_chunks.size() - 1). The last chunk may be any other size smaller than or equal to this value.
+            size_t m_chunk_size = s_default_chunksize;
+            size_t m_block_size = s_default_blocksize;
 
             /// Validate the chunk index throwing a std::out_of_range if the index is not valid.
             void validate_chunk_index(size_t index) const
             {
-                if (index > m_Chunks.size() - 1)
+                if (index > m_chunks.size() - 1)
                 {
                     throw std::out_of_range(
                         std::format(
                             "Cannot access index {} in schunk. Total amount of chunks is {}",
                             index,
-                            m_Chunks.size()
+                            m_chunks.size()
                         )
                     );
                 }
@@ -374,14 +374,14 @@ NAMESPACE_COMPRESSED_IMAGE
             /// ensures that the chunks
             void validate_chunk_sizes() const
             {
-                // Check that all chunks barring the last one are equal to m_ChunkSize
+                // Check that all chunks barring the last one are equal to m_chunk_size
                 for (auto i : std::views::iota(size_t{0}, this->num_chunks() - 1))
                 {
                     if (this->chunk_bytes(i) != this->chunk_bytes())
                     {
                         throw std::invalid_argument(
                             std::format(
-                                "Error while validating chunk sizes; Expected all chunks to have a size equivalent to {:L} (m_ChunkSize)."
+                                "Error while validating chunk sizes; Expected all chunks to have a size equivalent to {:L} (m_chunk_size)."
                                 " However, chunk {} instead has a chunk size of {:L}. Having a size different from the rest of the chunks"
                                 " is only supported for the last chunk (blosc2 limitation). Please ensure that all chunks are equally sized"
                                 " when modifying the super-chunk (excluding the last one).",

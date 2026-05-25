@@ -35,18 +35,18 @@ NAMESPACE_COMPRESSED_IMAGE
 
             schunk(schunk&& other) noexcept
             {
-                this->m_Chunks = std::move(other.m_Chunks);
-                this->m_ChunkSize = other.m_ChunkSize;
-                this->m_BlockSize = other.m_BlockSize;
+                this->m_chunks = std::move(other.m_chunks);
+                this->m_chunk_size = other.m_chunk_size;
+                this->m_block_size = other.m_block_size;
             }
 
             schunk& operator=(schunk&& other) noexcept
             {
                 if (this != &other)
                 {
-                    this->m_Chunks = std::move(other.m_Chunks);
-                    this->m_ChunkSize = other.m_ChunkSize;
-                    this->m_BlockSize = other.m_BlockSize;
+                    this->m_chunks = std::move(other.m_chunks);
+                    this->m_chunk_size = other.m_chunk_size;
+                    this->m_block_size = other.m_block_size;
                 }
                 return *this;
             }
@@ -60,8 +60,8 @@ NAMESPACE_COMPRESSED_IMAGE
             schunk(size_t block_size, size_t chunk_size)
             {
                 util::validate_chunk_size<T>(chunk_size, "schunk");
-                this->m_ChunkSize = chunk_size;
-                this->m_BlockSize = block_size;
+                this->m_chunk_size = chunk_size;
+                this->m_block_size = block_size;
             }
 
             /// Initialize a super-chunk from the given vector, compressing it
@@ -79,8 +79,8 @@ NAMESPACE_COMPRESSED_IMAGE
                    compression_context_var compression_ctx)
             {
                 util::validate_chunk_size<T>(chunk_size, "schunk");
-                this->m_BlockSize = block_size;
-                this->m_ChunkSize = chunk_size;
+                this->m_block_size = block_size;
+                this->m_chunk_size = chunk_size;
 
                 const size_t num_elements = data.size();
                 const size_t num_bytes = num_elements * sizeof(T);
@@ -125,7 +125,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         auto csize = blosc2::compress<T>(compression_ctx, subspan, compression_span);
 
                         // copy over a new vector containing all the elements from the compression span.
-                        this->m_Chunks.push_back(
+                        this->m_chunks.push_back(
                             util::default_init_vector<std::byte>(
                                 compression_span.begin(),
                                 compression_span.begin() + csize
@@ -140,7 +140,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         auto csize = blosc2::compress<T>(compression_ctx, subspan, compression_span);
 
                         // copy over a new vector containing all the elements from the compression span.
-                        this->m_Chunks.push_back(
+                        this->m_chunks.push_back(
                             util::default_init_vector<std::byte>(
                                 compression_span.begin(),
                                 compression_span.begin() + csize
@@ -163,7 +163,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         " chunk but a cpu chunk."
                     );
                 }
-                const auto& chunk_data = std::get<gpu_container>(this->m_Chunks.at(index));
+                const auto& chunk_data = std::get<gpu_container>(this->m_chunks.at(index));
                 auto compressor = cuda::make_compressor<T>(chunk_data);
                 std::visit(
                     [&](auto& _compressor)
@@ -198,7 +198,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     );
                 }
 
-                const auto& chunk_data = std::get<cpu_container>(this->m_Chunks.at(index));
+                const auto& chunk_data = std::get<cpu_container>(this->m_chunks.at(index));
                 auto chunk_span = std::span<const std::byte>(chunk_data.begin(), chunk_data.end());
                 blosc2::decompress(decompression_ctx, std::span<T>(buffer), chunk_span);
             }
@@ -215,7 +215,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_span);
 
                 // copy over a new vector containing all the elements from the compression span.
-                this->m_Chunks[index] = util::default_init_vector<std::byte>(
+                this->m_chunks[index] = util::default_init_vector<std::byte>(
                     compression_span.begin(),
                     compression_span.begin() + csize
                 );
@@ -236,7 +236,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     compressor
                 );
 
-                this->m_Chunks[index] = std::move(_chunk);
+                this->m_chunks[index] = std::move(_chunk);
                 this->validate_chunk_sizes();
             }
 
@@ -258,7 +258,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_buff);
                 assert(csize <= compression_buff.size());
                 // copy over a new vector containing all the elements from the compression span.
-                this->m_Chunks.push_back(cpu_chunk(compression_buff.begin(), compression_buff.begin() + csize));
+                this->m_chunks.push_back(cpu_chunk(compression_buff.begin(), compression_buff.begin() + csize));
                 this->validate_chunk_sizes();
             }
 
@@ -275,7 +275,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     compressor
                 );
 
-                this->m_Chunks.push_back(std::move(_chunk));
+                this->m_chunks.push_back(std::move(_chunk));
                 this->validate_chunk_sizes();
             }
 
@@ -283,10 +283,10 @@ NAMESPACE_COMPRESSED_IMAGE
             {
                 if (is_gpu_chunk(index))
                 {
-                    const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
+                    const auto& _chunk = std::get<gpu_container>(this->m_chunks.at(index));
                     return _chunk.size();
                 }
-                const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
+                const auto& _chunk = std::get<cpu_container>(this->m_chunks.at(index));
                 return blosc2::chunk_num_elements<T>(_chunk) * sizeof(T);
             }
 
@@ -295,16 +295,16 @@ NAMESPACE_COMPRESSED_IMAGE
             {
                 size_t _size = 0;
                 size_t index = 0;
-                for ([[maybe_unused]] const auto& chunk : this->m_Chunks)
+                for ([[maybe_unused]] const auto& chunk : this->m_chunks)
                 {
                     if (is_gpu_chunk(index))
                     {
-                        const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
+                        const auto& _chunk = std::get<gpu_container>(this->m_chunks.at(index));
                         _size += _chunk.csize();
                     }
                     else
                     {
-                        const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
+                        const auto& _chunk = std::get<cpu_container>(this->m_chunks.at(index));
                         _size += _chunk.size();
                     }
                     ++index;
@@ -316,16 +316,16 @@ NAMESPACE_COMPRESSED_IMAGE
             {
                 size_t _size = 0;
                 size_t index = 0;
-                for ([[maybe_unused]] const auto& chunk : this->m_Chunks)
+                for ([[maybe_unused]] const auto& chunk : this->m_chunks)
                 {
                     if (is_gpu_chunk(index))
                     {
-                        const auto& _chunk = std::get<gpu_container>(this->m_Chunks.at(index));
+                        const auto& _chunk = std::get<gpu_container>(this->m_chunks.at(index));
                         _size += _chunk.byte_size();
                     }
                     else
                     {
-                        const auto& _chunk = std::get<cpu_container>(this->m_Chunks.at(index));
+                        const auto& _chunk = std::get<cpu_container>(this->m_chunks.at(index));
                         _size += blosc2::chunk_num_elements<T>(_chunk) * sizeof(T);
                     }
                     ++index;

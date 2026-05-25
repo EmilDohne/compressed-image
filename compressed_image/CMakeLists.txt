@@ -12,6 +12,7 @@ target_link_libraries(compressed_image INTERFACE
    OpenImageIO::OpenImageIO
    compressed::nvcomp_headers
    compressed::nvcomp
+   spdlog::spdlog_header_only
 )
 
 if (MSVC)

@@ -18,9 +18,10 @@
 #include "blosc2/lazyschunk.h"
 #include "constants.h"
 #include "context.h"
+#include "logger.h"
 #include "util.h"
 #include "detail/scoped_timer.h"
-#include "iterators/iterator.h"
+#include "iterators/channel.h"
 
 
 namespace
@@ -35,24 +36,24 @@ NAMESPACE_COMPRESSED_IMAGE
 
         channel(channel&& other) noexcept
         {
-            m_schunk = std::move(other.m_Schunk);
-            m_codec = other.m_Codec;
-            m_compression_context = std::move(other.m_CompressionContext);
-            m_compression_level = other.m_CompressionLevel;
-            m_width = other.m_Width;
-            m_height = other.m_Height;
+            m_schunk = std::move(other.m_schunk);
+            m_codec = other.m_codec;
+            m_compression_level = other.m_compression_level;
+            m_num_threads = other.m_num_threads;
+            m_width = other.m_width;
+            m_height = other.m_height;
         };
 
         channel& operator=(channel&& other) noexcept
         {
             if (this != &other)
             {
-                m_schunk = std::move(other.m_Schunk);
-                m_codec = other.m_Codec;
-                m_compression_context = std::move(other.m_CompressionContext);
-                m_compression_level = other.m_CompressionLevel;
-                m_width = other.m_Width;
-                m_height = other.m_Height;
+                m_schunk = std::move(other.m_schunk);
+                m_codec = other.m_codec;
+                m_compression_level = other.m_compression_level;
+                m_num_threads = other.m_num_threads;
+                m_width = other.m_width;
+                m_height = other.m_height;
             }
             return *this;
         };
@@ -67,13 +68,6 @@ NAMESPACE_COMPRESSED_IMAGE
         {
             m_schunk = std::make_shared<schunk_var<T>>(
                 detail::lazy_schunk<T>(0, 1, s_default_blocksize, s_default_chunksize)
-            );
-            m_compression_context = this->create_compression_context(
-                enums::codec::lz4,
-                std::thread::hardware_concurrency() / 2,
-                5,
-                s_default_blocksize,
-                -1
             );
         };
 
@@ -99,12 +93,12 @@ NAMESPACE_COMPRESSED_IMAGE
         ///                   here.
         channel(
             const std::span<const T> data,
-            size_t width,
-            size_t height,
-            enums::codec compression_codec = enums::codec::lz4,
-            uint8_t compression_level = 9,
-            size_t block_size = s_default_blocksize,
-            size_t chunk_size = s_default_chunksize,
+            const size_t width,
+            const size_t height,
+            const enums::codec compression_codec = enums::codec::lz4,
+            const uint8_t compression_level = 9,
+            const size_t block_size = s_default_blocksize,
+            const size_t chunk_size = s_default_chunksize,
             std::optional<int> gpu_device = std::nullopt
         )
         {
@@ -112,6 +106,7 @@ NAMESPACE_COMPRESSED_IMAGE
             m_width = width;
             m_height = height;
             m_codec = compression_codec;
+            m_num_threads = std::thread::hardware_concurrency() / 2;
             m_compression_level = util::ensure_compression_level(compression_level);
             if (data.size() != width * height)
             {
@@ -124,6 +119,17 @@ NAMESPACE_COMPRESSED_IMAGE
                         width * height,
                         data.size()
                     )
+                );
+            }
+
+            if (enums::is_gpu_codec(m_codec) && !cuda::is_available())
+            {
+                m_codec = enums::s_gpu_codec_fallback.at(m_codec);
+                get_logger()->warn(
+                    "Unable to use the provided gpu codec '{}' as no cuda device is available."
+                    " Falling back to cpu codec '{}'.",
+                    enums::to_string(compression_codec),
+                    enums::to_string(m_codec)
                 );
             }
 
@@ -149,20 +155,20 @@ NAMESPACE_COMPRESSED_IMAGE
                 assert(block_size < chunk_size);
             }
 
+            // Align the chunks to the scanlines, makes our life a lot easier on read / write.
+            auto chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(m_width, chunk_size);
 
-            m_compression_context = this->create_compression_context(
+            auto gpu_device_index = enums::is_gpu_codec(m_codec) ? cuda::current_device() : 0;
+            auto compression_ctx = this->create_compression_context(
                 m_codec,
-                std::thread::hardware_concurrency() / 2,
+                m_num_threads,
                 m_compression_level,
                 block_size,
-                gpu_device.value_or(0)
+                gpu_device_index
             );
 
-
-            // Align the chunks to the scanlines, makes our lifes a lot easier on read / write.
-            auto chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(m_width, chunk_size);
             m_schunk = std::make_shared<schunk_var<T>>(
-                detail::schunk<T>(data, block_size, chunk_size_aligned, m_compression_context)
+                detail::schunk<T>(data, block_size, chunk_size_aligned, std::move(compression_ctx))
             );
         }
 
@@ -176,10 +182,10 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param compression_level The compression level (default is 5).
         channel(
             schunk_var<T> schunk,
-            size_t width,
-            size_t height,
-            enums::codec compression_codec = enums::codec::lz4,
-            uint8_t compression_level = 9
+            const size_t width,
+            const size_t height,
+            const enums::codec compression_codec = enums::codec::lz4,
+            const uint8_t compression_level = 9
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
@@ -214,24 +220,9 @@ NAMESPACE_COMPRESSED_IMAGE
             }
 
             m_schunk = std::make_shared<schunk_var<T>>(std::move(schunk));
+            m_num_threads = std::thread::hardware_concurrency() / 2;
             m_width = width;
             m_height = height;
-
-            // Store the compression and decompression contexts, retrieving the block size from the underlying schunk
-            // wrapper
-            std::visit(
-                [&](auto& _schunk)
-                {
-                    m_compression_context = this->create_compression_context(
-                        m_codec,
-                        std::thread::hardware_concurrency() / 2,
-                        m_compression_level,
-                        _schunk.max_block_size(),
-                        0
-                    );
-                },
-                *m_schunk
-            );
         }
 
 
@@ -251,12 +242,12 @@ NAMESPACE_COMPRESSED_IMAGE
         ///                   for optimal performance and must be a multiple of sizeof(T).
         /// \return A channel instance with all values initialized to zero.
         static channel zeros(
-            size_t width,
-            size_t height,
-            enums::codec compression_codec = enums::codec::lz4,
-            uint8_t compression_level = 9,
-            size_t block_size = s_default_blocksize,
-            size_t chunk_size = s_default_chunksize
+            const size_t width,
+            const size_t height,
+            const enums::codec compression_codec = enums::codec::lz4,
+            const uint8_t compression_level = 9,
+            const size_t block_size = s_default_blocksize,
+            const size_t chunk_size = s_default_chunksize
         )
         {
             return channel<T>::full(
@@ -306,13 +297,13 @@ NAMESPACE_COMPRESSED_IMAGE
         ///                   for optimal performance and must be a multiple of sizeof(T).
         /// \return A channel instance with all values initialized to \p fill_value.
         static channel full(
-            size_t width,
-            size_t height,
-            T fill_value,
-            enums::codec compression_codec = enums::codec::lz4,
-            uint8_t compression_level = 9,
-            size_t block_size = s_default_blocksize,
-            size_t chunk_size = s_default_chunksize
+            const size_t width,
+            const size_t height,
+            const T fill_value,
+            const enums::codec compression_codec = enums::codec::lz4,
+            const uint8_t compression_level = 9,
+            const size_t block_size = s_default_blocksize,
+            const size_t chunk_size = s_default_chunksize
         )
         {
             const size_t chunk_size_aligned = util::align_chunk_to_scanlines_bytes<T>(width, chunk_size);
@@ -345,63 +336,118 @@ NAMESPACE_COMPRESSED_IMAGE
             );
         }
 
-        /// Returns an iterator pointing to the beginning of the compressed data.
-        ///
-        /// \return An iterator to the beginning of the compressed data.
+        /// Returns an iterator pointing to the beginning of the decompressed channel chunks.
+                ///
+                /// The iterator does not allocate on construction. Its internal buffers and compression/decompression
+                /// context are initialized lazily when the first chunk is dereferenced.
         iterator begin()
         {
+            if (!m_schunk)
+            {
+                throw std::runtime_error(
+                    "Internal Error: Unable to create begin iterator as m_schunk is uninitialized."
+                );
+            }
+
             return iterator(
                 m_schunk,
-                m_compression_context,
                 0,
+                this->num_chunks(),
                 m_width,
-                m_height
+                m_height,
+                m_codec,
+                m_compression_level,
+                m_num_threads,
+                this->block_size(),
+                this->chunk_size()
             );
         }
 
-        /// Returns an iterator pointing to the end of the compressed data.
-        ///
-        /// \return An iterator to the end of the compressed data.
+        /// Returns an iterator pointing past the last decompressed channel chunk.
         iterator end()
         {
-            if (m_schunk)
+            if (!m_schunk)
             {
-                return std::visit(
-                    [&](auto& schunk)
-                    {
-                        return iterator(
-                            m_schunk,
-                            m_compression_context,
-                            schunk.num_chunks(),
-                            m_width,
-                            m_height
-                        );
-                    },
-                    *m_schunk
+                throw std::runtime_error("Internal Error: Unable to create end iterator as m_schunk is uninitialized.");
+            }
+
+            return iterator(
+                m_schunk,
+                this->num_chunks(),
+                this->num_chunks(),
+                m_width,
+                m_height,
+                m_codec,
+                m_compression_level,
+                m_num_threads,
+                this->block_size(),
+                this->chunk_size()
+            );
+        }
+
+        /// Returns a const iterator pointing to the beginning of the decompressed channel chunks.
+        const_iterator begin() const
+        {
+            if (!m_schunk)
+            {
+                throw std::runtime_error(
+                    "Internal Error: Unable to create begin iterator as m_schunk is uninitialized."
                 );
             }
-            throw std::runtime_error("Internal Error: Unable to create end iterator as m_Schunk is uninitialized.");
+
+            return const_iterator(
+                m_schunk,
+                0,
+                this->num_chunks(),
+                m_width,
+                m_height,
+                m_codec,
+                m_compression_level,
+                m_num_threads,
+                this->block_size(),
+                this->chunk_size()
+            );
+        }
+
+        /// Returns a const iterator pointing past the last decompressed channel chunk.
+        const_iterator end() const
+        {
+            if (!m_schunk)
+            {
+                throw std::runtime_error("Internal Error: Unable to create end iterator as m_schunk is uninitialized.");
+            }
+
+            return const_iterator(
+                m_schunk,
+                this->num_chunks(),
+                this->num_chunks(),
+                m_width,
+                m_height,
+                m_codec,
+                m_compression_level,
+                m_num_threads,
+                this->block_size(),
+                this->chunk_size()
+            );
+        }
+
+        const_iterator cbegin() const
+        {
+            return this->begin();
+        }
+
+        const_iterator cend() const
+        {
+            return this->end();
         }
 
         /// Update the number of threads used internally by c-blosc2 for compression and decompression. Only valid for
         /// CPU compression/decompression
         ///
         /// \param nthreads The number of threads to use for compression and decompression.
-        /// \param block_size The block size to compress to
-        void update_nthreads(size_t nthreads, size_t block_size = s_default_blocksize)
+        void update_nthreads(size_t nthreads)
         {
-            if (enums::is_gpu_codec(m_codec))
-            {
-                return;
-            }
-
-            m_compression_context = this->create_compression_context(
-                m_codec,
-                nthreads,
-                m_compression_level,
-                block_size,
-                0
-            );
+            m_num_threads = nthreads;
         }
 
         /// The channel width.
@@ -489,15 +535,13 @@ NAMESPACE_COMPRESSED_IMAGE
         {
             assert(m_schunk != nullptr);
 
-            if (std::holds_alternative<detail::schunk<T>>(*m_schunk))
-            {
-                return std::get<detail::schunk<T>>(*m_schunk).num_chunks();
-            }
-            else if (std::holds_alternative<detail::lazy_schunk<T>>(*m_schunk))
-            {
-                return std::get<detail::lazy_schunk<T>>(*m_schunk).num_chunks();
-            }
-            return {};
+            return std::visit(
+                [](const auto& schunk_)
+                {
+                    return schunk_.num_chunks();
+                },
+                *m_schunk
+            );
         }
 
         /// \brief Retrieve the block size (in bytes) of the channel
@@ -587,15 +631,31 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
             }
 
-            return std::visit(
+            std::visit(
                 [&](const auto& schunk)
                 {
-                    // We cheat a little bit here by creating this compression ctx on the fly, unfortunately this is
-                    // necessary as blosc2 will actually modify the ctx on decompression.
-                    auto decomp_ctx = blosc2::create_decompression_context(m_Nthreads);
-                    return schunk.chunk(decomp_ctx, buffer, chunk_idx);
-                },
-                *m_schunk
+                    if (enums::is_gpu_codec(m_codec))
+                    {
+                        schunk.chunk(buffer, chunk_idx);
+                    }
+                    else
+                    {
+                        auto compression_context = this->create_compression_context(
+                            m_codec,
+                            m_num_threads,
+                            m_compression_level,
+                            this->block_size(),
+                            0
+                        );
+
+                        schunk.chunk(
+                            std::get<cpu_compression_context>(compression_context).decompression_ctx.get(),
+                            buffer,
+                            chunk_idx
+                        );
+                    }
+                }
+                * m_schunk
             );
         }
 
@@ -617,7 +677,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
             }
 
-            return std::visit(
+            std::visit(
                 [&](auto& schunk)
                 {
                     if (buffer.size() != schunk.chunk_elements(chunk_idx))
@@ -633,7 +693,38 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                     }
 
-                    return schunk.set_chunk(m_compression_context, buffer, chunk_idx);
+                    if (enums::is_gpu_codec(m_codec))
+                    {
+                        auto compression_context = this->create_compression_context(
+                            m_codec,
+                            m_num_threads,
+                            m_compression_level,
+                            this->block_size(),
+                            cuda::current_device()
+                        );
+
+                        schunk.set_chunk(
+                            std::get<gpu_compression_context>(compression_context).ctx,
+                            buffer,
+                            chunk_idx
+                        );
+                    }
+                    else
+                    {
+                        auto compression_context = this->create_compression_context(
+                            m_codec,
+                            m_num_threads,
+                            m_compression_level,
+                            this->block_size(),
+                            0
+                        );
+
+                        schunk.set_chunk(
+                            std::get<cpu_compression_context>(compression_context).compression_ctx,
+                            buffer,
+                            chunk_idx
+                        );
+                    }
                 },
                 *m_schunk
             );
@@ -652,13 +743,30 @@ NAMESPACE_COMPRESSED_IMAGE
                     "Internal Error: Channel instance is not properly initialized, unable to get decompressed data"
                 );
             }
+
+
             return std::visit(
                 [&](const auto& schunk)
                 {
-                    // We cheat a little bit here by creating this compression ctx on the fly, unfortunately this is
-                    // necessary as blosc2 will actually modify the ctx on decompression.
-                    auto decomp_ctx = blosc2::create_decompression_context(m_Nthreads);
-                    return schunk.to_uncompressed(decomp_ctx);
+                    if (enums::is_gpu_codec(m_codec))
+                    {
+                        auto compression_context = this->create_compression_context(
+                            m_codec,
+                            m_num_threads,
+                            m_compression_level,
+                            this->block_size(),
+                            cuda::current_device()
+                        );
+                        return schunk.to_uncompressed(std::get<gpu_compression_context>(compression_context));
+                    }
+                    auto compression_context = this->create_compression_context(
+                        m_codec,
+                        m_num_threads,
+                        m_compression_level,
+                        this->block_size(),
+                        0
+                    );
+                    return schunk.to_uncompressed(std::get<cpu_compression_context>(compression_context));
                 },
                 *m_schunk
             );
@@ -670,24 +778,10 @@ NAMESPACE_COMPRESSED_IMAGE
             return this == &other;
         }
 
-    private:
-        /// The storage for the internal data, stored contiguously in a compressed data format
-        schunk_var_ptr<T> m_schunk = nullptr;
-        /// The compression/decompression context. Uses either blosc2 or cuda depending on the set compression codec.
-        compression_context_var m_compression_context{};
-        /// The compression codec in use.
-        enums::codec m_codec = enums::codec::lz4;
-        /// Compression level.
-        uint8_t m_compression_level = 9;
-
-        /// The width and height of the channel.
-        size_t m_width = 1;
-        size_t m_height = 1;
-
-    private:
         /// \brief Create a compression context for the given codec.
         ///
-        /// This will initialize either a gpu or cpu compressor/decompressor, returning it.
+        /// This will initialize either a gpu or cpu compressor/decompressor, returning it. This is primarily
+        /// for internal API usage.
         ///
         /// \param codec The compression codec, the type of context to initialize is inferred from this.
         /// \param num_threads The compression/decompression threads. Only used when the codec is cpu-based
@@ -702,6 +796,7 @@ NAMESPACE_COMPRESSED_IMAGE
             const int gpu_device
         )
         {
+            _COMPRESSED_PROFILE_FUNCTION();
             if (enums::is_gpu_codec(codec))
             {
                 return gpu_compression_context{
@@ -712,16 +807,31 @@ NAMESPACE_COMPRESSED_IMAGE
             else
             {
                 return cpu_compression_context{
-                    .compression_ctx = blosc2::create_decompression_context(num_threads),
-                    .decompression_ctx = blosc2::create_compression_context<T>(
+                    .compression_ctx = blosc2::create_compression_context<T>(
                         num_threads,
                         codec,
                         compression_level,
                         block_size
                     ),
+                    .decompression_ctx = blosc2::create_decompression_context(num_threads),
                     .nthreads = num_threads
                 };
             }
         }
+
+    private
+    :
+        /// The storage for the internal data, stored contiguously in a compressed data format
+        schunk_var_ptr<T> m_schunk = nullptr;
+        /// The compression codec in use.
+        enums::codec m_codec = enums::codec::lz4;
+        /// Compression level.
+        uint8_t m_compression_level = 9;
+        /// The number of threads used for cpu compression/decompression (blosc2 only).
+        size_t m_num_threads = std::thread::hardware_concurrency() / 2;
+
+        /// The width and height of the channel.
+        size_t m_width = 1;
+        size_t m_height = 1;
     };
 } // NAMESPACE_COMPRESSED_IMAGE

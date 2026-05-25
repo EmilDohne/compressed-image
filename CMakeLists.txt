@@ -65,6 +65,10 @@ target_include_directories(blosc2_include SYSTEM INTERFACE
 # JSON module for parsing/storing metadata
 add_subdirectory(thirdparty/json)
 
+# spdlog for logging
+set(SPDLOG_USE_STD_FORMAT ON)
+add_subdirectory(thirdparty/spdlog)
+
 # Pull nvcomp (headers + dll/so target)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/FetchNvcomp.cmake)
 
