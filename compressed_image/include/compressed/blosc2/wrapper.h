@@ -6,11 +6,10 @@
 #include "compressed/enums.h"
 #include "compressed/blosc2/util.h"
 #include "compressed/detail/scoped_timer.h"
+#include "compressed/detail/scratch_buffer_pool.h"
 
 #include "blosc2.h"
 
-#include "blosc2/blosc2-common.h"
-#include "blosc2/blosc2-stdio.h"
 #include "blosc2/filters-registry.h"
 
 #include <span>
@@ -118,6 +117,34 @@ NAMESPACE_COMPRESSED_IMAGE
             return enums::codec::blosclz;
         }
 
+
+        /// Get the minimum size needed to store the compressed data.
+        template <size_t ChunkSize>
+        constexpr size_t min_compressed_size()
+        {
+            return ChunkSize + BLOSC2_MAX_OVERHEAD;
+        }
+
+        /// Get the minimum size needed to store the compressed data.
+        inline constexpr size_t min_compressed_size(size_t chunk_size)
+        {
+            return chunk_size + BLOSC2_MAX_OVERHEAD;
+        }
+
+        /// Get the minimum size needed to store the decompressed data.
+        template <size_t ChunkSize>
+        constexpr size_t min_decompressed_size()
+        {
+            return ChunkSize;
+        }
+
+        /// Get the minimum size needed to store the decompressed data.
+        inline constexpr size_t min_decompressed_size(size_t chunk_size)
+        {
+            return chunk_size;
+        }
+
+
         /// Compress the `data` into `chunk` using the provided `context`.
         ///
         /// This function applies Blosc2 compression to the input `data` and stores the compressed
@@ -224,6 +251,58 @@ NAMESPACE_COMPRESSED_IMAGE
         size_t compress(context_ptr& context, std::span<const T> data, std::span<std::byte> chunk)
         {
             return compress(context.get(), data, chunk);
+        }
+
+        template <typename T>
+        util::default_init_vector<std::byte> compress_to_chunk(context_raw_ptr context, std::span<T> data)
+        {
+            _COMPRESSED_PROFILE_FUNCTION();
+
+            const auto required_size = min_compressed_size(data.size_bytes());
+
+            if (auto pool = NAMESPACE_COMPRESSED_IMAGE::detail::scratch_pool_registry::current())
+            {
+                auto lease = pool->acquire(required_size);
+                auto scratch = lease.span();
+                const auto csize = compress(context, data, scratch);
+                return util::default_init_vector<std::byte>(scratch.begin(), scratch.begin() + csize);
+            }
+
+            util::default_init_vector<std::byte> scratch(required_size);
+            const auto csize = compress(context, data, std::span<std::byte>(scratch));
+            return util::default_init_vector<std::byte>(scratch.begin(), scratch.begin() + csize);
+        }
+
+        template <typename T>
+        util::default_init_vector<std::byte> compress_to_chunk(context_raw_ptr context, std::span<const T> data)
+        {
+            _COMPRESSED_PROFILE_FUNCTION();
+
+            const auto required_size = min_compressed_size(data.size_bytes());
+
+            if (auto pool = NAMESPACE_COMPRESSED_IMAGE::detail::scratch_pool_registry::current())
+            {
+                auto lease = pool->acquire(required_size);
+                auto scratch = lease.span();
+                const auto csize = compress(context, data, scratch);
+                return util::default_init_vector<std::byte>(scratch.begin(), scratch.begin() + csize);
+            }
+
+            util::default_init_vector<std::byte> scratch(required_size);
+            const auto csize = compress(context, data, std::span<std::byte>(scratch));
+            return util::default_init_vector<std::byte>(scratch.begin(), scratch.begin() + csize);
+        }
+
+        template <typename T>
+        util::default_init_vector<std::byte> compress_to_chunk(context_ptr& context, std::span<T> data)
+        {
+            return compress_to_chunk(context.get(), data);
+        }
+
+        template <typename T>
+        util::default_init_vector<std::byte> compress_to_chunk(context_ptr& context, std::span<const T> data)
+        {
+            return compress_to_chunk(context.get(), data);
         }
 
         /// Decompress a Blosc2 `chunk` into `buffer` using the provided `context`.
@@ -426,32 +505,6 @@ NAMESPACE_COMPRESSED_IMAGE
             dparams.nthreads = static_cast<int16_t>(nthreads);
 
             return blosc2::context_ptr(blosc2_create_dctx(dparams));
-        }
-
-        /// Get the minimum size needed to store the compressed data.
-        template <size_t ChunkSize>
-        constexpr size_t min_compressed_size()
-        {
-            return ChunkSize + BLOSC2_MAX_OVERHEAD;
-        }
-
-        /// Get the minimum size needed to store the compressed data.
-        inline constexpr size_t min_compressed_size(size_t chunk_size)
-        {
-            return chunk_size + BLOSC2_MAX_OVERHEAD;
-        }
-
-        /// Get the minimum size needed to store the decompressed data.
-        template <size_t ChunkSize>
-        constexpr size_t min_decompressed_size()
-        {
-            return ChunkSize;
-        }
-
-        /// Get the minimum size needed to store the decompressed data.
-        inline constexpr size_t min_decompressed_size(size_t chunk_size)
-        {
-            return chunk_size;
         }
 
         /// Get the number of elements of the uncompressed chunk.

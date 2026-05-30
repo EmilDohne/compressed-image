@@ -38,7 +38,7 @@ NAMESPACE_COMPRESSED_IMAGE::cuda
             size_t block_size,
             size_t num_blocks,
             std::variant<compression_options, decompression_options> options
-        ) override
+        ) const override
         {
             if (std::holds_alternative<compression_options>(options))
             {
@@ -87,7 +87,7 @@ NAMESPACE_COMPRESSED_IMAGE::cuda
         }
 
 
-        size_t block_max_compressed_size(size_t block_size, compression_options& options) override
+        size_t block_max_compressed_size(size_t block_size, compression_options& options) const override
         {
             size_t max_bytes = 0;
             const auto status = nvcompBatchedCascadedCompressGetMaxOutputChunkSize(
@@ -148,7 +148,6 @@ NAMESPACE_COMPRESSED_IMAGE::cuda
         };
 
         void decompression_impl(
-            size_t block_size,
             size_t num_blocks,
             const cuda_device_buffer_async<void*>& compressed_block_ptrs,
             const cuda_device_buffer_async<size_t>& compressed_block_sizes,

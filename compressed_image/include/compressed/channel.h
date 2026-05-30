@@ -21,6 +21,7 @@
 #include "logger.h"
 #include "util.h"
 #include "detail/scoped_timer.h"
+#include "detail/scratch_buffer_pool.h"
 #include "iterators/channel.h"
 
 
@@ -37,6 +38,7 @@ NAMESPACE_COMPRESSED_IMAGE
         channel(channel&& other) noexcept
         {
             m_schunk = std::move(other.m_schunk);
+            m_scratch_pool = std::move(other.m_scratch_pool);
             m_codec = other.m_codec;
             m_compression_level = other.m_compression_level;
             m_num_threads = other.m_num_threads;
@@ -49,6 +51,7 @@ NAMESPACE_COMPRESSED_IMAGE
             if (this != &other)
             {
                 m_schunk = std::move(other.m_schunk);
+                m_scratch_pool = std::move(other.m_scratch_pool);
                 m_codec = other.m_codec;
                 m_compression_level = other.m_compression_level;
                 m_num_threads = other.m_num_threads;
@@ -66,6 +69,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// functions `zeros` and `full` are preferred.
         channel()
         {
+            m_scratch_pool = detail::scratch_pool_registry::get_or_create_for_channel();
             m_schunk = std::make_shared<schunk_var<T>>(
                 detail::lazy_schunk<T>(0, 1, s_default_blocksize, s_default_chunksize)
             );
@@ -103,6 +107,7 @@ NAMESPACE_COMPRESSED_IMAGE
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
+            m_scratch_pool = detail::scratch_pool_registry::get_or_create_for_channel();
             m_width = width;
             m_height = height;
             m_codec = compression_codec;
@@ -189,6 +194,7 @@ NAMESPACE_COMPRESSED_IMAGE
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
+            m_scratch_pool = detail::scratch_pool_registry::get_or_create_for_channel();
             m_codec = compression_codec;
             m_compression_level = util::ensure_compression_level(compression_level);
 
@@ -383,62 +389,6 @@ NAMESPACE_COMPRESSED_IMAGE
                 this->block_size(),
                 this->chunk_size()
             );
-        }
-
-        /// Returns a const iterator pointing to the beginning of the decompressed channel chunks.
-        const_iterator begin() const
-        {
-            if (!m_schunk)
-            {
-                throw std::runtime_error(
-                    "Internal Error: Unable to create begin iterator as m_schunk is uninitialized."
-                );
-            }
-
-            return const_iterator(
-                m_schunk,
-                0,
-                this->num_chunks(),
-                m_width,
-                m_height,
-                m_codec,
-                m_compression_level,
-                m_num_threads,
-                this->block_size(),
-                this->chunk_size()
-            );
-        }
-
-        /// Returns a const iterator pointing past the last decompressed channel chunk.
-        const_iterator end() const
-        {
-            if (!m_schunk)
-            {
-                throw std::runtime_error("Internal Error: Unable to create end iterator as m_schunk is uninitialized.");
-            }
-
-            return const_iterator(
-                m_schunk,
-                this->num_chunks(),
-                this->num_chunks(),
-                m_width,
-                m_height,
-                m_codec,
-                m_compression_level,
-                m_num_threads,
-                this->block_size(),
-                this->chunk_size()
-            );
-        }
-
-        const_iterator cbegin() const
-        {
-            return this->begin();
-        }
-
-        const_iterator cend() const
-        {
-            return this->end();
         }
 
         /// Update the number of threads used internally by c-blosc2 for compression and decompression. Only valid for
@@ -810,7 +760,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     .compression_ctx = blosc2::create_compression_context<T>(
                         num_threads,
                         codec,
-                        compression_level,
+                        static_cast<uint8_t>(compression_level),
                         block_size
                     ),
                     .decompression_ctx = blosc2::create_decompression_context(num_threads),
@@ -823,6 +773,8 @@ NAMESPACE_COMPRESSED_IMAGE
     :
         /// The storage for the internal data, stored contiguously in a compressed data format
         schunk_var_ptr<T> m_schunk = nullptr;
+        /// Keeps the globally discoverable scratch pool alive for as long as this channel exists.
+        std::shared_ptr<detail::scratch_buffer_pool> m_scratch_pool = nullptr;
         /// The compression codec in use.
         enums::codec m_codec = enums::codec::lz4;
         /// Compression level.

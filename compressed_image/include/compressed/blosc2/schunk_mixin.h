@@ -160,7 +160,8 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                     }
                 }
-                return this->to_uncompressed(cpu_compression_context{}, context);
+                auto _cpu_context = cpu_compression_context{};
+                return this->to_uncompressed(_cpu_context, context);
             }
 
             /// Retrieve the uncompressed chunk at `index`.
@@ -195,8 +196,8 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \throws std::out_of_range if the index is not valid
             virtual std::vector<T> chunk(blosc2::context_raw_ptr decompression_ctx, size_t index) const
             {
-                std::vector<T> buffer(this->size());
-                this->chunk(decompression_ctx, index);
+                std::vector<T> buffer(this->chunk_elements(index));
+                this->chunk(decompression_ctx, std::span<T>(buffer), index);
                 return buffer;
             };
 
@@ -252,7 +253,7 @@ NAMESPACE_COMPRESSED_IMAGE
             ///
             /// \param compression_ctx the compression context to use for compression.
             /// \param uncompressed the uncompressed chunk
-            virtual void append_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed) = 0;
+            virtual void append_chunk(cuda::nvcomp_context compression_ctx, std::span<const T> uncompressed) = 0;
 
             /// Append to the schunk with the uncompressed data (compressing it).
             ///
@@ -310,7 +311,7 @@ NAMESPACE_COMPRESSED_IMAGE
             /// The last chunk may be smaller (but not bigger) in size than this value.
             size_t chunk_bytes() const
             {
-                return this->m_ChunkSize;
+                return this->m_chunk_size;
             };
 
             /// Retrieve the number of bytes stored by the chunk at index `index`. This will be equivalent to

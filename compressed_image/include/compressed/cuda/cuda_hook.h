@@ -29,12 +29,12 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 	{
 
 		/// \brief Singleton class for dynamically loading CUDA functions at runtime.
-		/// 
+		///
 		/// This allows calling CUDA functions like cudaMalloc/cudaFree
 		/// without linking against CUDA at compile time.
-		/// 
+		///
 		/// Usage:
-		/// 
+		///
 		/// compressed::cuda::cuda_api::instance().malloc(ptr, size);
 		/// compressed::cuda::cuda_api::instance().free(ptr);
 		/// \brief Singleton for dynamically loading CUDA runtime functions.
@@ -68,10 +68,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			// --- Data transfer ---
 			void memcpy(void* dst, const void* src, size_t count, cudaMemcpyKind kind);
 			void memcpy_async(
-				void* dst, 
-				const void* src, 
+				void* dst,
+				const void* src,
 				size_t count,
-				cudaMemcpyKind kind, 
+				cudaMemcpyKind kind,
 				cudaStream_t stream = cudaStreamPerThread
 			);
 
@@ -237,10 +237,10 @@ namespace NAMESPACE_COMPRESSED_IMAGE
 			cudaMemPool_t mempool{};
 			cuda_call(get_mempool_fn_, "cudaDeviceGetDefaultMemPool", &mempool, device);
 			cuda_call(
-				set_mempool_fn_, 
-				"cudaMemPoolSetAttribute", 
+				set_mempool_fn_,
+				"cudaMemPoolSetAttribute",
 				mempool,
-				cudaMemPoolAttrReleaseThreshold, 
+				cudaMemPoolAttrReleaseThreshold,
 				&threshold
 			);
 		}

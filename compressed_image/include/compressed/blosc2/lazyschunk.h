@@ -324,16 +324,10 @@ NAMESPACE_COMPRESSED_IMAGE
             {
                 this->validate_chunk_index(index);
 
-                util::default_init_vector<std::byte> compression_buffer(
-                    blosc2::min_compressed_size(this->m_chunk_size)
-                );
-                std::span<std::byte> compression_span(compression_buffer);
+                auto compressed = blosc2::compress_to_chunk<T>(compression_ctx, uncompressed);
 
-                auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_span);
-
-                // copy over a new vector containing all the elements from the compression span.
                 auto chunk = detail::lazy_chunk<T, cpu_chunk>{
-                    cpu_chunk(compression_buffer.begin(), compression_buffer.begin() + csize),
+                    std::move(compressed),
                     uncompressed.size()
                 };
                 this->m_chunks[index] = std::move(chunk);
@@ -361,7 +355,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 this->validate_chunk_sizes();
             }
 
-            void append_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed) override
+            void append_chunk(cuda::nvcomp_context compression_ctx, std::span<const T> uncompressed) override
             {
                 auto compressor = cuda::make_compressor<T>(compression_ctx.codec);
                 cuda::compressed_chunk<T> _chunk{};
@@ -399,22 +393,34 @@ NAMESPACE_COMPRESSED_IMAGE
             size_t csize() const noexcept override
             {
                 size_t _csize = 0;
+                size_t idx = 0;
                 for (const auto& chunk : this->m_chunks)
                 {
-                    std::visit(
-                        [&](const auto& _chunk) -> void
+                    if (this->is_gpu_chunk(idx))
+                    {
+                        const auto& _chunk = std::get<gpu_container>(chunk);
+                        if (std::holds_alternative<T>(_chunk.value))
                         {
-                            if (std::holds_alternative<T>(_chunk.value))
-                            {
-                                _csize += sizeof(T);
-                            }
-                            else
-                            {
-                                _csize += std::get<std::vector<std::byte>>(_chunk.value).size();
-                            }
-                        },
-                        chunk
-                    );
+                            _csize += sizeof(T);
+                        }
+                        else
+                        {
+                            _csize += std::get<gpu_chunk<T>>(_chunk.value).size();
+                        }
+                    }
+                    else
+                    {
+                        const auto& _chunk = std::get<cpu_container>(chunk);
+                        if (std::holds_alternative<T>(_chunk.value))
+                        {
+                            _csize += sizeof(T);
+                        }
+                        else
+                        {
+                            _csize += std::get<cpu_chunk>(_chunk.value).size();
+                        }
+                    }
+                    ++idx;
                 }
                 return _csize;
             }
@@ -456,12 +462,26 @@ NAMESPACE_COMPRESSED_IMAGE
             {
                 for (const auto& chunk : this->m_chunks)
                 {
-                    if (std::holds_alternative<T>(chunk.value))
+                    T value = {};
+
+                    std::visit(
+                        [&](const auto& _chunk)
+                        {
+                            if (_chunk.is_lazy())
+                            {
+                                value = std::get<T>(_chunk.value);
+                            }
+                        },
+                        chunk
+                    );
+
+                    if (value != T{})
                     {
-                        return std::get<T>(chunk.value);
+                        return value;
                     }
                 }
-                return T{};
+
+                return {};
             }
         };
     } // detail

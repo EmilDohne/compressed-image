@@ -92,8 +92,8 @@ NAMESPACE_COMPRESSED_IMAGE
     template <typename T>
     struct channel_iterator
     {
-        using element_type = std::remove_const_t<T>;
-        using schunk_pointer = schunk_var_ptr<element_type>;
+        using storage_type = std::remove_const_t<T>;
+        using schunk_pointer = schunk_var_ptr<storage_type>;
 
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
@@ -118,6 +118,7 @@ NAMESPACE_COMPRESSED_IMAGE
             : m_state(
                 std::make_shared<state>(
                     std::move(schunk),
+                    detail::scratch_pool_registry::get_or_create_for_channel(),
                     chunk_index,
                     num_chunks,
                     width,
@@ -147,7 +148,7 @@ NAMESPACE_COMPRESSED_IMAGE
             }
         }
 
-        reference operator*()
+        value_type operator*()
         {
             ensure_dereferenceable();
             load_current_chunk();
@@ -158,11 +159,6 @@ NAMESPACE_COMPRESSED_IMAGE
             }
 
             return m_state->current_chunk;
-        }
-
-        pointer operator->()
-        {
-            return &operator*();
         }
 
         channel_iterator& operator++()
@@ -210,6 +206,7 @@ NAMESPACE_COMPRESSED_IMAGE
         {
             state(
                 schunk_pointer schunk_,
+                std::shared_ptr<detail::scratch_buffer_pool> scratch_pool_,
                 size_t chunk_index_,
                 size_t num_chunks_,
                 size_t width_,
@@ -221,6 +218,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 size_t chunk_size_
             )
                 : schunk(std::move(schunk_)),
+                  scratch_pool(std::move(scratch_pool_)),
                   chunk_index(chunk_index_),
                   num_chunks(num_chunks_),
                   width(width_),
@@ -234,6 +232,7 @@ NAMESPACE_COMPRESSED_IMAGE
             }
 
             schunk_pointer schunk = nullptr;
+            std::shared_ptr<detail::scratch_buffer_pool> scratch_pool = nullptr;
             size_t chunk_index = 0;
             size_t num_chunks = 0;
             size_t width = 0;
@@ -244,7 +243,7 @@ NAMESPACE_COMPRESSED_IMAGE
             size_t block_size = 0;
             size_t chunk_size = 0;
 
-            fitted_buffer<element_type> decompressed_buffer{};
+            fitted_buffer<storage_type> decompressed_buffer{};
             fitted_buffer<std::byte> compressed_buffer{};
             value_type current_chunk{};
 
@@ -308,8 +307,18 @@ NAMESPACE_COMPRESSED_IMAGE
                 },
                 *m_state->schunk
             );
+            const size_t schunk_total = std::visit(
+                [&](const auto& schunk)
+                {
+                    return schunk.size();
+                },
+                *m_state->schunk
+            );
 
-            const size_t max_chunk_elems = m_state->chunk_size / sizeof(element_type);
+            size_t max_chunk_elems = m_state->chunk_size / sizeof(storage_type);
+            // Optimize for small chunks by allocating at most what is held in total.
+            max_chunk_elems = std::min(max_chunk_elems, schunk_total);
+
             m_state->decompressed_buffer.ensure_capacity(max_chunk_elems);
             m_state->decompressed_buffer.refit(chunk_elems);
 
@@ -334,11 +343,11 @@ NAMESPACE_COMPRESSED_IMAGE
             if constexpr (std::is_const_v<T>)
             {
                 m_state->current_chunk = value_type(
-                    std::span<const element_type>(writable_buffer.data(), writable_buffer.size()),
+                    std::span<const storage_type>(writable_buffer.data(), writable_buffer.size()),
                     m_state->width,
                     m_state->height,
                     m_state->chunk_index,
-                    m_state->chunk_size / sizeof(element_type)
+                    m_state->chunk_size / sizeof(storage_type)
                 );
             }
             else
@@ -348,7 +357,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     m_state->width,
                     m_state->height,
                     m_state->chunk_index,
-                    m_state->chunk_size / sizeof(element_type)
+                    m_state->chunk_size / sizeof(storage_type)
                 );
             }
 
@@ -416,15 +425,15 @@ NAMESPACE_COMPRESSED_IMAGE
             if (enums::is_gpu_codec(codec))
             {
                 return gpu_compression_context{
-                    .ctx = cuda::make_compression_context<element_type>(codec, gpu_device, block_size)
+                    .ctx = cuda::make_compression_context<storage_type>(codec, gpu_device, block_size)
                 };
             }
 
             return cpu_compression_context{
-                .compression_ctx = blosc2::create_compression_context<element_type>(
+                .compression_ctx = blosc2::create_compression_context<storage_type>(
                     num_threads,
                     codec,
-                    compression_level,
+                    static_cast<uint8_t>(compression_level),
                     block_size
                 ),
                 .decompression_ctx = blosc2::create_decompression_context(num_threads),

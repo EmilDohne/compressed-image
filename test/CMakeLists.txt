@@ -5,7 +5,7 @@ enable_testing()
 add_executable(compressed_image_test ${MY_SOURCES} "main.cpp")
 
 if (MSVC)
-   target_compile_options(compressed_image_test PRIVATE /MP /utf-8)
+   target_compile_options(compressed_image_test PRIVATE /MP /utf-8 /bigobj)
 endif ()
 target_link_libraries(compressed_image_test PRIVATE compressed_image)
 target_link_libraries(compressed_image_test PRIVATE doctest)

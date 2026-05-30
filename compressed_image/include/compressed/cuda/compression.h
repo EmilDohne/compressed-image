@@ -51,7 +51,7 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T>
         compressor_var<T> make_compressor(const cuda::compressed_chunk<T>& chunk)
         {
-            return make_compressor(chunk.context.codec);
+            return make_compressor<T>(chunk.context.codec);
         }
 
 

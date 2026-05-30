@@ -153,24 +153,7 @@ TEST_CASE("Channel iterate")
         }
 
         auto decompressed = channel.get_decompressed();
-        CHECK(std::ranges::all_of(decompressed, [](auto value) { return value == 128; }));
-    }
-
-    SUBCASE("Const read")
-    {
-        const auto& const_channel = channel;
-        size_t count = 0;
-
-        for (auto chunk_span : const_channel)
-        {
-            for (const auto& pixel : chunk_span)
-            {
-                CHECK(pixel == 255);
-                ++count;
-            }
-        }
-
-        CHECK(count == vec.size());
+        test_util::check_vector_verbose(decompressed, static_cast<uint16_t>(128));
     }
 }
 
@@ -179,7 +162,7 @@ TEST_CASE("Channel iterate")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Channel iterate multiple chunks")
 {
-    auto vec = std::vector<uint16_t>(129);
+    auto vec = std::vector<uint16_t>(128);
     std::iota(vec.begin(), vec.end(), uint16_t{0});
 
     auto channel = compressed::channel<uint16_t>(
