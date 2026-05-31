@@ -1587,9 +1587,6 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
             );
 
-            // Buffer to hold a single chunk. We will reuse this quite frequently
-            auto chunk_buffer = util::default_init_vector<std::byte>(blosc2::min_compressed_size(chunk_size_aligned));
-
             // Read and compress the channel pairs in chunks
             // -----------------------------------------------------------------------------------
             // -----------------------------------------------------------------------------------
@@ -1598,6 +1595,9 @@ NAMESPACE_COMPRESSED_IMAGE
             // passes the channel names in a different order than they appear in such as 'A', 'G', 'R'. This should
             // still create the channel names as expected in correct order.
             std::vector<std::string> new_channelnames{};
+
+            // Initialize a scratch buffer for compression/decompression.
+            auto scratch_buffer = detail::scratch_pool_registry::get_or_create_for_channel();
 
             // Iterate all the pair and extract them, refitting the buffers as needed.
             // This is where the actual work of reading start.
@@ -1621,21 +1621,12 @@ NAMESPACE_COMPRESSED_IMAGE
                     );
                 }
 
-                // Create and initialize the contexts and schunks. These are pretty light weight so we don't need
+                // Create and initialize the schunks. These are pretty light weight so we don't need
                 // to worry about creating them outside of the loop/reusing them.
-                std::vector<blosc2::context_ptr> contexts;
                 std::vector<detail::schunk<T>> schunks;
                 for ([[maybe_unused]] auto _ : std::views::iota(0, nchannels))
                 {
                     schunks.push_back(detail::schunk<T>(block_size, chunk_size_aligned));
-                    contexts.push_back(
-                        blosc2::create_compression_context<T>(
-                            std::thread::hardware_concurrency(),
-                            compression_codec,
-                            comp_level_adjusted,
-                            block_size
-                        )
-                    );
                 }
 
                 // Read the contiguous channel sequence into the contexts and schunks.
@@ -1648,12 +1639,13 @@ NAMESPACE_COMPRESSED_IMAGE
                             subimage,
                             chbegin,
                             chend,
+                            compression_codec,
+                            comp_level_adjusted,
+                            block_size,
                             interleaved_fitted,
                             deinterleaved_fitted,
                             scanlines_per_chunk,
-                            contexts,
                             schunks,
-                            chunk_buffer,
                             std::forward<PostProcess>(postprocess)
                         );
                     }
@@ -1664,12 +1656,13 @@ NAMESPACE_COMPRESSED_IMAGE
                             subimage,
                             chbegin,
                             chend,
+                            compression_codec,
+                            comp_level_adjusted,
+                            block_size,
                             interleaved_fitted,
                             deinterleaved_fitted,
                             scanlines_per_chunk,
-                            contexts,
                             schunks,
-                            chunk_buffer,
                             std::forward<PostProcess>(postprocess)
                         );
                     }
@@ -1683,12 +1676,13 @@ NAMESPACE_COMPRESSED_IMAGE
                             subimage,
                             chbegin,
                             chend,
+                            compression_codec,
+                            comp_level_adjusted,
+                            block_size,
                             interleaved_fitted,
                             deinterleaved_fitted,
                             scanlines_per_chunk,
-                            contexts,
                             schunks,
-                            chunk_buffer,
                             std::nullopt
                         );
                     }
@@ -1699,12 +1693,13 @@ NAMESPACE_COMPRESSED_IMAGE
                             subimage,
                             chbegin,
                             chend,
+                            compression_codec,
+                            comp_level_adjusted,
+                            block_size,
                             interleaved_fitted,
                             deinterleaved_fitted,
                             scanlines_per_chunk,
-                            contexts,
                             schunks,
-                            chunk_buffer,
                             std::nullopt
                         );
                     }
@@ -1766,15 +1761,16 @@ NAMESPACE_COMPRESSED_IMAGE
                 std::remove_cvref_t<PostProcess>, std::nullopt_t>
         static void read_contiguous_channels_impl(
             std::unique_ptr<OIIO::ImageInput>& input_ptr,
-            int subimage,
-            int chbegin,
-            int chend,
+            const int subimage,
+            const int chbegin,
+            const int chend,
+            enums::codec compression_codec,
+            size_t compression_level,
+            size_t block_size,
             std::span<T> interleaved_buffer,
             std::vector<std::span<T>>& deinterleaved_buffer,
             size_t scanlines_per_chunk,
-            std::vector<blosc2::context_ptr>& contexts,
             std::vector<detail::schunk<T>>& schunks,
-            util::default_init_vector<std::byte>& chunk_buffer,
             PostProcess&& postprocess
         )
         {
@@ -1833,16 +1829,15 @@ NAMESPACE_COMPRESSED_IMAGE
                     );
                 }
             }
-            // Ensure the contexts and schunks are correctly sized
-            if (contexts.size() != static_cast<size_t>(nchannels) || schunks.size() != static_cast<size_t>(nchannels))
+            // Ensure the schunks are correctly sized
+            if (schunks.size() != static_cast<size_t>(nchannels))
             {
                 throw std::runtime_error(
                     std::format(
-                        "read_contiguous_channels_impl: Internal error: Expected the number of passed schunks and contexts"
-                        " to exactly match the number of requested channels. Instead got {} and {} while {} was the expected"
+                        "read_contiguous_channels_impl: Internal error: Expected the number of passed schunks"
+                        " to exactly match the number of requested channels. Instead got {} while {} was the expected"
                         " number.",
                         schunks.size(),
-                        contexts.size(),
                         nchannels
                     )
                 );
@@ -1867,20 +1862,13 @@ NAMESPACE_COMPRESSED_IMAGE
                 {
                     read_successful = input_ptr->read_tiles(
                         subimage,
-                        0,
-                        // miplevel
-                        spec.x,
-                        // xbegin
-                        spec.width,
-                        // xend
-                        y,
-                        // ybegin
-                        y + scanlines_to_read,
-                        // yend
-                        0,
-                        // zbegin
-                        1,
-                        // zend
+                        0 /* miplevel */,
+                        spec.x /* xbegin */,
+                        spec.width /* xend */,
+                        y /* ybegin */,
+                        y + scanlines_to_read /* yend */,
+                        0 /* zbegin */,
+                        1 /* zend */,
                         chbegin,
                         chend,
                         typedesc,
@@ -1891,14 +1879,10 @@ NAMESPACE_COMPRESSED_IMAGE
                 {
                     read_successful = input_ptr->read_scanlines(
                         subimage,
-                        0,
-                        // miplevel
-                        y,
-                        // ybegin
-                        y + scanlines_to_read,
-                        // yend
-                        0,
-                        // z
+                        0 /* miplevel */,
+                        y /* ybegin */,
+                        y + scanlines_to_read /* yend */,
+                        0 /* z */,
                         chbegin,
                         chend,
                         typedesc,
@@ -1929,6 +1913,14 @@ NAMESPACE_COMPRESSED_IMAGE
                 // Now start compressing the chunks and appending them into the super-chunks.
                 for (auto channel_idx : std::views::iota(0, nchannels))
                 {
+                    auto context = NAMESPACE_COMPRESSED_IMAGE::channel<T>::create_compression_context(
+                        compression_codec,
+                        std::thread::hardware_concurrency(),
+                        compression_level,
+                        block_size,
+                        0
+                    );
+
                     // How many elements we actually read per buffer
                     size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;
                     auto deinterleaved_fitted = std::span<T>(deinterleaved_buffer[channel_idx].data(), read_elements);
@@ -1942,9 +1934,8 @@ NAMESPACE_COMPRESSED_IMAGE
                     }
 
                     schunks[channel_idx].append_chunk(
-                        contexts[channel_idx],
-                        deinterleaved_fitted,
-                        std::span<std::byte>(chunk_buffer)
+                        std::move(context),
+                        deinterleaved_fitted
                     );
                 }
                 y += scanlines_to_read;

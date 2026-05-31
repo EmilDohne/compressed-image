@@ -279,12 +279,44 @@ NAMESPACE_COMPRESSED_IMAGE
                 this->validate_chunk_sizes();
             }
 
+            void append_chunk(compression_context_var compression_ctx, std::span<T> uncompressed) override
+            {
+                if (std::holds_alternative<cpu_compression_context>(compression_ctx))
+                {
+                    auto compressed = blosc2::compress_to_chunk<T>(
+                        std::get<cpu_compression_context>(compression_ctx).compression_ctx,
+                        uncompressed
+                    );
+                    this->m_chunks.push_back(std::move(compressed));
+                }
+                else
+                {
+                    auto compressor = cuda::make_compressor<T>(
+                        std::get<gpu_compression_context>(compression_ctx).ctx.codec
+                    );
+                    cuda::compressed_chunk<T> _chunk{};
+                    std::visit(
+                        [&](auto& _compressor)
+                        {
+                            _chunk = _compressor.compress(
+                                uncompressed,
+                                std::get<gpu_compression_context>(compression_ctx).ctx
+                            );
+                        },
+                        compressor
+                    );
+
+                    this->m_chunks.push_back(std::move(_chunk));
+                }
+                this->validate_chunk_sizes();
+            };
+
             size_t chunk_bytes(size_t index) const override
             {
                 if (is_gpu_chunk(index))
                 {
                     const auto& _chunk = std::get<gpu_container>(this->m_chunks.at(index));
-                    return _chunk.size();
+                    return _chunk.byte_size();
                 }
                 const auto& _chunk = std::get<cpu_container>(this->m_chunks.at(index));
                 return blosc2::chunk_num_elements<T>(_chunk) * sizeof(T);

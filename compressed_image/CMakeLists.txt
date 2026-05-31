@@ -11,7 +11,6 @@ target_link_libraries(compressed_image INTERFACE
    nlohmann_json
    OpenImageIO::OpenImageIO
    compressed::nvcomp_headers
-   compressed::nvcomp
    spdlog::spdlog_header_only
 )
 

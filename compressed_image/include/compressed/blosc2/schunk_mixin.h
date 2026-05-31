@@ -264,6 +264,14 @@ NAMESPACE_COMPRESSED_IMAGE
                                       std::span<T> uncompressed,
                                       std::span<std::byte> compression_buff) = 0;
 
+            /// Append to the schunk with the uncompressed data (compressing it).
+            ///
+            /// \param compression_ctx the compression context to use for compression.
+            /// \param uncompressed the uncompressed chunk
+            virtual void append_chunk(compression_context_var compression_ctx,
+                                      std::span<T> uncompressed) = 0;
+
+
             /// Retrieve the number of elements (uncompressed) that the schunk stores.
             ///
             /// \throws std::runtime_error if the chunk_bytes / sizeof(T) is not cleanly divisble

@@ -5,9 +5,9 @@
 #include <vector>
 #include <algorithm>
 #include <thread>
-#include <string>
 #include <numeric>
 
+#define _COMPRESSED_PROFILE 1
 #include <compressed/blosc2/schunk.h>
 #include <compressed/blosc2/wrapper.h>
 

@@ -11,6 +11,7 @@
 #include "nlohmann/json.hpp"
 
 #include "macros.h"
+#include "fwd.h"
 #include "enums.h"
 #include "blosc2/wrapper.h"
 #include "blosc2/typedefs.h"
@@ -157,7 +158,7 @@ NAMESPACE_COMPRESSED_IMAGE
             {
                 // c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
                 assert(chunk_size < std::numeric_limits<int32_t>::max());
-                assert(block_size < chunk_size);
+                assert(block_size <= chunk_size);
             }
 
             // Align the chunks to the scanlines, makes our life a lot easier on read / write.
@@ -771,6 +772,8 @@ NAMESPACE_COMPRESSED_IMAGE
 
     private
     :
+        friend struct image<T>;
+
         /// The storage for the internal data, stored contiguously in a compressed data format
         schunk_var_ptr<T> m_schunk = nullptr;
         /// Keeps the globally discoverable scratch pool alive for as long as this channel exists.

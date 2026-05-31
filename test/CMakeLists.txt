@@ -20,3 +20,13 @@ add_custom_command(TARGET compressed_image_test POST_BUILD
 add_custom_command(TARGET compressed_image_test POST_BUILD
    COMMAND ${CMAKE_COMMAND} -E echo
    "Finished copying test files to output directory $<TARGET_FILE_DIR:compressed_image_test>/images")
+
+if (NVCOMP_RUNTIME_BINARIES)
+   add_custom_command(
+      TARGET compressed_image_test POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      ${NVCOMP_RUNTIME_BINARIES}
+      $<TARGET_FILE_DIR:compressed_image_test>
+      COMMENT "Syncing nvcomp runtime dependencies next to test executable..."
+   )
+endif ()

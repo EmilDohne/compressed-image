@@ -2,6 +2,7 @@
 
 #include "compressed/macros.h"
 
+#include "compressed/cuda/nvcomp_hook.h"
 #include "compressed/cuda/compressors/base.h"
 #include "compressed/cuda/compressors/util.h"
 
@@ -40,10 +41,11 @@ NAMESPACE_COMPRESSED_IMAGE
                 std::variant<compression_options, decompression_options> options
             ) const override
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 if (std::holds_alternative<compression_options>(options))
                 {
                     size_t temp_bytes{};
-                    const auto status = nvcompBatchedSnappyCompressGetTempSizeAsync(
+                    const auto status = nvcomp_api::instance().SnappyCompressGetTempSizeAsync(
                         num_blocks,
                         block_size,
                         std::get<nvcompBatchedSnappyCompressOpts_t>(std::get<compression_options>(options)),
@@ -65,7 +67,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
 
                 size_t temp_bytes{};
-                const auto status = nvcompBatchedSnappyDecompressGetTempSizeAsync(
+                const auto status = nvcomp_api::instance().SnappyDecompressGetTempSizeAsync(
                     num_blocks,
                     block_size,
                     std::get<nvcompBatchedSnappyDecompressOpts_t>(std::get<decompression_options>(options)),
@@ -89,8 +91,9 @@ NAMESPACE_COMPRESSED_IMAGE
 
             size_t block_max_compressed_size(size_t block_size, compression_options& options) const override
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 size_t max_bytes = 0;
-                const auto status = nvcompBatchedSnappyCompressGetMaxOutputChunkSize(
+                const auto status = nvcomp_api::instance().SnappyCompressGetMaxOutputChunkSize(
                     block_size,
                     std::get<nvcompBatchedSnappyCompressOpts_t>(options),
                     &max_bytes
@@ -122,7 +125,8 @@ NAMESPACE_COMPRESSED_IMAGE
                 const compression_options& options
             ) const override
             {
-                const auto status = nvcompBatchedSnappyCompressAsync(
+                _COMPRESSED_PROFILE_FUNCTION();
+                const auto status = nvcomp_api::instance().SnappyCompressAsync(
                     uncompressed_block_ptrs.get(),
                     uncompressed_block_sizes.get(),
                     block_size,
@@ -158,9 +162,10 @@ NAMESPACE_COMPRESSED_IMAGE
                 const decompression_options& options
             ) const override
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 auto block_sizes_out = cuda::make_device_buffer<size_t>(num_blocks);
 
-                const auto status = nvcompBatchedSnappyDecompressAsync(
+                const auto status = nvcomp_api::instance().SnappyDecompressAsync(
                     compressed_block_ptrs.get(),
                     compressed_block_sizes.get(),
                     uncompressed_block_sizes.get(),

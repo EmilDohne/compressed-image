@@ -94,7 +94,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 _string
             };
 
-            inline _JSONType to_json_type(OIIO::ParamValue pvalue)
+            inline _JSONType to_json_type(const OIIO::ParamValue& pvalue)
             {
                 _COMPRESSED_PROFILE_FUNCTION();
                 auto type = pvalue.type();

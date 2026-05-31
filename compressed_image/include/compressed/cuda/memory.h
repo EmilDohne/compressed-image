@@ -170,7 +170,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     static_cast<void*>(buffer.data()),
                     this->get_raw(),
                     this->size * sizeof(T),
-                    cudaMemcpyHostToDevice
+                    cudaMemcpyDeviceToHost
                 );
             }
 

@@ -8,6 +8,7 @@
 
 #include <OpenImageIO/half.h>
 
+#define _COMPRESSED_PROFILE 1
 #include <compressed/channel.h>
 #include <compressed/blosc2/schunk.h>
 #include <compressed/blosc2/wrapper.h>

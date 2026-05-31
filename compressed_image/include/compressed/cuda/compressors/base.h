@@ -103,6 +103,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
             [[nodiscard]] size_t csize() const
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 return std::accumulate(
                     this->blocks.begin(),
                     this->blocks.end(),
@@ -181,6 +182,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 ///       work on other streams may proceed concurrently.
                 compressed_chunk<T> compress(std::span<const T> data, nvcomp_context context) const
                 {
+                    _COMPRESSED_PROFILE_FUNCTION();
                     // Set both the current stack device as well as unlocking the mem pool size allowing
                     // future calls to `compress` to take advantage of this memory pooling.
                     device_guard guard(context.gpu_device);
@@ -275,36 +277,36 @@ NAMESPACE_COMPRESSED_IMAGE
                     // ##################################################################################
                     // Copy the compressed data back to host
                     // ##################################################################################
-
-                    std::vector<NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>> compressed_blocks(
-                        num_blocks
-                    );
-                    std::vector<size_t> compressed_bytes(num_blocks);
-                    device_compressed_bytes.
-                        to_host(std::span<size_t>(compressed_bytes.begin(), compressed_bytes.end()));
-
-                    auto gen = std::views::iota(size_t{0}, num_blocks);
-                    std::for_each(
-                        std::execution::seq,
-                        gen.begin(),
-                        gen.end(),
-                        [&](size_t block_idx)
-                        {
-                            // Allocate memory
-                            auto& block = compressed_blocks.at(block_idx);
-                            block = NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>(
-                                compressed_bytes.at(block_idx)
-                            );
-
-                            // Copy from device back to host
-                            cuda_api::instance().memcpy_async(
-                                (block.data()),
-                                host_compressed_ptrs.at(block_idx),
-                                block.size(),
-                                cudaMemcpyDeviceToHost
-                            );
-                        }
-                    );
+                    //
+                    // std::vector<NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>> compressed_blocks(
+                    //     num_blocks
+                    // );
+                    // std::vector<size_t> compressed_bytes(num_blocks);
+                    // device_compressed_bytes.
+                    //     to_host(std::span<size_t>(compressed_bytes.begin(), compressed_bytes.end()));
+                    //
+                    // auto gen = std::views::iota(size_t{0}, num_blocks);
+                    // std::for_each(
+                    //     std::execution::seq,
+                    //     gen.begin(),
+                    //     gen.end(),
+                    //     [&](size_t block_idx)
+                    //     {
+                    //         // Allocate memory
+                    //         auto& block = compressed_blocks.at(block_idx);
+                    //         block = NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>(
+                    //             compressed_bytes.at(block_idx)
+                    //         );
+                    //
+                    //         // Copy from device back to host
+                    //         cuda_api::instance().memcpy_async(
+                    //             (block.data()),
+                    //             host_compressed_ptrs.at(block_idx),
+                    //             block.size(),
+                    //             cudaMemcpyDeviceToHost
+                    //         );
+                    //     }
+                    // );
 
                     // ##################################################################################
                     // Synchronize, check for errors and return
@@ -335,6 +337,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 /// \throws std::runtime_error on CUDA or nvCOMP failure.
                 void decompress(const compressed_chunk<T>& chunk, std::span<T> output) const
                 {
+                    _COMPRESSED_PROFILE_FUNCTION();
                     // we copy here to lose the const as this struct is relatively trivially copyable
                     nvcomp_context context = chunk.context;
 
@@ -544,6 +547,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 /// \param device_statuses The device-memory held nvcompStatus_t vector.
                 void validate_per_block_statuses(cuda_device_buffer_async<nvcompStatus_t>& device_statuses) const
                 {
+                    _COMPRESSED_PROFILE_FUNCTION();
                     // Now that we have synchronized, we can check the statuses per-block
                     auto status_vector = NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<nvcompStatus_t>(
                         device_statuses.size
@@ -611,6 +615,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     std::variant<compression_options, decompression_options> options
                 ) const
                 {
+                    _COMPRESSED_PROFILE_FUNCTION();
                     auto size = this->get_temp_bytes(block_size, num_blocks, options);
                     return make_device_buffer_async<std::byte>(size);
                 }
@@ -628,6 +633,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     const size_t num_blocks
                 )
                 {
+                    _COMPRESSED_PROFILE_FUNCTION();
                     std::vector<const void*> ptrs(num_blocks);
 
                     auto device_base_ptr = static_cast<const char*>(device_uncompressed_data.get_raw());
@@ -642,7 +648,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         device_buffer.get_raw(),
                         ptrs.data(),
                         device_buffer.bytes(),
-                        cudaMemcpyDeviceToDevice
+                        cudaMemcpyHostToDevice
                     );
 
                     return std::move(device_buffer);
@@ -661,6 +667,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     const size_t num_blocks
                 ) const
                 {
+                    _COMPRESSED_PROFILE_FUNCTION();
                     std::vector<size_t> out(num_blocks, block_size);
                     if (!out.empty())
                     {

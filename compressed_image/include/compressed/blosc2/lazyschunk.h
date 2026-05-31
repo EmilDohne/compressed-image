@@ -388,6 +388,46 @@ NAMESPACE_COMPRESSED_IMAGE
                 this->validate_chunk_sizes();
             }
 
+            void append_chunk(compression_context_var compression_ctx, std::span<T> uncompressed) override
+            {
+                if (std::holds_alternative<cpu_compression_context>(compression_ctx))
+                {
+                    auto compressed = blosc2::compress_to_chunk<T>(
+                        std::get<cpu_compression_context>(compression_ctx).compression_ctx,
+                        uncompressed
+                    );
+                    auto chunk = detail::lazy_chunk<T, cpu_chunk>{
+                        cpu_chunk(compressed.begin(), compressed.end()),
+                        uncompressed.size()
+                    };
+                    this->m_chunks.push_back(std::move(chunk));
+                }
+                else
+                {
+                    auto compressor = cuda::make_compressor<T>(
+                        std::get<gpu_compression_context>(compression_ctx).ctx.codec
+                    );
+                    cuda::compressed_chunk<T> gpu_chunk{};
+                    std::visit(
+                        [&](auto& _compressor)
+                        {
+                            gpu_chunk = _compressor.compress(
+                                uncompressed,
+                                std::get<gpu_compression_context>(compression_ctx).ctx
+                            );
+                        },
+                        compressor
+                    );
+
+                    auto chunk = detail::lazy_chunk<T, detail::gpu_chunk<T>>{
+                        std::move(gpu_chunk),
+                        uncompressed.size()
+                    };
+                    this->m_chunks.push_back(std::move(chunk));
+                }
+                this->validate_chunk_sizes();
+            };
+
             /// Retrieve the total compressed size of the lazy-schunk.
             /// Lazy chunks will count as the size of T.
             size_t csize() const noexcept override

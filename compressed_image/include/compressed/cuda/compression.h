@@ -62,6 +62,7 @@ NAMESPACE_COMPRESSED_IMAGE
             const size_t block_size
         )
         {
+            _COMPRESSED_PROFILE_FUNCTION();
             auto compressor = make_compressor<T>(codec);
 
             return std::visit(

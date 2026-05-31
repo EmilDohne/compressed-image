@@ -3,6 +3,7 @@
 #include "compressed/macros.h"
 
 #include "compressed/cuda/cuda_hook.h"
+#include "compressed/cuda/nvcomp_hook.h"
 
 
 namespace
@@ -13,7 +14,8 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \brief Check if CUDA runtime is available and at least one device exists.
         inline bool is_available()
         {
-            return cuda_api::instance().available() && cuda_api::instance().has_device();
+            return cuda_api::instance().available() && nvcomp_api::instance().available() && cuda_api::instance().
+                has_device();
         }
 
         /// \brief Get the number of available CUDA devices.

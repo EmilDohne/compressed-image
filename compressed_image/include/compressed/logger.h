@@ -45,7 +45,7 @@ NAMESPACE_COMPRESSED_IMAGE
         {
             // Lazy init with a sensible default
             detail::s_logger = spdlog::stdout_color_mt(detail::s_default_logger_name);
-            detail::s_logger->set_level(spdlog::level::warn);
+            detail::s_logger->set_level(spdlog::level::info);
         }
         return detail::s_logger;
     }

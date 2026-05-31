@@ -36,6 +36,7 @@ endif ()
 
 option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." OFF)
 option(COMPRESSED_IMAGE_EXTENDED_WARNINGS "Whether to compile with extended warnings (-Wextra, -Werror etc.)" OFF)
+option(COMPRESSED_IMAGE_CUDA_VERSION "CUDA Runtime/Toolkit version" 12)
 option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
 option(COMPRESSED_IMAGE_BUILD_EXAMPLES OFF)
 option(COMPRESSED_IMAGE_BUILD_DOCS OFF)
@@ -48,7 +49,7 @@ option(_COMPRESSED_IMAGE_SANITIZE_FLAGS "Internal CI flag for enabling sanitizer
 # Add thirdparty libraries
 # --------------------------------------------------------------------------
 
-find_package(CUDAToolkit REQUIRED)
+find_package(CUDAToolkit REQUIRED COMPRESSED_IMAGE_CUDA_VERSION)
 
 # Add c-blosc2
 set(DEACTIVATE_ZLIB ON)

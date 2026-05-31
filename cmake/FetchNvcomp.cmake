@@ -1,38 +1,19 @@
 # FetchNvcomp.cmake
-# Fetch NVCOMP headers and static library, provide namespaced targets:
+# Fetch NVCOMP headers and dynamic libraries for runtime loading.
+# Provides namespaced target:
 #   compressed::nvcomp_headers
-#   compressed::nvcomp (static)
 
 include(FetchContent)
 
 ##############################################################
-# Check if there is already system targets
-##############################################################
-
-find_package(nvcomp CONFIG QUIET)
-
-if (nvcomp_FOUND)
-   message(STATUS "Found system nvcomp package")
-
-   add_library(compressed::nvcomp ALIAS nvcomp::nvcomp_static)
-   add_library(compressed::nvcomp_headers INTERFACE)
-   target_link_libraries(compressed::nvcomp_headers INTERFACE nvcomp::nvcomp_static)
-
-   return()
-endif ()
-
-
-##############################################################
-# Fetch dynamically
+# Fetch dynamically from NVIDIA Redistributables
 ##############################################################
 
 if (WIN32)
    set(NVCOMP_URL "https://developer.download.nvidia.com/compute/nvcomp/redist/nvcomp/windows-x86_64/nvcomp-windows-x86_64-5.0.0.6_cuda11-archive.zip")
-   set(NVCOMP_LIB_SUBDIR "lib/nvcomp_static.lib")
    set(NVCOMP_SHA256 "5C2E1EE55398F47D28806EB7C53ACA33B9E22D6D5B3ACEC86BBC4253C7E6D1D3")
-elseif (UNIX)
+elseif (UNIX AND NOT APPLE)
    set(NVCOMP_URL "https://developer.download.nvidia.com/compute/nvcomp/redist/nvcomp/linux-x86_64/nvcomp-linux-x86_64-5.0.0.6_cuda11-archive.tar.xz")
-   set(NVCOMP_LIB_SUBDIR "lib/libnvcomp_static.a")
    set(NVCOMP_SHA256 "64F5F7CC622F36006C503EE5A3F9D730B5C6CC49E4FAB0FC0507C1272D5EFA7B")
 else ()
    message(FATAL_ERROR "Unsupported platform for NVCOMP")
@@ -46,11 +27,20 @@ FetchContent_MakeAvailable(_nvcomp_src)
 set(NVCOMP_ROOT ${_nvcomp_src_SOURCE_DIR})
 
 ##############################################################
-# Set up targets
+# Locate Runtime Binaries
 ##############################################################
 
+if (WIN32)
+   file(GLOB FOUND_BINARIES "${NVCOMP_ROOT}/bin/*.dll")
+else ()
+   file(GLOB FOUND_BINARIES "${NVCOMP_ROOT}/lib/libnvcomp.so*")
+endif ()
 
-find_package(CUDAToolkit REQUIRED)
+set(NVCOMP_RUNTIME_BINARIES "${FOUND_BINARIES}" CACHE INTERNAL "nvcomp runtime binaries")
+
+##############################################################
+# Set up Compile-Time Header Targets
+##############################################################
 
 add_library(compressed_nvcomp_headers INTERFACE)
 
@@ -60,40 +50,15 @@ target_include_directories(compressed_nvcomp_headers INTERFACE
 )
 
 add_library(compressed::nvcomp_headers ALIAS compressed_nvcomp_headers)
-add_library(compressed_nvcomp STATIC IMPORTED GLOBAL)
-set_target_properties(compressed_nvcomp PROPERTIES
-   IMPORTED_LOCATION "${NVCOMP_ROOT}/${NVCOMP_LIB_SUBDIR}"
-   INTERFACE_INCLUDE_DIRECTORIES "${NVCOMP_ROOT}/include"
-)
-target_compile_definitions(compressed_nvcomp
-   INTERFACE
-   NVCOMP_STATIC_DEFINE
-)
 
-add_library(compressed::nvcomp ALIAS compressed_nvcomp)
+##############################################################
+# Install Rules (For Deployment / Packaging)
+##############################################################
 
-target_link_libraries(compressed_nvcomp INTERFACE
-   CUDA::cudart
-   CUDA::cuda_driver
-)
+install(DIRECTORY ${NVCOMP_ROOT}/include/ DESTINATION include)
 
-if (MSVC)
-   # Propagate iterator debug consistency requirement warning
-   target_compile_definitions(compressed_nvcomp INTERFACE
-      $<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=2>
-      $<$<CONFIG:Release>:_ITERATOR_DEBUG_LEVEL=0>
-   )
-
-   # Ensure dynamic CRT (nvcomp is built with /MD)
-   set_property(TARGET compressed_nvcomp PROPERTY
-      MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
-   )
+if (WIN32)
+   install(FILES ${NVCOMP_RUNTIME_BINARIES} DESTINATION bin)
+else ()
+   install(FILES ${NVCOMP_RUNTIME_BINARIES} DESTINATION lib)
 endif ()
-
-install(DIRECTORY ${NVCOMP_ROOT}/include/
-   DESTINATION include
-)
-
-install(FILES ${NVCOMP_ROOT}/${NVCOMP_LIB_SUBDIR}
-   DESTINATION lib
-)
