@@ -177,6 +177,7 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \param buffer The buffer to use as a size reference and to generate the device pointer from
             static cuda_device_buffer_async from_host(std::span<const T> buffer)
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 void* raw = nullptr;
 
                 cuda_api::instance().malloc_async(
@@ -210,6 +211,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
             void to_host(std::span<T> buffer)
             {
+                _COMPRESSED_PROFILE_FUNCTION();
                 if (buffer.size() != this->size)
                 {
                     throw std::invalid_argument(
@@ -255,6 +257,7 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T = void>
         inline cuda_device_ptr<T> make_device_mem(size_t count)
         {
+            _COMPRESSED_PROFILE_FUNCTION();
             void* raw = nullptr;
             cuda_api::instance().malloc(raw, count * sizeof(T));
             return cuda_device_ptr<T>(static_cast<T*>(raw));
@@ -263,6 +266,7 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T = void>
         inline cuda_device_buffer<T> make_device_buffer(size_t count)
         {
+            _COMPRESSED_PROFILE_FUNCTION();
             auto managed_ptr = make_device_mem<T>(count);
             return cuda_device_buffer<T>{std::move(managed_ptr), count};
         }
@@ -270,6 +274,7 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T = void>
         inline cuda_device_ptr_async<T> make_device_mem_async(size_t count, cudaStream_t stream = cudaStreamPerThread)
         {
+            _COMPRESSED_PROFILE_FUNCTION();
             void* raw = nullptr;
             cuda_api::instance().malloc_async(raw, count * sizeof(T), stream);
             return cuda_device_ptr_async<T>(static_cast<T*>(raw), detail::device_deleter_async{stream});
@@ -279,6 +284,7 @@ NAMESPACE_COMPRESSED_IMAGE
         inline cuda_device_buffer_async<T> make_device_buffer_async(size_t count,
                                                                     cudaStream_t stream = cudaStreamPerThread)
         {
+            _COMPRESSED_PROFILE_FUNCTION();
             auto managed_ptr = make_device_mem_async<T>(count, stream);
             return cuda_device_buffer_async<T>{std::move(managed_ptr), count};
         }

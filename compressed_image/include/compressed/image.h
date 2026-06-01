@@ -1873,6 +1873,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 // we can safely call either `read_tiles` or `read_scanlines` here making sure we are correctly aligned
                 if constexpr (read_tiles)
                 {
+                    _COMPRESSED_PROFILE_SCOPE("read tiles");
                     read_successful = input_ptr->read_tiles(
                         subimage,
                         0 /* miplevel */,
@@ -1890,6 +1891,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
                 else
                 {
+                    _COMPRESSED_PROFILE_SCOPE("read scanlines");
                     read_successful = input_ptr->read_scanlines(
                         subimage,
                         0 /* miplevel */,
@@ -1942,6 +1944,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     // what goes here.
                     if constexpr (std::invocable<std::remove_reference_t<PostProcess>, size_t, std::span<T>>)
                     {
+                        _COMPRESSED_PROFILE_SCOPE("postprocess");
                         auto absolute_channel_idx = chbegin + channel_idx;
                         postprocess(absolute_channel_idx, deinterleaved_fitted);
                     }
