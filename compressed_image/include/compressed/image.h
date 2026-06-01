@@ -1587,6 +1587,19 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
             );
 
+            // If this is a gpu codec we pin the interleaved memory to the gpu pages for more efficient memory operations.
+            std::vector<cuda::scoped_host_pinner> memory_pinners;
+            if (enums::is_gpu_codec(compression_codec))
+            {
+                memory_pinners.reserve(1 + deinterleaved_buffer.size());
+
+                memory_pinners.emplace_back(interleaved_buffer.data(), interleaved_buffer.size() * sizeof(T));
+                for (auto& buffer : deinterleaved_buffer)
+                {
+                    memory_pinners.emplace_back(buffer.data(), buffer.size() * sizeof(T));
+                }
+            }
+
             // Read and compress the channel pairs in chunks
             // -----------------------------------------------------------------------------------
             // -----------------------------------------------------------------------------------
@@ -1937,6 +1950,39 @@ NAMESPACE_COMPRESSED_IMAGE
                         std::move(context),
                         deinterleaved_fitted
                     );
+
+
+                    if (y + scanlines_to_read == (spec.height + spec.y))
+                    {
+                        if (enums::is_gpu_codec(compression_codec))
+                        {
+                            get_logger()->info(
+                                std::format(
+                                    "[channel: {}] cuda {}: uncompressed {} bytes; compressed {} bytes; cratio {}",
+                                    channel_idx,
+                                    enums::to_string(compression_codec),
+                                    schunks[channel_idx].chunk_bytes(),
+                                    schunks[channel_idx].csize(),
+                                    static_cast<double>(schunks[channel_idx].chunk_bytes()) / schunks[channel_idx].
+                                    csize()
+                                )
+                            );
+                        }
+                        else
+                        {
+                            get_logger()->info(
+                                std::format(
+                                    "[channel: {}] blosc2 {}: uncompressed {} bytes; compressed {} bytes; cratio {}",
+                                    channel_idx,
+                                    enums::to_string(compression_codec),
+                                    schunks[channel_idx].chunk_bytes(),
+                                    schunks[channel_idx].csize(),
+                                    static_cast<double>(schunks[channel_idx].chunk_bytes()) / schunks[channel_idx].
+                                    csize()
+                                )
+                            );
+                        }
+                    }
                 }
                 y += scanlines_to_read;
             }

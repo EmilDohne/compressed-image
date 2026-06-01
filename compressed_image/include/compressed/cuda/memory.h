@@ -78,6 +78,62 @@ NAMESPACE_COMPRESSED_IMAGE
             };
         } // namespace detail
 
+        struct scoped_host_pinner
+        {
+            void* ptr = nullptr;
+            size_t bytes = 0;
+
+            scoped_host_pinner(void* p, const size_t b, const unsigned int flags = cudaHostRegisterDefault)
+                : ptr(p), bytes(b)
+            {
+                if (ptr && bytes > 0)
+                {
+                    cuda_api::instance().host_register(ptr, bytes, flags);
+                }
+            }
+
+            ~scoped_host_pinner() noexcept
+            {
+                if (ptr && bytes > 0)
+                {
+                    try
+                    {
+                        cuda_api::instance().host_unregister(ptr);
+                    }
+                    catch (...)
+                    {
+                        // Suppress exceptions inside destructors during unwinding
+                    }
+                }
+            }
+
+            // Move-only semantics to maintain strict resource ownership
+            scoped_host_pinner(const scoped_host_pinner&) = delete;
+            scoped_host_pinner& operator=(const scoped_host_pinner&) = delete;
+
+            scoped_host_pinner(scoped_host_pinner&& other) noexcept
+                : ptr(std::exchange(other.ptr, nullptr)), bytes(std::exchange(other.bytes, 0))
+            {
+            }
+
+            scoped_host_pinner& operator=(scoped_host_pinner&& other) noexcept
+            {
+                if (this != &other)
+                {
+                    if (ptr && bytes > 0)
+                    {
+                        try { cuda_api::instance().host_unregister(ptr); }
+                        catch (...)
+                        {
+                        }
+                    }
+                    ptr = std::exchange(other.ptr, nullptr);
+                    bytes = std::exchange(other.bytes, 0);
+                }
+                return *this;
+            }
+        };
+
         // -------------------------------------------------------------------------
         // Smart pointer aliases (void*, untyped)
         // -------------------------------------------------------------------------

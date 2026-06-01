@@ -92,14 +92,29 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T>
         struct compressed_chunk
         {
-            /// \brief The compressed data, stored on host as a std::vector.
-            std::vector<NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>> blocks;
+            /// \brief The compressed data, stored on device as a std::vector.
+            std::vector<cuda_device_buffer_async<std::byte>> blocks;
 
             /// \brief The uncompressed block sizes of all the blocks inside `blocks`. Expressed as bytes
             std::vector<size_t> block_sizes{};
 
             /// \brief The compression context used for compression/decompression. Once set this may not be modified.
             nvcomp_context context{};
+
+            compressed_chunk() = default;
+
+            compressed_chunk(
+                std::vector<cuda_device_buffer_async<std::byte>> _blocks,
+                std::vector<size_t> sizes,
+                nvcomp_context ctx)
+                : blocks(std::move(_blocks)), block_sizes(std::move(sizes)), context(std::move(ctx))
+            {
+            }
+
+            compressed_chunk(const compressed_chunk&) = delete;
+            compressed_chunk& operator=(const compressed_chunk&) = delete;
+            compressed_chunk(compressed_chunk&&) noexcept = default;
+            compressed_chunk& operator=(compressed_chunk&&) noexcept = default;
 
             [[nodiscard]] size_t csize() const
             {
@@ -110,7 +125,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     size_t{0},
                     [](size_t sum, const auto& elem)
                     {
-                        return sum + elem.size();
+                        return sum + elem.size;
                     }
                 );
             }
@@ -273,51 +288,49 @@ NAMESPACE_COMPRESSED_IMAGE
                         device_statuses,
                         context.comp_options
                     );
-
                     // ##################################################################################
-                    // Copy the compressed data back to host
-                    // ##################################################################################
-                    //
-                    // std::vector<NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>> compressed_blocks(
-                    //     num_blocks
-                    // );
-                    // std::vector<size_t> compressed_bytes(num_blocks);
-                    // device_compressed_bytes.
-                    //     to_host(std::span<size_t>(compressed_bytes.begin(), compressed_bytes.end()));
-                    //
-                    // auto gen = std::views::iota(size_t{0}, num_blocks);
-                    // std::for_each(
-                    //     std::execution::seq,
-                    //     gen.begin(),
-                    //     gen.end(),
-                    //     [&](size_t block_idx)
-                    //     {
-                    //         // Allocate memory
-                    //         auto& block = compressed_blocks.at(block_idx);
-                    //         block = NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<std::byte>(
-                    //             compressed_bytes.at(block_idx)
-                    //         );
-                    //
-                    //         // Copy from device back to host
-                    //         cuda_api::instance().memcpy_async(
-                    //             (block.data()),
-                    //             host_compressed_ptrs.at(block_idx),
-                    //             block.size(),
-                    //             cudaMemcpyDeviceToHost
-                    //         );
-                    //     }
-                    // );
-
-                    // ##################################################################################
-                    // Synchronize, check for errors and return
+                    // Copy sizes back to host & allocate fitted GPU buffers
                     // ##################################################################################
 
+                    auto compressed_bytes_pinned = make_host_mem<size_t>(num_blocks);
+
+                    // Copy directly into pinned memory via instant hardware DMA
+                    device_compressed_bytes.to_host(
+                        std::span<size_t>(compressed_bytes_pinned.get(), num_blocks)
+                    );
+
+                    // We must synchronize here so the host can safely read `compressed_bytes`
+                    // to figure out how much GPU memory to allocate for the fitted buffers.
                     cuda_api::instance().stream_synchronize(cudaStreamPerThread);
 
+                    // Fail early if any blocks had compression issues before doing further allocations
                     this->validate_per_block_statuses(device_statuses);
 
+                    // Allocate tightly fitted GPU buffers and copy data Device-to-Device
+                    std::vector<cuda_device_buffer_async<std::byte>> fitted_device_buffers(num_blocks);
+                    for (size_t i = 0; i < num_blocks; ++i)
+                    {
+                        // Read directly out of the pinned host pointer
+                        size_t actual_size = compressed_bytes_pinned.get()[i];
+                        fitted_device_buffers[i] = make_device_buffer_async<std::byte>(actual_size);
+
+                        cuda_api::instance().memcpy_async(
+                            fitted_device_buffers[i].get_raw(),
+                            _device_buffers[i].get_raw(),
+                            actual_size,
+                            cudaMemcpyDeviceToDevice
+                        );
+                    }
+
+                    // ##################################################################################
+                    // Finalize async work
+                    // ##################################################################################
+
+                    // Ensure the Device-to-Device copies are complete before returning control
+                    cuda_api::instance().stream_synchronize(cudaStreamPerThread);
+
                     return compressed_chunk<T>{
-                        std::move(compressed_blocks),
+                        std::move(fitted_device_buffers),\
                         std::move(block_sizes),
                         std::move(context)
                     };
@@ -347,28 +360,21 @@ NAMESPACE_COMPRESSED_IMAGE
                     const size_t num_blocks = chunk.blocks.size();
 
                     // ##################################################################################
-                    // Upload compressed blocks to device
+                    // Gather compressed block metadata from the GPU buffers
                     // ##################################################################################
-                    std::vector<cuda_device_buffer_async<std::byte>> device_compressed_blocks(num_blocks);
-                    std::vector<void*> host_compressed_ptrs(num_blocks);
+                    std::vector<const void*> host_compressed_ptrs(num_blocks);
                     std::vector<size_t> host_compressed_bytes(num_blocks);
 
                     for (size_t i = 0; i < num_blocks; ++i)
                     {
-                        device_compressed_blocks[i] = cuda_device_buffer_async<std::byte>::from_host(
-                            std::span<const std::byte>(
-                                chunk.blocks[i].data(),
-                                chunk.blocks[i].size()
-                            )
-                        );
-
-                        host_compressed_ptrs[i] = device_compressed_blocks[i].get_raw();
-                        host_compressed_bytes[i] = chunk.blocks[i].size();
+                        host_compressed_ptrs[i] = chunk.blocks[i].get_raw();
+                        host_compressed_bytes[i] = chunk.blocks[i].bytes();
                     }
 
-                    auto device_compressed_ptrs = cuda_device_buffer_async<void*>::from_host(host_compressed_ptrs);
+                    // Pass the arrays of pointers/sizes to the device so nvCOMP batch API can read them
+                    auto device_compressed_ptrs = cuda_device_buffer_async<const void
+                        *>::from_host(host_compressed_ptrs);
                     auto device_compressed_bytes = cuda_device_buffer_async<size_t>::from_host(host_compressed_bytes);
-
                     // ##################################################################################
                     // Allocate single contiguous device buffer for all output
                     // ##################################################################################
@@ -379,8 +385,8 @@ NAMESPACE_COMPRESSED_IMAGE
                     size_t offset_bytes = 0;
                     for (size_t i = 0; i < num_blocks; ++i)
                     {
-                        host_uncompressed_ptrs[i] = reinterpret_cast<void*>(device_output.get() + (offset_bytes / sizeof
-                            (T)));
+                        host_uncompressed_ptrs[i] = reinterpret_cast<void*>(device_output.get() +
+                            (offset_bytes / sizeof(T)));
                         offset_bytes += context.block_size;
                     }
 
@@ -523,7 +529,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 /// \param options                  Algorithm-specific decompression options.
                 virtual void decompression_impl(
                     size_t num_blocks,
-                    const cuda_device_buffer_async<void*>& compressed_block_ptrs,
+                    const cuda_device_buffer_async<const void*>& compressed_block_ptrs,
                     const cuda_device_buffer_async<size_t>& compressed_block_sizes,
                     cuda_device_buffer_async<std::byte>& scratch_space,
                     cuda_device_buffer_async<void*>& uncompressed_block_ptrs,

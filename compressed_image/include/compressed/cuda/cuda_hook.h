@@ -64,6 +64,10 @@ NAMESPACE_COMPRESSED_IMAGE
             void free_host(void* ptr) const;
             void free_async(void* ptr, cudaStream_t stream = cudaStreamPerThread);
 
+            // --- Page-locking (Pinning) ---
+            void host_register(void* ptr, size_t size, unsigned int flags = cudaHostRegisterDefault) const;
+            void host_unregister(void* ptr) const;
+
             // --- Data transfer ---
             void memcpy(void* dst, const void* src, size_t count, cudaMemcpyKind kind);
             void memcpy_async(
@@ -102,6 +106,9 @@ NAMESPACE_COMPRESSED_IMAGE
             using cuda_malloc_host_t = cudaError_t(*)(void**, size_t);
             using cuda_free_host_t = decltype(&cudaFreeHost);
 
+            using cuda_host_register_t = decltype(&cudaHostRegister);
+            using cuda_host_unregister_t = decltype(&cudaHostUnregister);;
+
             using cuda_memcpy_t = decltype(&cudaMemcpy);
             using cuda_memcpy_async_t = decltype(&cudaMemcpyAsync);
             using cuda_stream_sync_t = decltype(&cudaStreamSynchronize);
@@ -124,6 +131,9 @@ NAMESPACE_COMPRESSED_IMAGE
             cuda_free_t free_fn_ = nullptr;
             cuda_free_host_t free_host_fn_ = nullptr;
             cuda_free_async_t free_async_fn_ = nullptr;
+
+            cuda_host_register_t host_register_fn_ = nullptr;
+            cuda_host_unregister_t host_unregister_fn_ = nullptr;
 
             cuda_memcpy_t memcpy_fn_ = nullptr;
             cuda_memcpy_async_t memcpy_async_fn_ = nullptr;
@@ -241,6 +251,18 @@ NAMESPACE_COMPRESSED_IMAGE
             cuda_call(free_async_fn_, "cudaFreeAsync", ptr, stream);
         }
 
+        inline void cuda_api::host_register(void* ptr, size_t size, unsigned int flags) const
+        {
+            _COMPRESSED_PROFILE_FUNCTION();
+            cuda_call(host_register_fn_, "cudaHostRegister", ptr, size, flags);
+        }
+
+        inline void cuda_api::host_unregister(void* ptr) const
+        {
+            _COMPRESSED_PROFILE_FUNCTION();
+            cuda_call(host_unregister_fn_, "cudaHostUnregister", ptr);
+        }
+
         inline void cuda_api::memcpy(void* dst, const void* src, size_t count, cudaMemcpyKind kind)
         {
             _COMPRESSED_PROFILE_FUNCTION();
@@ -254,7 +276,6 @@ NAMESPACE_COMPRESSED_IMAGE
             cudaMemcpyKind kind,
             cudaStream_t stream)
         {
-            get_logger()->info(std::format("cuda: memcpying {} bytes", count));
             _COMPRESSED_PROFILE_FUNCTION();
             cuda_call(memcpy_async_fn_, "cudaMemcpyAsync", dst, src, count, kind, stream);
         }
@@ -331,6 +352,9 @@ NAMESPACE_COMPRESSED_IMAGE
             LOAD(cudaFree, free_fn_);
             LOAD(cudaFreeHost, free_host_fn_);
             LOAD(cudaFreeAsync, free_async_fn_);
+
+            LOAD(cudaHostRegister, host_register_fn_);
+            LOAD(cudaHostUnregister, host_unregister_fn_);
 
             LOAD(cudaMemcpy, memcpy_fn_);
             LOAD(cudaMemcpyAsync, memcpy_async_fn_);

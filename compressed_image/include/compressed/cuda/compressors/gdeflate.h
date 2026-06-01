@@ -152,7 +152,7 @@ NAMESPACE_COMPRESSED_IMAGE::cuda
 
         void decompression_impl(
             size_t num_blocks,
-            const cuda_device_buffer_async<void*>& compressed_block_ptrs,
+            const cuda_device_buffer_async<const void*>& compressed_block_ptrs,
             const cuda_device_buffer_async<size_t>& compressed_block_sizes,
             cuda_device_buffer_async<std::byte>& scratch_space,
             cuda_device_buffer_async<void*>& uncompressed_block_ptrs,
@@ -162,7 +162,7 @@ NAMESPACE_COMPRESSED_IMAGE::cuda
         ) const override
         {
             _COMPRESSED_PROFILE_FUNCTION();
-            auto block_sizes_out = cuda::make_device_buffer<size_t>(num_blocks);
+            auto block_sizes_out = cuda::make_device_buffer_async<size_t>(num_blocks);
 
             const auto status = nvcomp_api::instance().GdeflateDecompressAsync(
                 compressed_block_ptrs.get(),

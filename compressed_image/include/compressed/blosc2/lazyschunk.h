@@ -299,7 +299,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 if (const auto& chunk_val = std::get<gpu_container>(this->m_chunks.at(index)); std::holds_alternative<
                     gpu_chunk<T>>(chunk_val.value))
                 {
-                    auto chunk_container = std::get<gpu_chunk<T>>(chunk_val.value);
+                    const auto& chunk_container = std::get<gpu_chunk<T>>(chunk_val.value);
                     auto compressor = cuda::make_compressor<T>(chunk_container);
                     std::visit(
                         [&](auto& _compressor)
