@@ -1,6 +1,19 @@
 /*
 Wrapper around cuda memory allocation/deallocation using std::unique_ptr to manage freeing memory appropriately
 again instead of having to do this by hand
+
+This header file includes the following structs:
+
+scoped_host_pinner
+    A RAII struct for pinning a buffer to gpu memory for quicker gpu <-> cpu memory transfers. This should be used only
+    for staging buffers (like a chunk buffer). Doing this for big buffers often causes performance degradation so use
+    with care.
+
+cuda_device_buffer
+    A RAII-managed GPU buffer allocated using CUDAs non-async memory functions.
+
+cuda_device_buffer_async
+    A RAII-managed GPU buffer allocated using CUDAs async memory functions.
 */
 #pragma once
 
@@ -78,6 +91,12 @@ NAMESPACE_COMPRESSED_IMAGE
             };
         } // namespace detail
 
+
+        /// \brief A RAII wrapper for registering and deregistering host memory.
+        ///
+        /// Automatically pins the cpu-memory for gpu-operations. The `scoped_host_pinner` holds a thin view over the
+        /// registered memory, meaning it is not valid for the `scoped_host_pinner` to exceed the lifespan of the held
+        /// memory.
         struct scoped_host_pinner
         {
             void* ptr = nullptr;
@@ -107,7 +126,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
             }
 
-            // Move-only semantics to maintain strict resource ownership
+            // The scoped_host_pinner is move-only to ensure we don't deregister the same memory multiple times.
             scoped_host_pinner(const scoped_host_pinner&) = delete;
             scoped_host_pinner& operator=(const scoped_host_pinner&) = delete;
 
@@ -147,10 +166,13 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T>
         using cuda_device_ptr = std::unique_ptr<T, detail::device_deleter>;
 
+        /// \brief RAII wrapper around a gpu memory buffer allocated using synchronous APIs.
         template <typename T>
         struct cuda_device_buffer
         {
+            /// \brief the underlying raw device ptr.
             cuda_device_ptr<T> data = nullptr;
+            /// \brief the number of elements in the device buffer (expressed as a multiple of T)
             size_t size{};
 
             T* get() noexcept { return this->data.get(); }
@@ -164,6 +186,7 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T>
         using cuda_device_ptr_async = std::unique_ptr<T, detail::device_deleter_async>;
 
+        /// \brief RAII wrapper around a gpu memory buffer allocated using synchronous APIs.
         template <typename T>
         struct cuda_device_buffer_async
         {
@@ -209,6 +232,9 @@ NAMESPACE_COMPRESSED_IMAGE
                 return cuda_device_buffer_async::from_host(std::span<T>(buffer.begin(), buffer.end()));
             }
 
+            /// \brief memcpy the gpu buffer into `buffer`.
+            ///
+            /// \throws std::invalid_argument if the size of `buffer` does not match the size of the gpu buffer.
             void to_host(std::span<T> buffer)
             {
                 _COMPRESSED_PROFILE_FUNCTION();
@@ -257,7 +283,6 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T = void>
         inline cuda_device_ptr<T> make_device_mem(size_t count)
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             void* raw = nullptr;
             cuda_api::instance().malloc(raw, count * sizeof(T));
             return cuda_device_ptr<T>(static_cast<T*>(raw));
@@ -274,7 +299,6 @@ NAMESPACE_COMPRESSED_IMAGE
         template <typename T = void>
         inline cuda_device_ptr_async<T> make_device_mem_async(size_t count, cudaStream_t stream = cudaStreamPerThread)
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             void* raw = nullptr;
             cuda_api::instance().malloc_async(raw, count * sizeof(T), stream);
             return cuda_device_ptr_async<T>(static_cast<T*>(raw), detail::device_deleter_async{stream});

@@ -217,7 +217,6 @@ NAMESPACE_COMPRESSED_IMAGE
 
         inline void cuda_api::malloc(void*& ptr, size_t size) const
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             cuda_call(malloc_fn_, "cudaMalloc", &ptr, size);
         }
 
@@ -229,13 +228,11 @@ NAMESPACE_COMPRESSED_IMAGE
 
         inline void cuda_api::malloc_async(void*& ptr, size_t size, cudaStream_t stream)
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             cuda_call(malloc_async_fn_, "cudaMallocAsync", &ptr, size, stream);
         }
 
         inline void cuda_api::free(void* ptr) const
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             cuda_call(free_fn_, "cudaFree", ptr);
         }
 
@@ -247,7 +244,6 @@ NAMESPACE_COMPRESSED_IMAGE
 
         inline void cuda_api::free_async(void* ptr, cudaStream_t stream)
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             cuda_call(free_async_fn_, "cudaFreeAsync", ptr, stream);
         }
 
@@ -265,7 +261,6 @@ NAMESPACE_COMPRESSED_IMAGE
 
         inline void cuda_api::memcpy(void* dst, const void* src, size_t count, cudaMemcpyKind kind)
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             cuda_call(memcpy_fn_, "cudaMemcpy", dst, src, count, kind);
         }
 
@@ -276,7 +271,6 @@ NAMESPACE_COMPRESSED_IMAGE
             cudaMemcpyKind kind,
             cudaStream_t stream)
         {
-            _COMPRESSED_PROFILE_FUNCTION();
             cuda_call(memcpy_async_fn_, "cudaMemcpyAsync", dst, src, count, kind, stream);
         }
 

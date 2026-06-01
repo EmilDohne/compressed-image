@@ -1468,6 +1468,23 @@ NAMESPACE_COMPRESSED_IMAGE
         }
 
     private:
+        struct ring_buffer_slot
+        {
+            util::default_init_vector<T> interleaved_buffer;
+            std::vector<util::default_init_vector<T>> deinterleaved_buffer;
+            std::vector<cuda::scoped_host_pinner> memory_pinners;
+            std::future<void> processing_future;
+
+            ring_buffer_slot() = default;
+            ring_buffer_slot(ring_buffer_slot&&) noexcept = default;
+            ring_buffer_slot& operator=(ring_buffer_slot&&) noexcept = default;
+            ring_buffer_slot(const ring_buffer_slot&) = delete;
+            ring_buffer_slot& operator=(const ring_buffer_slot&) = delete;
+        };
+
+        using ring_buffer_t = std::vector<ring_buffer_slot>;
+
+    private:
         /// All the channels, each holding their own decompression and compression context.
         std::vector<compressed::channel<T>> m_Channels{};
 
@@ -1565,38 +1582,32 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
             }
 
-
-            // Set up scratch buffers
+            // Set up the Ring Buffer (Double Buffering)
             // -----------------------------------------------------------------------------------
-            // -----------------------------------------------------------------------------------
-
-            // Maximum chunk size we will need to account for (times number of channels).
+            constexpr size_t ring_buffer_size = 2;
             const size_t max_chunk_size = chunk_size_aligned * max_num_channels;
+            ring_buffer_t ring_buffer(ring_buffer_size);
 
-            // Initialize our swap buffers, these are going to be either discarded after
-            // or compressed from.
-            util::default_init_vector<T> interleaved_buffer(max_chunk_size / sizeof(T));
-            std::vector<util::default_init_vector<T>> deinterleaved_buffer(max_num_channels);
-            std::for_each(
-                std::execution::par_unseq,
-                deinterleaved_buffer.begin(),
-                deinterleaved_buffer.end(),
-                [&](auto& buffer)
+            for (auto& slot : ring_buffer)
+            {
+                slot.interleaved_buffer.resize(max_chunk_size / sizeof(T));
+                slot.deinterleaved_buffer.resize(max_num_channels);
+                for (auto& buffer : slot.deinterleaved_buffer)
                 {
                     buffer.resize(chunk_size_aligned / sizeof(T));
                 }
-            );
 
-            // If this is a gpu codec we pin the interleaved memory to the gpu pages for more efficient memory operations.
-            std::vector<cuda::scoped_host_pinner> memory_pinners;
-            if (enums::is_gpu_codec(compression_codec))
-            {
-                memory_pinners.reserve(1 + deinterleaved_buffer.size());
-
-                memory_pinners.emplace_back(interleaved_buffer.data(), interleaved_buffer.size() * sizeof(T));
-                for (auto& buffer : deinterleaved_buffer)
+                if (enums::is_gpu_codec(compression_codec))
                 {
-                    memory_pinners.emplace_back(buffer.data(), buffer.size() * sizeof(T));
+                    slot.memory_pinners.reserve(1 + slot.deinterleaved_buffer.size());
+                    slot.memory_pinners.emplace_back(
+                        slot.interleaved_buffer.data(),
+                        slot.interleaved_buffer.size() * sizeof(T)
+                    );
+                    for (auto& buffer : slot.deinterleaved_buffer)
+                    {
+                        slot.memory_pinners.emplace_back(buffer.data(), buffer.size() * sizeof(T));
+                    }
                 }
             }
 
@@ -1619,35 +1630,20 @@ NAMESPACE_COMPRESSED_IMAGE
                 // Calculate some preliminary data for computing how many scanlines to extract in one go.
                 int nchannels = chend - chbegin;
                 const size_t bytes_per_scanline = static_cast<size_t>(spec.width) * nchannels * sizeof(T);
-
                 const size_t chunk_size_all = chunk_size_aligned * nchannels;
                 const size_t scanlines_per_chunk = chunk_size_all / bytes_per_scanline;
-
-                // Refit the swap buffers as `read_contiguous_channels_impl` expects these to be exactly sized.
-                auto interleaved_fitted = std::span<T>(interleaved_buffer.begin(), chunk_size_all / sizeof(T));
-                std::vector<std::span<T>> deinterleaved_fitted{};
-                for (auto idx : std::views::iota(0, nchannels))
-                {
-                    // construct a span from the util::default_init_vector
-                    deinterleaved_fitted.push_back(
-                        std::span<T>(deinterleaved_buffer.at(idx).begin(), deinterleaved_buffer.at(idx).end())
-                    );
-                }
-
-                // Create and initialize the schunks. These are pretty light weight so we don't need
-                // to worry about creating them outside of the loop/reusing them.
                 std::vector<detail::schunk<T>> schunks;
                 for ([[maybe_unused]] auto _ : std::views::iota(0, nchannels))
                 {
                     schunks.push_back(detail::schunk<T>(block_size, chunk_size_aligned));
                 }
 
-                // Read the contiguous channel sequence into the contexts and schunks.
+                // Pass the managed ring buffer into our streaming implementation
                 if constexpr (std::invocable<std::remove_reference_t<PostProcess>, size_t, std::span<T>>)
                 {
                     if (spec.tile_height != 0)
                     {
-                        image<T>::read_contiguous_channels_impl<true>(
+                        image<T>::template read_contiguous_channels_impl<true>(
                             input_ptr,
                             subimage,
                             chbegin,
@@ -1655,8 +1651,7 @@ NAMESPACE_COMPRESSED_IMAGE
                             compression_codec,
                             comp_level_adjusted,
                             block_size,
-                            interleaved_fitted,
-                            deinterleaved_fitted,
+                            ring_buffer,
                             scanlines_per_chunk,
                             schunks,
                             std::forward<PostProcess>(postprocess)
@@ -1664,7 +1659,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     }
                     else
                     {
-                        image<T>::read_contiguous_channels_impl<false>(
+                        image<T>::template read_contiguous_channels_impl<false>(
                             input_ptr,
                             subimage,
                             chbegin,
@@ -1672,8 +1667,7 @@ NAMESPACE_COMPRESSED_IMAGE
                             compression_codec,
                             comp_level_adjusted,
                             block_size,
-                            interleaved_fitted,
-                            deinterleaved_fitted,
+                            ring_buffer,
                             scanlines_per_chunk,
                             schunks,
                             std::forward<PostProcess>(postprocess)
@@ -1684,7 +1678,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 {
                     if (spec.tile_height != 0)
                     {
-                        image<T>::read_contiguous_channels_impl<true>(
+                        image<T>::template read_contiguous_channels_impl<true>(
                             input_ptr,
                             subimage,
                             chbegin,
@@ -1692,8 +1686,7 @@ NAMESPACE_COMPRESSED_IMAGE
                             compression_codec,
                             comp_level_adjusted,
                             block_size,
-                            interleaved_fitted,
-                            deinterleaved_fitted,
+                            ring_buffer,
                             scanlines_per_chunk,
                             schunks,
                             std::nullopt
@@ -1701,7 +1694,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     }
                     else
                     {
-                        image<T>::read_contiguous_channels_impl<false>(
+                        image<T>::template read_contiguous_channels_impl<false>(
                             input_ptr,
                             subimage,
                             chbegin,
@@ -1709,8 +1702,7 @@ NAMESPACE_COMPRESSED_IMAGE
                             compression_codec,
                             comp_level_adjusted,
                             block_size,
-                            interleaved_fitted,
-                            deinterleaved_fitted,
+                            ring_buffer,
                             scanlines_per_chunk,
                             schunks,
                             std::nullopt
@@ -1718,8 +1710,6 @@ NAMESPACE_COMPRESSED_IMAGE
                     }
                 }
 
-
-                // Finally create the channels from the schunks
                 for (const auto channel_idx : std::views::iota(0, nchannels))
                 {
                     _COMPRESSED_PROFILE_SCOPE("generate channels");
@@ -1734,14 +1724,12 @@ NAMESPACE_COMPRESSED_IMAGE
                     );
                 }
 
-                // Store the correctly mapped channelnames
                 for (auto channel_idx : std::views::iota(chbegin, chend))
                 {
                     new_channelnames.push_back(spec.channelnames.at(channel_idx));
                 }
             }
 
-            // Construct the image instance.
             auto img = compressed::image<T>(std::move(channels), spec.width, spec.height, new_channelnames);
             img.metadata(compressed::image<T>::read_oiio_metadata(spec));
             return std::move(img);
@@ -1777,11 +1765,10 @@ NAMESPACE_COMPRESSED_IMAGE
             const int subimage,
             const int chbegin,
             const int chend,
-            enums::codec compression_codec,
-            size_t compression_level,
-            size_t block_size,
-            std::span<T> interleaved_buffer,
-            std::vector<std::span<T>>& deinterleaved_buffer,
+            const enums::codec compression_codec,
+            const size_t compression_level,
+            const size_t block_size,
+            ring_buffer_t& ring_buffer,
             size_t scanlines_per_chunk,
             std::vector<detail::schunk<T>>& schunks,
             PostProcess&& postprocess
@@ -1804,61 +1791,13 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
             }
 
-            // Ensure the interleaved buffer is correctly sized.
-            if (interleaved_buffer.size() != static_cast<size_t>(nchannels) * spec.width * scanlines_per_chunk)
-            {
-                throw std::invalid_argument(
-                    std::format(
-                        "read_contiguous_channels_impl: Received incorrectly sized interleaved buffer, should be exactly"
-                        " {:L} elements large but instead got {:L}.",
-                        static_cast<size_t>(nchannels) * spec.width * scanlines_per_chunk,
-                        interleaved_buffer.size()
-                    )
-                );
-            }
-            // Ensure the deinterleaved buffer, and its subbuffers, are correctly sized.
-            if (deinterleaved_buffer.size() != static_cast<size_t>(nchannels))
-            {
-                throw std::invalid_argument(
-                    std::format(
-                        "read_contiguous_channels_impl: Received incorrectly sized deinterleaved buffer, should be exactly"
-                        " {:L} elements large but instead got {:L}.",
-                        nchannels,
-                        deinterleaved_buffer.size()
-                    )
-                );
-            }
-            for (const auto& buffer : deinterleaved_buffer)
-            {
-                if (buffer.size() != spec.width * scanlines_per_chunk)
-                {
-                    throw std::invalid_argument(
-                        std::format(
-                            "read_contiguous_channels_impl: Received incorrectly sized deinterleaved buffer,"
-                            " should be exactly {:L} elements large but instead got {:L}.",
-                            static_cast<size_t>(nchannels) * spec.width * scanlines_per_chunk,
-                            interleaved_buffer.size()
-                        )
-                    );
-                }
-            }
-            // Ensure the schunks are correctly sized
-            if (schunks.size() != static_cast<size_t>(nchannels))
-            {
-                throw std::runtime_error(
-                    std::format(
-                        "read_contiguous_channels_impl: Internal error: Expected the number of passed schunks"
-                        " to exactly match the number of requested channels. Instead got {} while {} was the expected"
-                        " number.",
-                        schunks.size(),
-                        nchannels
-                    )
-                );
-            }
 
             // Iterate all scanlines and read as many scanlines as possible in one go, compressing them on the fly
             // into all of the super-chunks. This works for data windows as well where the y and x may not start at zero
+            std::future<void> previous_compute_future;
+            size_t ring_index = 0;
             int y = spec.y;
+
             while (y < (spec.height + spec.y))
             {
                 _COMPRESSED_PROFILE_SCOPE("Read Scanlines/Tiles and compress");
@@ -1867,26 +1806,37 @@ NAMESPACE_COMPRESSED_IMAGE
                     static_cast<size_t>(spec.height + spec.y - y)
                 ));
 
+                // Select active slot in our ring buffer
+                auto& slot = ring_buffer[ring_index];
 
+                // 1. Wait if this slot's own previous turn hasn't finished (Safe Guard for small ring buffers)
+                if (slot.processing_future.valid())
+                {
+                    slot.processing_future.get();
+                }
+
+                // Slice out exact span dimensions required for the OIIO validation checks and bounds
+                const size_t chunk_size_all = scanlines_per_chunk * spec.width * nchannels;
+                auto interleaved_fitted = std::span<T>(slot.interleaved_buffer.data(), chunk_size_all);
+
+                // 2. STAGE 1 (I/O): Synchronously read next file chunk on main thread
                 bool read_successful = false;
-                // Since the passed `scanlines_per_chunk` is already appropriately aligned to either tiles or scanlines,
-                // we can safely call either `read_tiles` or `read_scanlines` here making sure we are correctly aligned
                 if constexpr (read_tiles)
                 {
                     _COMPRESSED_PROFILE_SCOPE("read tiles");
                     read_successful = input_ptr->read_tiles(
                         subimage,
-                        0 /* miplevel */,
-                        spec.x /* xbegin */,
-                        spec.width /* xend */,
-                        y /* ybegin */,
-                        y + scanlines_to_read /* yend */,
-                        0 /* zbegin */,
-                        1 /* zend */,
+                        0,
+                        spec.x,
+                        spec.width,
+                        y,
+                        y + scanlines_to_read,
+                        0,
+                        1,
                         chbegin,
                         chend,
                         typedesc,
-                        static_cast<void*>(interleaved_buffer.data())
+                        static_cast<void*>(interleaved_fitted.data())
                     );
                 }
                 else
@@ -1894,14 +1844,14 @@ NAMESPACE_COMPRESSED_IMAGE
                     _COMPRESSED_PROFILE_SCOPE("read scanlines");
                     read_successful = input_ptr->read_scanlines(
                         subimage,
-                        0 /* miplevel */,
-                        y /* ybegin */,
-                        y + scanlines_to_read /* yend */,
-                        0 /* z */,
+                        0,
+                        y,
+                        y + scanlines_to_read,
+                        0,
                         chbegin,
                         chend,
                         typedesc,
-                        static_cast<void*>(interleaved_buffer.data())
+                        static_cast<void*>(interleaved_fitted.data())
                     );
                 }
 
@@ -1919,75 +1869,97 @@ NAMESPACE_COMPRESSED_IMAGE
                     );
                 }
 
-                // Deinterleave the buffers, in some cases we may be deinterleaving empty space here but that
-                // is ok as we refit the buffers. Since in most cases the size will only be off by at most one
-                // scanline. In the case of the last chunk, we may be at worst deinterleaving only one scanline
-                // with the rest being empty space but that is also ok.
-                image_algo::deinterleave(std::span<const T>(interleaved_buffer), deinterleaved_buffer);
-
-                // Now start compressing the chunks and appending them into the super-chunks.
-                for (auto channel_idx : std::views::iota(0, nchannels))
+                // 3. ORDER ENFORCEMENT: Wait for chunk k-1's compression to completely finish
+                // before spawning chunk k's compute task. This guarantees blocks append to schunks in sequential order.
+                if (previous_compute_future.valid())
                 {
-                    auto context = NAMESPACE_COMPRESSED_IMAGE::channel<T>::create_compression_context(
-                        compression_codec,
-                        std::thread::hardware_concurrency(),
-                        compression_level,
-                        block_size,
-                        0
-                    );
-
-                    // How many elements we actually read per buffer
-                    size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;
-                    auto deinterleaved_fitted = std::span<T>(deinterleaved_buffer[channel_idx].data(), read_elements);
-
-                    // Perform the user-passed postprocessing, this may be anything and it's up to the user to decide
-                    // what goes here.
-                    if constexpr (std::invocable<std::remove_reference_t<PostProcess>, size_t, std::span<T>>)
-                    {
-                        _COMPRESSED_PROFILE_SCOPE("postprocess");
-                        auto absolute_channel_idx = chbegin + channel_idx;
-                        postprocess(absolute_channel_idx, deinterleaved_fitted);
-                    }
-
-                    schunks[channel_idx].append_chunk(
-                        std::move(context),
-                        deinterleaved_fitted
-                    );
-
-
-                    if (y + scanlines_to_read == (spec.height + spec.y))
-                    {
-                        if (enums::is_gpu_codec(compression_codec))
-                        {
-                            get_logger()->info(
-                                std::format(
-                                    "[channel: {}] cuda {}: uncompressed {} bytes; compressed {} bytes; cratio {}",
-                                    channel_idx,
-                                    enums::to_string(compression_codec),
-                                    schunks[channel_idx].chunk_bytes(),
-                                    schunks[channel_idx].csize(),
-                                    static_cast<double>(schunks[channel_idx].chunk_bytes()) / schunks[channel_idx].
-                                    csize()
-                                )
-                            );
-                        }
-                        else
-                        {
-                            get_logger()->info(
-                                std::format(
-                                    "[channel: {}] blosc2 {}: uncompressed {} bytes; compressed {} bytes; cratio {}",
-                                    channel_idx,
-                                    enums::to_string(compression_codec),
-                                    schunks[channel_idx].chunk_bytes(),
-                                    schunks[channel_idx].csize(),
-                                    static_cast<double>(schunks[channel_idx].chunk_bytes()) / schunks[channel_idx].
-                                    csize()
-                                )
-                            );
-                        }
-                    }
+                    previous_compute_future.get();
                 }
+
+                size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;
+
+                // 4. STAGE 2 (COMPUTE): Delegate processing & compression of the freshly read chunk to a background task.
+                // Main thread loops back immediately to read chunk k+1 into the alternate buffer slot.
+                slot.processing_future = std::async(
+                    std::launch::async,
+                    [
+                        &slot, interleaved_fitted, nchannels, read_elements, compression_codec, compression_level,
+                        block_size, chbegin,
+                        y, scanlines_to_read, spec_width = spec.width, spec_height = spec.height, spec_y = spec.y,
+                        &schunks, &postprocess
+                    ]()
+                    {
+                        // Slice deinterleaved spans for this active task
+                        std::vector<std::span<T>> deinterleaved_fitted_views;
+                        deinterleaved_fitted_views.reserve(nchannels);
+                        for (int idx = 0; idx < nchannels; ++idx)
+                        {
+                            deinterleaved_fitted_views.emplace_back(
+                                slot.deinterleaved_buffer[idx].data(),
+                                slot.deinterleaved_buffer[idx].size()
+                            );
+                        }
+
+                        // Compute steps
+                        image_algo::deinterleave(std::span<const T>(interleaved_fitted), deinterleaved_fitted_views);
+
+                        for (auto channel_idx : std::views::iota(0, nchannels))
+                        {
+                            auto context = NAMESPACE_COMPRESSED_IMAGE::channel<T>::create_compression_context(
+                                compression_codec,
+                                std::thread::hardware_concurrency(),
+                                compression_level,
+                                block_size,
+                                0
+                            );
+
+                            auto channel_span = std::span<T>(
+                                slot.deinterleaved_buffer[channel_idx].data(),
+                                read_elements
+                            );
+
+                            if constexpr (std::invocable<std::remove_reference_t<PostProcess>, size_t, std::span<T>>)
+                            {
+                                auto absolute_channel_idx = chbegin + channel_idx;
+                                postprocess(absolute_channel_idx, channel_span);
+                            }
+
+                            schunks[channel_idx].append_chunk(std::move(context), channel_span);
+
+                            // Logging
+                            if (y + scanlines_to_read == (spec_height + spec_y))
+                            {
+                                std::string_view codec_name = enums::to_string(compression_codec);
+                                std::string backend = enums::is_gpu_codec(compression_codec) ? "cuda" : "blosc2";
+                                get_logger()->debug(
+                                    std::format(
+                                        "[channel: {}] {} {}: uncompressed {} bytes; compressed {} bytes; cratio {}",
+                                        channel_idx,
+                                        backend,
+                                        codec_name,
+                                        schunks[channel_idx].chunk_bytes(),
+                                        schunks[channel_idx].csize(),
+                                        static_cast<double>(schunks[channel_idx].chunk_bytes()) / schunks[channel_idx].
+                                        csize()
+                                    )
+                                );
+                            }
+                        }
+                    }
+                );
+
+                // Save our background work task tracking token to previous handle
+                previous_compute_future = std::move(slot.processing_future);
+
+                // Cycle the Ring Buffer index and step image coordinate offset
+                ring_index = (ring_index + 1) % ring_buffer.size();
                 y += scanlines_to_read;
+            }
+
+            // 5. Final sync: block until the last chunk's processing pipeline completely winds down
+            if (previous_compute_future.valid())
+            {
+                previous_compute_future.get();
             }
         }
 

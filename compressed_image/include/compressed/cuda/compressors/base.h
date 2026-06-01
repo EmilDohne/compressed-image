@@ -570,27 +570,29 @@ NAMESPACE_COMPRESSED_IMAGE
                 void validate_per_block_statuses(cuda_device_buffer_async<nvcompStatus_t>& device_statuses) const
                 {
                     _COMPRESSED_PROFILE_FUNCTION();
-                    auto status_vector = NAMESPACE_COMPRESSED_IMAGE::util::default_init_vector<nvcompStatus_t>(
+                    auto status_buffer = NAMESPACE_COMPRESSED_IMAGE::cuda::make_host_mem<nvcompStatus_t>(
                         device_statuses.size
                     );
 
                     cuda_api::instance().memcpy_async(
-                        status_vector.data(),
+                        status_buffer.get(),
                         device_statuses.get(),
                         device_statuses.bytes(),
                         cudaMemcpyDeviceToHost
                     );
+                    cuda_api::instance().stream_synchronize(cudaStreamPerThread);
+
 
                     std::vector<std::string> error_messages;
                     for (size_t i = 0; i < device_statuses.size; ++i)
                     {
-                        if (status_vector[i] != nvcompStatus_t::nvcompSuccess)
+                        if (status_buffer.get()[i] != nvcompStatus_t::nvcompSuccess)
                         {
                             error_messages.emplace_back(
                                 std::format(
                                     "block {} failed with nvcomp status: '{}'",
                                     i,
-                                    cuda::util::status_t_to_string(status_vector[i])
+                                    cuda::util::status_t_to_string(status_buffer.get()[i])
                                 )
                             );
                         }
