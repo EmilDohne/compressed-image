@@ -1201,8 +1201,8 @@ NAMESPACE_COMPRESSED_IMAGE
         /// Return the compression ratio over all channels.
         double compression_ratio() const noexcept
         {
-            const size_t compressed_bytes = std::min(size_t{1}, this->compressed_bytes());
-            const size_t uncompressed_bytes = std::min(size_t{1}, this->uncompressed_bytes());
+            const size_t compressed_bytes = std::max(size_t{1}, this->compressed_bytes());
+            const size_t uncompressed_bytes = std::max(size_t{1}, this->uncompressed_bytes());
             return static_cast<double>(uncompressed_bytes) / compressed_bytes;
         }
 

@@ -27,7 +27,7 @@
 #include "util.h"
 
 /// The number of executions per benchmark
-constexpr static size_t s_iterations = 1;
+constexpr static size_t s_iterations = 3;
 
 // ============================================================================
 // BENCHMARK DEFINITIONS
@@ -82,8 +82,8 @@ void bench_image_read_compressed(benchmark::State& state, const std::filesystem:
         }
     );
 
-    state.counters["compressed_bytes"] = compressed_size;
-    state.counters["uncompressed_bytes"] = uncompressed_size;
+    state.counters["compressed_bytes"] = static_cast<double>(compressed_size);
+    state.counters["uncompressed_bytes"] = static_cast<double>(uncompressed_size);
     state.counters["compression_ratio"] = compression_ratio;
 }
 
