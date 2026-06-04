@@ -64,6 +64,10 @@ NAMESPACE_COMPRESSED_IMAGE
             void free_host(void* ptr) const;
             void free_async(void* ptr, cudaStream_t stream = cudaStreamPerThread);
 
+            // --- Memory Queries ---
+            void mem_get_info(size_t& free_bytes, size_t& total_bytes) const;
+            uint64_t pool_allocated_bytes(int device) const;
+
             // --- Page-locking (Pinning) ---
             void host_register(void* ptr, size_t size, unsigned int flags = cudaHostRegisterDefault) const;
             void host_unregister(void* ptr) const;
@@ -106,6 +110,8 @@ NAMESPACE_COMPRESSED_IMAGE
             using cuda_malloc_host_t = cudaError_t(*)(void**, size_t);
             using cuda_free_host_t = decltype(&cudaFreeHost);
 
+            using cuda_mem_get_info_t = decltype(&cudaMemGetInfo);
+
             using cuda_host_register_t = decltype(&cudaHostRegister);
             using cuda_host_unregister_t = decltype(&cudaHostUnregister);;
 
@@ -131,6 +137,8 @@ NAMESPACE_COMPRESSED_IMAGE
             cuda_free_t free_fn_ = nullptr;
             cuda_free_host_t free_host_fn_ = nullptr;
             cuda_free_async_t free_async_fn_ = nullptr;
+
+            cuda_mem_get_info_t mem_get_info_fn_ = nullptr;
 
             cuda_host_register_t host_register_fn_ = nullptr;
             cuda_host_unregister_t host_unregister_fn_ = nullptr;
@@ -214,6 +222,12 @@ NAMESPACE_COMPRESSED_IMAGE
             cuda_call(get_attr_fn_, "cudaDeviceGetAttribute", &value, attr, device);
             return value;
         }
+
+        inline void cuda_api::mem_get_info(size_t& free_bytes, size_t& total_bytes) const
+        {
+            cuda_call(mem_get_info_fn_, "cudaMemGetInfo", &free_bytes, &total_bytes);
+        }
+
 
         inline void cuda_api::malloc(void*& ptr, size_t size) const
         {
@@ -346,6 +360,8 @@ NAMESPACE_COMPRESSED_IMAGE
             LOAD(cudaFree, free_fn_);
             LOAD(cudaFreeHost, free_host_fn_);
             LOAD(cudaFreeAsync, free_async_fn_);
+
+            LOAD(cudaMemGetInfo, mem_get_info_fn_);
 
             LOAD(cudaHostRegister, host_register_fn_);
             LOAD(cudaHostUnregister, host_unregister_fn_);

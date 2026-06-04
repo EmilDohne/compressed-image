@@ -1178,17 +1178,32 @@ NAMESPACE_COMPRESSED_IMAGE
         }
 
 
-        /// Return the compression ratio over all channels.
-        double compression_ratio() const noexcept
+        size_t compressed_bytes() const
         {
-            size_t total_uncompressed = 1;
-            size_t total_compressed = 1;
+            size_t total_compressed = 0;
             for (const auto& channel : m_Channels)
             {
                 total_compressed += channel.compressed_bytes();
-                total_uncompressed += channel.uncompressed_size();
             }
-            return static_cast<double>(total_uncompressed) / total_compressed;
+            return total_compressed;
+        }
+
+        size_t uncompressed_bytes() const
+        {
+            size_t total_uncompressed = 0;
+            for (const auto& channel : m_Channels)
+            {
+                total_uncompressed += channel.uncompressed_size() * sizeof(T);
+            }
+            return total_uncompressed;
+        }
+
+        /// Return the compression ratio over all channels.
+        double compression_ratio() const noexcept
+        {
+            const size_t compressed_bytes = std::min(size_t{1}, this->compressed_bytes());
+            const size_t uncompressed_bytes = std::min(size_t{1}, this->uncompressed_bytes());
+            return static_cast<double>(uncompressed_bytes) / compressed_bytes;
         }
 
 
@@ -1745,6 +1760,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// Due to us only being able to read contiguous channels at a time this helper function allows us to do that.
         ///
         /// \param input_ptr The opened OpenImageIO ImageInput.
+        /// \param subimage The subimage to read
         /// \param chbegin The start channel to read
         /// \param chend The end channel to read
         /// \param interleaved_buffer The buffer into which we will read the channels (before then interleaving).
@@ -1873,7 +1889,15 @@ NAMESPACE_COMPRESSED_IMAGE
                 // before spawning chunk k's compute task. This guarantees blocks append to schunks in sequential order.
                 if (previous_compute_future.valid())
                 {
-                    previous_compute_future.get();
+                    try
+                    {
+                        previous_compute_future.get();
+                    }
+                    catch (const std::exception& e)
+                    {
+                        get_logger()->error(std::format("Exception caught from async thread: {}", e.what()));
+                        throw;
+                    }
                 }
 
                 size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;
@@ -1959,7 +1983,15 @@ NAMESPACE_COMPRESSED_IMAGE
             // 5. Final sync: block until the last chunk's processing pipeline completely winds down
             if (previous_compute_future.valid())
             {
-                previous_compute_future.get();
+                try
+                {
+                    previous_compute_future.get();
+                }
+                catch (const std::exception& e)
+                {
+                    get_logger()->error(std::format("Exception caught from async thread: {}", e.what()));
+                    throw;
+                }
             }
         }
 
