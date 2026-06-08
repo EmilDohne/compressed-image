@@ -38,7 +38,7 @@ NAMESPACE_COMPRESSED_IMAGE
     /// The image is stored in a non-resizable fashion so whatever the resolution was going into it, is what the image will be.
     /// To rescale or refit the image a new `image` has to be constructed.
     ///
-    /// The data is compressed in memory and we store it as part of a blosc2 super-chunk which is essentially a 3d array of
+    /// The data is compressed in-memory, and we store it as part of a blosc2 super-chunk, which is essentially a 3d array of
     /// super-chunk -> chunk -> block. Where having the block size fit into L1 cache and the Chunk size into L3 cache is desirable
     /// as each block can be handled by a single cpu core while the chunk fits well within shared L3 memory.
     template <typename T>
@@ -121,7 +121,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 {
                     // Generate the channel and append it.
                     m_Channels.push_back(
-                        compressed::channel<T>(
+                        NAMESPACE_COMPRESSED_IMAGE::channel<T>(
                             _channel,
                             width,
                             height,
@@ -227,7 +227,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 {
                     // Generate the channel and append it.
                     m_Channels.push_back(
-                        compressed::channel<T>(
+                        NAMESPACE_COMPRESSED_IMAGE::channel<T>(
                             std::span<const T>(_channel.begin(), _channel.end()),
                             width,
                             height,
@@ -279,7 +279,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param channel_names (Optional) A list of channel names, must match the number of channels provided.
         ///					     If omitted or incorrect, channel names are ignored.
         image(
-            std::vector<compressed::channel<T>> channels,
+            std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> channels,
             size_t width,
             size_t height,
             std::vector<std::string> channel_names = {}
@@ -952,7 +952,8 @@ NAMESPACE_COMPRESSED_IMAGE
         ///
         /// \param _channel The channel to be added to the image.
         /// \param name (Optional) Channel name of the channel to be inserted. If no channel names are set this argument is ignored.
-        void add_channel(compressed::channel<T> _channel, std::optional<std::string> name = std::nullopt)
+        void add_channel(NAMESPACE_COMPRESSED_IMAGE::channel<T> _channel,
+                         std::optional<std::string> name = std::nullopt)
         {
             if (_channel.width() != this->width())
             {
@@ -1051,7 +1052,7 @@ NAMESPACE_COMPRESSED_IMAGE
             }
 
             m_Channels.push_back(
-                compressed::channel(
+                NAMESPACE_COMPRESSED_IMAGE::channel(
                     std::span<const T>(data.begin(), data.end()),
                     width,
                     height,
@@ -1090,7 +1091,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param index The index of the channel to retrieve.
         /// \return The channel object.
         /// \throws std::out_of_range if the index is out of bounds.
-        compressed::channel<T> extract_channel(size_t index)
+        NAMESPACE_COMPRESSED_IMAGE::channel<T> extract_channel(size_t index)
         {
             if (index >= m_Channels.size())
             {
@@ -1112,7 +1113,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param name The name of the channel to retrieve.
         /// \return The channel object.
         /// \throws std::out_of_range if the channel name is invalid.
-        compressed::channel<T> extract_channel(const std::string_view name)
+        NAMESPACE_COMPRESSED_IMAGE::channel<T> extract_channel(const std::string_view name)
         {
             size_t index = get_channel_offset(name);
             return extract_channel(index);
@@ -1226,7 +1227,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param index The index of the channel to retrieve.
         /// \return A reference to the requested channel.
         /// \throws std::out_of_range if the index is out of bounds.
-        compressed::channel<T>& channel(size_t index)
+        NAMESPACE_COMPRESSED_IMAGE::channel<T>& channel(size_t index)
         {
             if (index >= m_Channels.size())
             {
@@ -1240,7 +1241,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param name The name of the channel to retrieve.
         /// \return A reference to the requested channel.
         /// \throws std::out_of_range if the channel name is invalid.
-        compressed::channel<T>& channel(const std::string_view name)
+        NAMESPACE_COMPRESSED_IMAGE::channel<T>& channel(const std::string_view name)
         {
             size_t index = get_channel_offset(name);
             return m_Channels[index];
@@ -1295,9 +1296,9 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param channel_indices A vector of channel indices.
         /// \return A vector containing references to the requested channels.
         /// \throws std::out_of_range if any channel indec is invalid.
-        std::vector<compressed::channel<T>&> channels(std::vector<size_t> channel_indices)
+        std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>&> channels(std::vector<size_t> channel_indices)
         {
-            std::vector<compressed::channel<T>> result{};
+            std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> result{};
             for (const auto& index : channel_indices)
             {
                 result.append(this->channel(index));
@@ -1310,9 +1311,9 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \param channel_names A vector of channel names.
         /// \return A vector containing references to the requested channels.
         /// \throws std::out_of_range if any channel name is invalid.
-        std::vector<compressed::channel<T>&> channels(std::vector<std::string> channel_names)
+        std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>&> channels(std::vector<std::string> channel_names)
         {
-            std::vector<compressed::channel<T>> result{};
+            std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> result{};
             for (const auto& name : channel_names)
             {
                 result.append(this->channel(name));
@@ -1323,7 +1324,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// Retrieves references to all of the channels in the image
         ///
         /// \return A vector containing references to the all the channels.
-        std::vector<compressed::channel<T>>& channels()
+        std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>>& channels()
         {
             return m_Channels;
         }
@@ -1331,7 +1332,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// Retrieves const references to all of the channels in the image
         ///
         /// \return A vector containing references to the all the channels.
-        const std::vector<compressed::channel<T>>& channels() const
+        const std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>>& channels() const
         {
             return m_Channels;
         }
@@ -1501,7 +1502,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
     private:
         /// All the channels, each holding their own decompression and compression context.
-        std::vector<compressed::channel<T>> m_Channels{};
+        std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> m_Channels{};
 
         /// Arbitrary user metadata, not authored or managed by us, it's up to the caller to handle what goes in and comes out
         json_ordered m_Metadata{};
@@ -1586,7 +1587,7 @@ NAMESPACE_COMPRESSED_IMAGE
             // This allows us to both maximize performance by handling as many channels in one go as we can while also
             // minimizing memory footprint by only ever allocating as much as we need for the max amount of contiguous
             // channels we can encounter.
-            std::vector<compressed::channel<T>> channels;
+            std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> channels;
             auto channel_ranges_contiguous = detail::get_contiguous_channels(input_ptr, channelnames);
             size_t max_num_channels = 0;
             for (const auto& [chbegin, chend] : channel_ranges_contiguous)
@@ -1729,7 +1730,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 {
                     _COMPRESSED_PROFILE_SCOPE("generate channels");
                     channels.push_back(
-                        compressed::channel<T>(
+                        NAMESPACE_COMPRESSED_IMAGE::channel<T>(
                             std::move(schunks[channel_idx]),
                             spec.width,
                             spec.height,
@@ -1745,8 +1746,13 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
             }
 
-            auto img = compressed::image<T>(std::move(channels), spec.width, spec.height, new_channelnames);
-            img.metadata(compressed::image<T>::read_oiio_metadata(spec));
+            auto img = NAMESPACE_COMPRESSED_IMAGE::image<T>(
+                std::move(channels),
+                spec.width,
+                spec.height,
+                new_channelnames
+            );
+            img.metadata(NAMESPACE_COMPRESSED_IMAGE::image<T>::read_oiio_metadata(spec));
             return std::move(img);
         }
 
@@ -1909,7 +1915,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     [
                         &slot, interleaved_fitted, nchannels, read_elements, compression_codec, compression_level,
                         block_size, chbegin,
-                        y, scanlines_to_read, spec_width = spec.width, spec_height = spec.height, spec_y = spec.y,
+                        y, scanlines_to_read, spec_height = spec.height, spec_y = spec.y,
                         &schunks, &postprocess
                     ]()
                     {

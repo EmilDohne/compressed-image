@@ -14,7 +14,7 @@ namespace bench_util
 {
     namespace detail
     {
-        inline constexpr size_t s_mem_sampling_interval = 25;
+        inline constexpr size_t s_mem_sampling_interval_ms = 25;
 
         // Periodic memory sampling variables
         inline std::atomic<bool> g_sampling{false};
@@ -49,7 +49,7 @@ namespace bench_util
                 detail::g_memory_diffs.push_back(mem_diff);
                 detail::g_vram_diffs.push_back(vram_diff);
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(detail::s_mem_sampling_interval));
+            std::this_thread::sleep_for(std::chrono::milliseconds(detail::s_mem_sampling_interval_ms));
         }
     }
 

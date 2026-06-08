@@ -7,7 +7,6 @@ Entry point for the various compressors of nvcomp
 #include <variant>
 #include <cstddef>
 #include <vector>
-#include <ranges>
 #include <execution>
 
 #include <nvcomp.h>
@@ -22,13 +21,12 @@ Entry point for the various compressors of nvcomp
 #include "compressed/macros.h"
 #include "compressed/constants.h"
 #include "compressed/enums.h"
-#include "compressed/util.h"
 
 #include "compressed/cuda/memory.h"
-#include "compressed/cuda/enums.h"
 #include "compressed/cuda/compressors/util.h"
 #include "compressed/cuda/cuda_hook.h"
 #include "compressed/cuda/gpu.h"
+#include "compressed/cuda/filters/filter.h"
 
 
 namespace
@@ -36,6 +34,7 @@ NAMESPACE_COMPRESSED_IMAGE
 {
     namespace cuda
     {
+        struct gpu_filter;
         /// \brief compression options for the various nvcomp compressors.
         using compression_options = std::variant<
             nvcompBatchedLZ4CompressOpts_t,
@@ -57,7 +56,6 @@ NAMESPACE_COMPRESSED_IMAGE
             nvcompBatchedSnappyDecompressOpts_t,
             nvcompBatchedZstdDecompressOpts_t
         >;
-
 
         /// \brief Compression context for nvcomp/cuda based compression and decompression.
         ///
@@ -104,17 +102,27 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \brief The compression context used for compression/decompression. Once set this may not be modified.
             nvcomp_context context{};
 
+            std::vector<gpu_filter> filters{};
+
+            /// \brief Flag indicating if the entire chunk was filled with constant values
+            std::optional<T> constant_value = std::nullopt;
+
             compressed_chunk() = default;
 
             compressed_chunk(
                 cuda_device_buffer_async<std::byte> _compressed_data,
                 std::vector<size_t> _comp_sizes,
                 std::vector<size_t> _uncomp_sizes,
-                nvcomp_context ctx)
-                : compressed_data(std::move(_compressed_data)),
-                  compressed_block_sizes(std::move(_comp_sizes)),
-                  uncompressed_block_sizes(std::move(_uncomp_sizes)),
-                  context(std::move(ctx))
+                nvcomp_context ctx,
+                std::vector<gpu_filter> _filters,
+                std::optional<T> _chunk_constant)
+                :
+                compressed_data(std::move(_compressed_data)),
+                compressed_block_sizes(std::move(_comp_sizes)),
+                uncompressed_block_sizes(std::move(_uncomp_sizes)),
+                context(std::move(ctx)),
+                filters(std::move(_filters)),
+                constant_value(_chunk_constant)
             {
             }
 
@@ -170,6 +178,30 @@ NAMESPACE_COMPRESSED_IMAGE
             template <typename T>
             struct compressor
             {
+                virtual std::vector<gpu_filter> get_default_filters() const
+                {
+                    if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+                    {
+                        return {
+                            gpu_filter{cuda::enums::filter::delta},
+                        };
+                    }
+                    if constexpr (std::is_integral_v<T>)
+                    {
+                        return {
+                            gpu_filter{cuda::enums::filter::delta},
+                            gpu_filter{cuda::enums::filter::shuffle},
+                        };
+                    }
+                    else
+                    {
+                        return {
+                            gpu_filter{cuda::enums::filter::xordelta},
+                            gpu_filter{cuda::enums::filter::shuffle},
+                        };
+                    }
+                }
+
                 virtual ~compressor() = default;
 
                 /// \brief Compress a CPU buffer into a compressed chunk using CUDA.
@@ -181,6 +213,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 ///
                 /// \param data        The input data buffer to compress (host memory).
                 /// \param context	   The compression/decompression context used for the generated blocks.
+                /// \param _filters     The filters to apply to the data before compression.
                 ///
                 /// \return A \c compressed_chunk containing the compressed blocks, their sizes,
                 ///         and codec metadata describing the compression algorithm used.
@@ -193,19 +226,69 @@ NAMESPACE_COMPRESSED_IMAGE
                 /// \note Compression uses asynchronous CUDA operations with per-thread streams and
                 ///       memory pooling. Data is synchronized before returning, but overlapping
                 ///       work on other streams may proceed concurrently.
-                compressed_chunk<T> compress(std::span<const T> data, nvcomp_context context) const
+                compressed_chunk<T> compress(std::span<const T> data,
+                                             nvcomp_context context,
+                                             std::optional<std::vector<gpu_filter>> _filters = std::nullopt) const
                 {
                     _COMPRESSED_PROFILE_FUNCTION();
 
-                    device_guard guard(context.gpu_device);
-                    cuda_api::instance().set_mem_pool_size(context.gpu_device);
-
+                    std::vector<gpu_filter> filters = _filters.value_or(this->get_default_filters());
                     context.block_size = this->fit_block_size(context.block_size);
+                    const size_t num_blocks = (data.size() * sizeof(T) + context.block_size - 1) / context.block_size;
+
+                    // ##################################################################################
+                    // empty chunk optimizations
+                    // ##################################################################################
+                    std::optional<T> chunk_constant = std::nullopt;
+
+                    if (!data.empty())
+                    {
+                        _COMPRESSED_PROFILE_SCOPE("chunk_constant");
+                        const T& first_val = data[0];
+
+                        // Use a bitwise comparison to safely handle floats (NaNs, +/-0.0)
+                        // and ensure strictly lossless behavior.
+                        bool is_constant = std::all_of(
+                            std::execution::par_unseq,
+                            data.begin(),
+                            data.end(),
+                            [&](const T& v)
+                            {
+                                return std::memcmp(&v, &first_val, sizeof(T)) == 0;
+                            }
+                        );
+                        if (is_constant)
+                        {
+                            chunk_constant = first_val;
+                        }
+                    }
+
+                    if (chunk_constant.has_value())
+                    {
+                        auto block_sizes = this->generate_block_sizes(
+                            data.size() * sizeof(T),
+                            context.block_size,
+                            num_blocks
+                        );
+
+                        return compressed_chunk<T>(
+                            cuda_device_buffer_async<std::byte>{},
+                            // Empty device buffer
+                            std::vector<size_t>(num_blocks, 0),
+                            // 0 bytes compressed per block
+                            std::move(block_sizes),
+                            std::move(context),
+                            std::move(filters),
+                            chunk_constant // Pass the constant value
+                        );
+                    }
 
                     // ##################################################################################
                     // Set up device uncompressed memory
                     // ##################################################################################
-                    const size_t num_blocks = (data.size() * sizeof(T) + context.block_size - 1) / context.block_size;
+                    device_guard guard(context.gpu_device);
+                    cuda_api::instance().set_mem_pool_size(context.gpu_device);
+
                     auto block_sizes = this->generate_block_sizes(
                         data.size() * sizeof(T),
                         context.block_size,
@@ -220,16 +303,42 @@ NAMESPACE_COMPRESSED_IMAGE
                         cudaMemcpyHostToDevice
                     );
 
+                    // ##################################################################################
+                    // Apply Forward Filter Pipeline (if any)
+                    // ##################################################################################
+
+                    // Declare the filtered buffer here so it lives until the end of the function.
+                    // We conditionally allocate it only if filters are requested.
+                    cuda_device_buffer_async<T> device_filtered_data;
+
+                    if (!filters.empty())
+                    {
+                        device_filtered_data = make_device_buffer_async<T>(data.size());
+
+                        cuda::apply_forward_pipeline<T>(
+                            filters,
+                            device_uncompressed_data.get_raw(),
+                            device_filtered_data.get_raw(),
+                            device_uncompressed_data.bytes()
+                        );
+                    }
+
+                    // Determine which buffer to feed into the compressor
+                    auto& active_uncompressed_buffer =
+                        filters.empty() ? device_uncompressed_data : device_filtered_data;
+
                     auto device_block_pointers = compressor::generate_device_block_pointers(
-                        device_uncompressed_data,
+                        active_uncompressed_buffer,
                         context.block_size,
                         num_blocks
                     );
+
                     auto device_block_sizes = cuda_device_buffer_async<size_t>::from_host(block_sizes);
 
                     // ##################################################################################
-                    // Set up device temporary compressed memory (Flat Buffer Strategy)
+                    // Set up device temporary compressed memory
                     // ##################################################################################
+
                     auto max_block_compressed_size = this->block_max_compressed_size(
                         context.block_size,
                         context.comp_options
@@ -278,7 +387,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     // ##################################################################################
                     // Copy sizes back to host & allocate flat fitted GPU buffer
                     // ##################################################################################
-                    auto compressed_bytes_pinned = make_host_mem<size_t>(num_blocks);
+                    const auto compressed_bytes_pinned = make_host_mem<size_t>(num_blocks);
 
                     device_compressed_bytes.to_host(
                         std::span<size_t>(compressed_bytes_pinned.get(), num_blocks)
@@ -311,8 +420,8 @@ NAMESPACE_COMPRESSED_IMAGE
                         const size_t actual_size = host_compressed_sizes[i];
                         if (actual_size == 0) continue;
 
-                        void* src_ptr = static_cast<void*>(base_device_ptr + (i * max_block_compressed_size));
-                        void* dst_ptr = static_cast<void*>(dest_base_ptr + host_block_offsets[i]);
+                        const auto* src_ptr = static_cast<void*>(base_device_ptr + (i * max_block_compressed_size));
+                        auto* dst_ptr = static_cast<void*>(dest_base_ptr + host_block_offsets[i]);
 
                         cuda_api::instance().memcpy_async(
                             dst_ptr,
@@ -327,12 +436,15 @@ NAMESPACE_COMPRESSED_IMAGE
                     // ##################################################################################
                     cuda_api::instance().stream_synchronize(cudaStreamPerThread);
 
-                    return compressed_chunk<T>{
+                    return compressed_chunk<T>(
                         std::move(fitted_device_buffer),
                         std::move(host_compressed_sizes),
                         std::move(block_sizes),
-                        std::move(context)
-                    };
+                        std::move(context),
+                        filters,
+                        std::nullopt
+
+                    );
                 };
 
 
@@ -351,6 +463,16 @@ NAMESPACE_COMPRESSED_IMAGE
                 {
                     _COMPRESSED_PROFILE_FUNCTION();
 
+                    if (chunk.constant_value)
+                    {
+                        std::fill(
+                            std::execution::par_unseq,
+                            output.begin(),
+                            output.end(),
+                            chunk.constant_value.value()
+                        );
+                        return;
+                    }
                     nvcomp_context context = chunk.context;
 
                     device_guard guard(context.gpu_device);
@@ -420,12 +542,35 @@ NAMESPACE_COMPRESSED_IMAGE
                     );
 
                     // ##################################################################################
+                    // Apply Backward Filter Pipeline (if any)
+                    // ##################################################################################
+
+                    // Conditionally declare and allocate an unfiltered buffer to hold the final state
+                    cuda_device_buffer_async<T> device_unfiltered_data;
+
+                    if (!chunk.filters.empty())
+                    {
+                        device_unfiltered_data = make_device_buffer_async<T>(output.size());
+
+                        cuda::apply_backward_pipeline<T>(
+                            chunk.filters,
+                            device_output.get_raw(),
+                            device_unfiltered_data.get_raw(),
+                            device_output.bytes() // Keep length in bytes!
+                        );
+                    }
+
+                    // Determine which buffer to copy back to the host
+                    auto& active_decompressed_buffer =
+                        chunk.filters.empty() ? device_output : device_unfiltered_data;
+
+                    // ##################################################################################
                     // Copy result back to host
                     // ##################################################################################
                     cuda_api::instance().memcpy_async(
                         static_cast<void*>(output.data()),
-                        device_output.get_raw(),
-                        output.size() * sizeof(T),
+                        active_decompressed_buffer.get_raw(),
+                        active_decompressed_buffer.bytes(),
                         cudaMemcpyDeviceToHost
                     );
 
@@ -435,21 +580,14 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
 
                 /// \brief The codec associated with the compressor.
-                [[nodiscard]] virtual NAMESPACE_COMPRESSED_IMAGE::enums::codec codec() const noexcept
-                =
-                0;
+                [[nodiscard]] virtual NAMESPACE_COMPRESSED_IMAGE::enums::codec codec() const noexcept = 0;
 
-                [[nodiscard]] virtual compression_options default_compression_opts() const noexcept
-                =
-                0;
-                [[nodiscard]] virtual decompression_options default_decompression_opts() const noexcept
-                =
-                0;
+                [[nodiscard]] virtual compression_options default_compression_opts() const noexcept = 0;
+
+                [[nodiscard]] virtual decompression_options default_decompression_opts() const noexcept = 0;
 
                 /// \brief The max block size allowed for a given compressor. Implementation defined.
-                [[nodiscard]] virtual size_t max_block_size() const noexcept
-                =
-                0;
+                [[nodiscard]] virtual size_t max_block_size() const noexcept = 0;
 
                 /// \brief Fits the given `block_size` to be <= what the compressor allows.
                 ///

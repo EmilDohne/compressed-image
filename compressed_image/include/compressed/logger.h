@@ -12,7 +12,9 @@ NAMESPACE_COMPRESSED_IMAGE
 {
     namespace detail
     {
-        static std::shared_ptr<spdlog::logger> s_logger = nullptr;
+        inline std::shared_ptr<spdlog::logger> s_logger = nullptr;
+        inline std::mutex s_logger_mutex;
+
         /// \brief The default logger name used internally if the user does not provide one.
         static inline std::string s_default_logger_name = "compressed_image";
     }
@@ -29,6 +31,7 @@ NAMESPACE_COMPRESSED_IMAGE
     /// \param logger The `spdlog::logger` instance to use for all library logging.
     inline void set_logger(std::shared_ptr<spdlog::logger> logger)
     {
+        std::lock_guard<std::mutex> lock(detail::s_logger_mutex);
         detail::s_logger = logger;
     }
 
@@ -41,11 +44,17 @@ NAMESPACE_COMPRESSED_IMAGE
     /// \return A shared pointer to the currently active `spdlog::logger`.
     inline std::shared_ptr<spdlog::logger> get_logger()
     {
+        std::lock_guard<std::mutex> lock(detail::s_logger_mutex);
         if (!detail::s_logger)
         {
-            // Lazy init with a sensible default
-            detail::s_logger = spdlog::stdout_color_mt(detail::s_default_logger_name);
-            detail::s_logger->set_level(spdlog::level::info);
+            detail::s_logger = spdlog::get(detail::s_default_logger_name);
+
+            if (!detail::s_logger)
+            {
+                // Lazy init with a sensible default
+                detail::s_logger = spdlog::stdout_color_mt(detail::s_default_logger_name);
+                detail::s_logger->set_level(spdlog::level::info);
+            }
         }
         return detail::s_logger;
     }

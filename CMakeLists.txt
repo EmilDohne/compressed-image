@@ -32,11 +32,13 @@ if (MAIN_PROJECT)
    set(COMPRESSED_IMAGE_BUILD_DOCS ON)
    set(COMPRESSED_IMAGE_BUILD_BENCHMARKS ON)
    set(COMPRESSED_IMAGE_EXTENDED_WARNINGS ON)
+   set(COMPRESSED_IMAGE_BUILD_CUDA_FILTER_KERNELS ON)
 endif ()
 
 option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." OFF)
 option(COMPRESSED_IMAGE_EXTENDED_WARNINGS "Whether to compile with extended warnings (-Wextra, -Werror etc.)" OFF)
 option(COMPRESSED_IMAGE_CUDA_VERSION "CUDA Runtime/Toolkit version" 12)
+option(COMPRESSED_IMAGE_BUILD_CUDA_FILTER_KERNELS "Whether to compile the CUDA filter kernels ran prior to compression/decompression." ON)
 option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
 option(COMPRESSED_IMAGE_BUILD_EXAMPLES OFF)
 option(COMPRESSED_IMAGE_BUILD_DOCS OFF)
@@ -75,7 +77,8 @@ set(SPDLOG_USE_STD_FORMAT ON)
 add_subdirectory(thirdparty/spdlog)
 
 # Pull nvcomp (headers + dll/so target)
-include(${CMAKE_CURRENT_LIST_DIR}/cmake/FetchNvcomp.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/fetch_nvcomp.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/load_cuda_plugins.cmake)
 
 # Include the local vcpkg toolchain, if requested, otherwise it is up to the user
 # to provide a valid OpenImageIO library (that can be found via find_package)
@@ -95,6 +98,14 @@ endif ()
 # Projects
 # --------------------------------------------------------------------------
 add_subdirectory(compressed_image)
+
+
+if (COMPRESSED_IMAGE_BUILD_CUDA_FILTER_KERNELS)
+   add_subdirectory(plugins/bytedelta)
+   add_subdirectory(plugins/delta)
+   add_subdirectory(plugins/xordelta)
+   add_subdirectory(plugins/shuffle)
+endif ()
 
 if (COMPRESSED_IMAGE_BUILD_TESTS)
    add_library(doctest INTERFACE)

@@ -31,10 +31,12 @@ NAMESPACE_COMPRESSED_IMAGE
     {
         fitted_buffer() = default;
 
-        explicit fitted_buffer(size_t initial_size)
+        explicit fitted_buffer(size_t initial_size, bool requires_pinning)
         {
             m_buffer.resize(initial_size);
             m_size = initial_size;
+            m_requires_pinning = requires_pinning;
+            apply_pinning();
         }
 
         std::span<T> get()
@@ -57,7 +59,19 @@ NAMESPACE_COMPRESSED_IMAGE
         {
             if (capacity > m_buffer.size())
             {
+                const bool will_reallocate = capacity > m_buffer.capacity();
+                if (will_reallocate)
+                {
+                    remove_pinning();
+                }
+
                 m_buffer.resize(capacity);
+
+                // Re-pin the newly allocated memory block.
+                if (will_reallocate)
+                {
+                    apply_pinning();
+                }
             }
 
             if (!m_is_fitted)
@@ -83,10 +97,62 @@ NAMESPACE_COMPRESSED_IMAGE
             return m_buffer.size();
         }
 
+        void pin()
+        {
+            if (!m_is_pinned)
+            {
+                m_is_pinned = true;
+                apply_pinning();
+            }
+        }
+
+        void unpin()
+        {
+            if (m_is_pinned)
+            {
+                m_is_pinned = false;
+                remove_pinning();
+            }
+        }
+
+        [[nodiscard]] bool is_pinned() const noexcept
+        {
+            return m_is_pinned;
+        }
+
     private:
         util::default_init_vector<T> m_buffer;
+
+        std::optional<NAMESPACE_COMPRESSED_IMAGE::cuda::scoped_host_pinner> m_pinner;
+        bool m_requires_pinning = false;
+        bool m_is_pinned = false;
+
         bool m_is_fitted = false;
         size_t m_size = 0;
+
+        void apply_pinning()
+        {
+            if (!m_requires_pinning)
+            {
+                return;
+            }
+
+            if (m_is_pinned && m_buffer.capacity() > 0)
+            {
+                // Pin based on capacity(), not size(), to ensure the entire underlying
+                // allocation block is registered. If the vector resizes without reallocating,
+                // the new elements will already be properly pinned.
+                m_pinner.emplace(
+                    static_cast<void*>(m_buffer.data()),
+                    m_buffer.capacity() * sizeof(T)
+                );
+            }
+        }
+
+        void remove_pinning()
+        {
+            m_pinner.reset();
+        }
     };
 
     template <typename T>
@@ -229,6 +295,11 @@ NAMESPACE_COMPRESSED_IMAGE
                   block_size(block_size_),
                   chunk_size(chunk_size_)
             {
+                if (enums::is_gpu_codec(codec))
+                {
+                    this->decompressed_buffer = fitted_buffer<storage_type>{size_t{}, true};
+                    this->compressed_buffer = fitted_buffer<std::byte>{size_t{}, true};
+                }
             }
 
             schunk_pointer schunk = nullptr;

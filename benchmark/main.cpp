@@ -23,7 +23,7 @@
 #include <compressed/ranges.h>
 #include <compressed/detail/scoped_timer.h>
 
-#include "memory_sampling.h"
+#include "util/memory_sampling.h"
 #include "util.h"
 
 /// The number of executions per benchmark
@@ -96,14 +96,18 @@ void bench_image_iteration_normal(benchmark::State& state, const std::filesystem
     std::vector<T> pixels(spec.width * spec.height * spec.nchannels);
     std::vector<std::vector<T>> channels(spec.nchannels, std::vector<T>(spec.width * spec.height));
 
-    auto typedesc = compressed::enums::get_type_desc<T>();
-    input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
-    compressed::image_algo::deinterleave(std::span<const T>(pixels), channels);
 
     bench_util::run_with_memory_sampling(
         state,
         [&]()
         {
+            _COMPRESSED_PROFILE_FUNCTION();
+
+            auto typedesc = compressed::enums::get_type_desc<T>();
+            input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
+            compressed::image_algo::deinterleave(std::span<const T>(pixels), channels);
+
+
             for (auto& channel : channels)
             {
                 std::for_each(
@@ -125,10 +129,13 @@ template <typename T, compressed::enums::codec Codec>
 void bench_image_iteration_compressed(benchmark::State& state, const std::filesystem::path& image_path)
 {
     auto image = compressed::image<T>::read(image_path, 0, Codec);
+
     bench_util::run_with_memory_sampling(
         state,
         [&]()
         {
+            _COMPRESSED_PROFILE_FUNCTION();
+
             for (auto& channel : image.channels())
             {
                 for (auto chunk_span : channel)
@@ -153,10 +160,15 @@ template <typename T, compressed::enums::codec Codec>
 void bench_image_iteration_compressed_zip(benchmark::State& state, const std::filesystem::path& image_path)
 {
     auto image = compressed::image<T>::read(image_path, 0, Codec);
+
+
     bench_util::run_with_memory_sampling(
         state,
         [&]()
         {
+            _COMPRESSED_PROFILE_FUNCTION();
+
+
             auto [channel_r, channel_g, channel_b] = image.channels(0, 1, 2);
             for (auto [chunk_r, chunk_g, chunk_b] : compressed::ranges::zip(channel_r, channel_g, channel_b))
             {
@@ -183,10 +195,14 @@ template <typename T, compressed::enums::codec Codec>
 void bench_image_iteration_compressed_get_decompressed(benchmark::State& state, const std::filesystem::path& image_path)
 {
     auto image = compressed::image<T>::read(image_path, 0, Codec);
+
+
     bench_util::run_with_memory_sampling(
         state,
         [&]()
         {
+            _COMPRESSED_PROFILE_FUNCTION();
+
             auto data = image.get_decompressed();
             for (auto& channel : data)
             {

@@ -49,6 +49,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
             // --- Runtime queries ---
             bool available() const noexcept { return handle_ != nullptr; }
+            std::string get_error_string(const cudaError_t error) const;
             int device_count() const;
             int current_device() const;
             void set_device(int device);
@@ -162,6 +163,29 @@ NAMESPACE_COMPRESSED_IMAGE
         // ===========================================================
         // Implementation
         // ===========================================================
+
+        inline std::string cuda_api::get_error_string(const cudaError_t error) const
+        {
+            _COMPRESSED_PROFILE_FUNCTION();
+            if (!get_error_str_fn_)
+            {
+                throw std::runtime_error(
+                    "CUDA function 'cudaGetErrorString' is unavailable (library or entrypoint not loaded)."
+                );
+            }
+
+            try
+            {
+                return std::string(get_error_str_fn_(error));
+            }
+            catch (...)
+            {
+                return std::format(
+                    "unknown error or missing driver string table. Cuda code {}",
+                    static_cast<int>(error)
+                );
+            }
+        }
 
         inline int cuda_api::device_count() const
         {

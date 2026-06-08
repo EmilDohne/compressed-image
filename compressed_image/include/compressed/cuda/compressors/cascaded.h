@@ -12,6 +12,13 @@ NAMESPACE_COMPRESSED_IMAGE::cuda
     template <typename T>
     struct cascaded_compressor final : public detail::compressor<T>
     {
+        virtual std::vector<gpu_filter> get_default_filters() const override
+        {
+            // The cascaded scheme already implements its own filters and thus often we get counterproductive
+            // effects if we run our own filtering schemas.
+            return {};
+        }
+
         [[nodiscard]] NAMESPACE_COMPRESSED_IMAGE::enums::codec codec() const noexcept override
         {
             return NAMESPACE_COMPRESSED_IMAGE::enums::codec::cascaded_gpu;
