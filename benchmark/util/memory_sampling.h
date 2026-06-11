@@ -4,6 +4,9 @@
 #include <thread>
 #include <chrono>
 #include <mutex>
+#include <vector>
+#include <limits>
+#include <algorithm>
 
 #include <benchmark/benchmark.h>
 
@@ -26,28 +29,25 @@ namespace bench_util
 
         // Store relative differences (deltas) instead of absolute values
         inline std::vector<int64_t> g_memory_diffs;
-        inline std::vector<int64_t> g_vram_diffs;
+        inline std::vector<int64_t> g_vram_usage;
     } // detail
 
     void memory_profiler()
     {
         while (detail::g_sampling)
         {
-            size_t mem_used = MemoryAllocTracker::get_bytes_used();
-            size_t vram_used = CudaMemoryTracker::get_bytes_used();
+            size_t mem_used = memory_tracker::get_bytes_used();
+            size_t vram_used = cuda_memory_tracker::get_bytes_used();
 
             // Load the most recent baseline floor set by the main execution thread
             size_t base_mem = detail::g_base_memory.load(std::memory_order_relaxed);
-            size_t base_vram = detail::g_base_vram.load(std::memory_order_relaxed);
 
-            // Compute signed differences (handles potential deallocations gracefully)
             int64_t mem_diff = static_cast<int64_t>(mem_used) - static_cast<int64_t>(base_mem);
-            int64_t vram_diff = static_cast<int64_t>(vram_used) - static_cast<int64_t>(base_vram);
 
             {
                 std::lock_guard<std::mutex> lock(detail::g_mem_mutex);
                 detail::g_memory_diffs.push_back(mem_diff);
-                detail::g_vram_diffs.push_back(vram_diff);
+                detail::g_vram_usage.push_back(vram_used);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(detail::s_mem_sampling_interval_ms));
         }
@@ -60,12 +60,11 @@ namespace bench_util
         {
             std::lock_guard<std::mutex> lock(detail::g_mem_mutex);
             detail::g_memory_diffs.clear();
-            detail::g_vram_diffs.clear();
+            detail::g_vram_usage.clear();
         }
 
         // Establish an initial baseline floor before thread startup
-        detail::g_base_memory.store(MemoryAllocTracker::get_bytes_used(), std::memory_order_relaxed);
-        detail::g_base_vram.store(CudaMemoryTracker::get_bytes_used(), std::memory_order_relaxed);
+        detail::g_base_memory.store(memory_tracker::get_bytes_used(), std::memory_order_relaxed);
 
         detail::g_sampling = true;
         std::thread mem_thread(memory_profiler); // Start memory profiler
@@ -74,8 +73,7 @@ namespace bench_util
         {
             // Pause benchmark timer so memory floor calculations do not skew execution time metrics
             state.PauseTiming();
-            detail::g_base_memory.store(MemoryAllocTracker::get_bytes_used(), std::memory_order_relaxed);
-            detail::g_base_vram.store(CudaMemoryTracker::get_bytes_used(), std::memory_order_relaxed);
+            detail::g_base_memory.store(memory_tracker::get_bytes_used(), std::memory_order_relaxed);
             state.ResumeTiming();
 
             func();
@@ -93,9 +91,9 @@ namespace bench_util
         int64_t max_mem_diff = std::numeric_limits<int64_t>::min();
         int64_t total_mem_diff = 0;
 
-        int64_t min_vram_diff = std::numeric_limits<int64_t>::max();
-        int64_t max_vram_diff = std::numeric_limits<int64_t>::min();
-        int64_t total_vram_diff = 0;
+        size_t min_vram = std::numeric_limits<size_t>::max();
+        size_t max_vram = std::numeric_limits<size_t>::min();
+        size_t total_vram = 0;
 
         size_t mem_samples_count = 0;
         size_t vram_samples_count = 0;
@@ -103,7 +101,7 @@ namespace bench_util
         {
             std::lock_guard<std::mutex> lock(detail::g_mem_mutex);
             mem_samples_count = detail::g_memory_diffs.size();
-            vram_samples_count = detail::g_vram_diffs.size();
+            vram_samples_count = detail::g_vram_usage.size();
 
             for (int64_t diff : detail::g_memory_diffs)
             {
@@ -111,11 +109,11 @@ namespace bench_util
                 max_mem_diff = std::max(max_mem_diff, diff);
                 total_mem_diff += diff;
             }
-            for (int64_t diff : detail::g_vram_diffs)
+            for (size_t usage : detail::g_vram_usage)
             {
-                min_vram_diff = std::min(min_vram_diff, diff);
-                max_vram_diff = std::max(max_vram_diff, diff);
-                total_vram_diff += diff;
+                min_vram = std::min(min_vram, usage);
+                max_vram = std::max(max_vram, usage);
+                total_vram += usage;
             }
         }
 
@@ -123,17 +121,16 @@ namespace bench_util
 
         if (mem_samples_count > 0)
         {
-            state.counters["mem_diff_min_mb"] = static_cast<double>(min_mem_diff) / mb_divisor;
-            state.counters["mem_diff_max_mb"] = static_cast<double>(max_mem_diff) / mb_divisor;
-            state.counters["mem_diff_avg_mb"] = static_cast<double>(total_mem_diff) / (mb_divisor * mem_samples_count);
+            state.counters["mem_min_mb"] = static_cast<double>(min_mem_diff) / mb_divisor;
+            state.counters["mem_max_mb"] = static_cast<double>(max_mem_diff) / mb_divisor;
+            state.counters["mem_avg_mb"] = static_cast<double>(total_mem_diff) / (mb_divisor * mem_samples_count);
         }
 
         if (vram_samples_count > 0)
         {
-            state.counters["gpu_diff_min_mb"] = static_cast<double>(min_vram_diff) / mb_divisor;
-            state.counters["gpu_diff_max_mb"] = static_cast<double>(max_vram_diff) / mb_divisor;
-            state.counters["gpu_diff_avg_mb"] = static_cast<double>(total_vram_diff) / (mb_divisor *
-                vram_samples_count);
+            state.counters["gpu_min_mb"] = static_cast<double>(min_vram) / mb_divisor;
+            state.counters["gpu_max_mb"] = static_cast<double>(max_vram) / mb_divisor;
+            state.counters["gpu_avg_mb"] = static_cast<double>(total_vram) / (mb_divisor * vram_samples_count);
         }
     }
 } // bench_util

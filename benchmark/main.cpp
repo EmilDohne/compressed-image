@@ -16,7 +16,7 @@
 // Note:
 //      This more heavily affects gpu benchmarks as we do more verbose tracking there. This should only be used if you
 //      want to debug performance issues in the library as it might skew the results.
-// #define _COMPRESSED_PROFILE 1
+#define _COMPRESSED_PROFILE 1
 
 #include <compressed/enums.h>
 #include <compressed/image.h>
@@ -27,7 +27,7 @@
 #include "util.h"
 
 /// The number of executions per benchmark
-constexpr static size_t s_iterations = 3;
+constexpr static size_t s_iterations = 1;
 
 // ============================================================================
 // BENCHMARK DEFINITIONS
@@ -96,17 +96,16 @@ void bench_image_iteration_normal(benchmark::State& state, const std::filesystem
     std::vector<T> pixels(spec.width * spec.height * spec.nchannels);
     std::vector<std::vector<T>> channels(spec.nchannels, std::vector<T>(spec.width * spec.height));
 
+    auto typedesc = compressed::enums::get_type_desc<T>();
+    input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
+    compressed::image_algo::deinterleave(std::span<const T>(pixels), channels);
+
 
     bench_util::run_with_memory_sampling(
         state,
         [&]()
         {
             _COMPRESSED_PROFILE_FUNCTION();
-
-            auto typedesc = compressed::enums::get_type_desc<T>();
-            input_ptr->read_image(0, 0, 0, spec.nchannels, typedesc, static_cast<void*>(pixels.data()));
-            compressed::image_algo::deinterleave(std::span<const T>(pixels), channels);
-
 
             for (auto& channel : channels)
             {
@@ -226,16 +225,16 @@ void bench_image_iteration_compressed_get_decompressed(benchmark::State& state, 
 // ============================================================================
 
 constexpr std::array s_all_codecs = {
-    compressed::enums::codec::blosclz,
-    compressed::enums::codec::lz4,
-    compressed::enums::codec::lz4hc,
-    compressed::enums::codec::zstd,
-    compressed::enums::codec::lz4_gpu,
-    compressed::enums::codec::snappy_gpu,
+    // compressed::enums::codec::blosclz,
+    // compressed::enums::codec::lz4,
+    // compressed::enums::codec::lz4hc,
+    // compressed::enums::codec::zstd,
+    // compressed::enums::codec::lz4_gpu,
+    // compressed::enums::codec::snappy_gpu,
     compressed::enums::codec::zstd_gpu,
-    compressed::enums::codec::deflate_gpu,
-    compressed::enums::codec::gdeflate_gpu,
-    compressed::enums::codec::cascaded_gpu
+    // compressed::enums::codec::deflate_gpu,
+    // compressed::enums::codec::gdeflate_gpu,
+    // compressed::enums::codec::cascaded_gpu
 };
 
 /// Helper template to register a single codec configuration
@@ -253,26 +252,26 @@ void register_codec_benchmarks_for_type(const std::filesystem::path& image,
             image
         )
         ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
-
-    benchmark::RegisterBenchmark(
-            std::format("iter_chunked<{}_{}>/{}", tname, cname, filename),
-            &bench_image_iteration_compressed<T, codec>,
-            image
-        )
-        ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
-
-    benchmark::RegisterBenchmark(
-            std::format("iter_zip_rgb<{}_{}>/{}", tname, cname, filename),
-            &bench_image_iteration_compressed_zip<T, codec>,
-            image
-        )
-        ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
-    benchmark::RegisterBenchmark(
-            std::format("iter_get_decompressed<{}_{}>/{}", tname, cname, filename),
-            &bench_image_iteration_compressed_get_decompressed<T, codec>,
-            image
-        )
-        ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
+    //
+    // benchmark::RegisterBenchmark(
+    //         std::format("iter_chunked<{}_{}>/{}", tname, cname, filename),
+    //         &bench_image_iteration_compressed<T, codec>,
+    //         image
+    //     )
+    //     ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
+    //
+    // benchmark::RegisterBenchmark(
+    //         std::format("iter_zip_rgb<{}_{}>/{}", tname, cname, filename),
+    //         &bench_image_iteration_compressed_zip<T, codec>,
+    //         image
+    //     )
+    //     ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
+    // benchmark::RegisterBenchmark(
+    //         std::format("iter_get_decompressed<{}_{}>/{}", tname, cname, filename),
+    //         &bench_image_iteration_compressed_get_decompressed<T, codec>,
+    //         image
+    //     )
+    //     ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
 }
 
 /// Unrolls the global codec array via index_sequence mapping
@@ -281,8 +280,8 @@ void register_benchmarks_for_type_impl(const std::filesystem::path& image, std::
 {
     const std::string filename = image.filename().string();
     const std::string_view tname = type_name<T>();
-
-    // 1. Core Framework Overheads (Independent of Codecs - registered once per type)
+    //
+    // // 1. Core Framework Overheads (Independent of Codecs - registered once per type)
     benchmark::RegisterBenchmark(
             std::format("read_oiio<{}>/{}", tname, filename),
             &bench_image_read_oiio<T>,
@@ -290,12 +289,12 @@ void register_benchmarks_for_type_impl(const std::filesystem::path& image, std::
         )
         ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
 
-    benchmark::RegisterBenchmark(
-            std::format("iter_no_compression<{}>/{}", tname, filename),
-            &bench_image_iteration_normal<T>,
-            image
-        )
-        ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
+    // benchmark::RegisterBenchmark(
+    //         std::format("iter_no_compression<{}>/{}", tname, filename),
+    //         &bench_image_iteration_normal<T>,
+    //         image
+    //     )
+    //     ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
 
     // Codec Dependent Framework Benchmarks (Fold-expanded across all indices)
     (register_codec_benchmarks_for_type<T, Is>(image, filename, tname), ...);
@@ -325,11 +324,12 @@ void register_all_permutations(const std::vector<std::filesystem::path>& images)
 
 auto main(int argc, char** argv) -> int
 {
+    cuda_memory_tracker::initialize();
     compressed::detail::Instrumentor::Get().BeginSession("Benchmarks");
 
     const auto images = get_images();
 
-    register_all_permutations<uint8_t, uint16_t, uint32_t, Imath::half, float>(images);
+    register_all_permutations</*uint8_t, uint16_t, uint32_t, */Imath::half, float>(images);
 
     benchmark::Initialize(&argc, argv);
     benchmark::RunSpecifiedBenchmarks();

@@ -1,44 +1,64 @@
 #pragma once
 
+#include <mutex>
+#include <unordered_map>
+#include <atomic>
+
 #include "compressed/cuda/cuda_hook.h"
 
-namespace bench_util
+class cuda_memory_tracker
 {
-    struct CudaMemoryTracker
+public:
+    // Call this once at the start of your program (e.g., in main())
+    static void initialize()
     {
-        /// \brief Returns global VRAM currently consumed across the active GPU device.
-        /// Note: This represents total system allocation on the card.
-        inline static size_t get_bytes_used() noexcept
-        {
-            const auto& api = NAMESPACE_COMPRESSED_IMAGE::cuda::cuda_api::instance();
-            if (!api.available()) return 0;
+        auto& api = NAMESPACE_COMPRESSED_IMAGE::cuda::cuda_api::instance();
 
-            try
+        api.set_alloc_callback(
+            [](void* ptr, size_t size)
             {
-                size_t free_bytes = 0;
-                size_t total_bytes = 0;
-                api.mem_get_info(free_bytes, total_bytes);
-                return total_bytes - free_bytes;
+                std::lock_guard<std::mutex> lock(get_mutex());
+                get_map()[ptr] = size;
+                get_total_bytes().fetch_add(size, std::memory_order_relaxed);
             }
-            catch (...)
+        );
+
+        api.set_free_callback(
+            [](void* ptr)
             {
-                return 0;
+                std::lock_guard<std::mutex> lock(get_mutex());
+                auto& map = get_map();
+                auto it = map.find(ptr);
+                if (it != map.end())
+                {
+                    get_total_bytes().fetch_sub(it->second, std::memory_order_relaxed);
+                    map.erase(it);
+                }
             }
-        }
+        );
+    }
 
-        inline static double get_kb_used() noexcept
-        {
-            return static_cast<double>(get_bytes_used()) / 1024.0;
-        }
+    static size_t get_bytes_used()
+    {
+        return get_total_bytes().load(std::memory_order_relaxed);
+    }
 
-        inline static double get_mb_used() noexcept
-        {
-            return static_cast<double>(get_bytes_used()) / 1024.0 / 1024.0;
-        }
+private:
+    static std::mutex& get_mutex()
+    {
+        static std::mutex mtx;
+        return mtx;
+    }
 
-        inline static double get_gb_used() noexcept
-        {
-            return static_cast<double>(get_bytes_used()) / 1024.0 / 1024.0 / 1024.0;
-        }
-    };
-} // namespace bench_util
+    static std::unordered_map<void*, size_t>& get_map()
+    {
+        static std::unordered_map<void*, size_t> map;
+        return map;
+    }
+
+    static std::atomic<size_t>& get_total_bytes()
+    {
+        static std::atomic<size_t> total{0};
+        return total;
+    }
+};

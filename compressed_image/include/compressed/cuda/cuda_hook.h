@@ -47,6 +47,13 @@ NAMESPACE_COMPRESSED_IMAGE
                 return inst;
             }
 
+            using alloc_callback_t = std::function<void(void* ptr, size_t size)>;
+            using free_callback_t = std::function<void(void* ptr)>;
+
+            // --- Callback Registration ---
+            void set_alloc_callback(alloc_callback_t cb) { alloc_cb_ = std::move(cb); }
+            void set_free_callback(free_callback_t cb) { free_cb_ = std::move(cb); }
+
             // --- Runtime queries ---
             bool available() const noexcept { return handle_ != nullptr; }
             std::string get_error_string(const cudaError_t error) const;
@@ -94,6 +101,9 @@ NAMESPACE_COMPRESSED_IMAGE
             cuda_api& operator=(cuda_api&&) = delete;
 
         private:
+            mutable alloc_callback_t alloc_cb_;
+            mutable free_callback_t free_cb_;
+
             // Private constructor
             cuda_api();
 
@@ -256,6 +266,10 @@ NAMESPACE_COMPRESSED_IMAGE
         inline void cuda_api::malloc(void*& ptr, size_t size) const
         {
             cuda_call(malloc_fn_, "cudaMalloc", &ptr, size);
+            if (this->alloc_cb_)
+            {
+                alloc_cb_(ptr, size);
+            }
         }
 
         inline void cuda_api::malloc_host(void*& ptr, size_t size) const
@@ -267,11 +281,19 @@ NAMESPACE_COMPRESSED_IMAGE
         inline void cuda_api::malloc_async(void*& ptr, size_t size, cudaStream_t stream)
         {
             cuda_call(malloc_async_fn_, "cudaMallocAsync", &ptr, size, stream);
+            if (this->alloc_cb_)
+            {
+                alloc_cb_(ptr, size);
+            }
         }
 
         inline void cuda_api::free(void* ptr) const
         {
             cuda_call(free_fn_, "cudaFree", ptr);
+            if (this->free_cb_)
+            {
+                free_cb_(ptr);
+            }
         }
 
         inline void cuda_api::free_host(void* ptr) const
@@ -283,6 +305,10 @@ NAMESPACE_COMPRESSED_IMAGE
         inline void cuda_api::free_async(void* ptr, cudaStream_t stream)
         {
             cuda_call(free_async_fn_, "cudaFreeAsync", ptr, stream);
+            if (this->free_cb_)
+            {
+                free_cb_(ptr);
+            }
         }
 
         inline void cuda_api::host_register(void* ptr, size_t size, unsigned int flags) const
