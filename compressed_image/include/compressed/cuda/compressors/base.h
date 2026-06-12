@@ -78,6 +78,13 @@ NAMESPACE_COMPRESSED_IMAGE
 
             /// The GPU device to use for compression/decompression.
             int gpu_device = 0;
+
+            /// The scanline width (row stride) of the data in elements. Forwarded to 2D-aware
+            /// filters (e.g. delta / bytedelta row reset) so they can restart prediction at row
+            /// boundaries. A value of 0 disables row-aware behaviour (filters treat the whole
+            /// chunk as a single 1D stream, matching the legacy behaviour). Stored alongside the
+            /// chunk so the backward pipeline reconstructs with the exact same segmentation.
+            size_t row_stride = 0;
         };
 
 
@@ -327,7 +334,8 @@ NAMESPACE_COMPRESSED_IMAGE
                             filters,
                             device_uncompressed_data.get_raw(),
                             device_filtered_data.get_raw(),
-                            device_uncompressed_data.bytes()
+                            device_uncompressed_data.bytes(),
+                            context.row_stride
                         );
                     }
 
@@ -564,7 +572,8 @@ NAMESPACE_COMPRESSED_IMAGE
                             chunk.filters,
                             device_output.get_raw(),
                             device_unfiltered_data.get_raw(),
-                            device_output.bytes() // Keep length in bytes!
+                            device_output.bytes(), // Keep length in bytes!
+                            chunk.context.row_stride
                         );
                     }
 

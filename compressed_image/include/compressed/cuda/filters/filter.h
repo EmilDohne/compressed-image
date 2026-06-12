@@ -23,7 +23,8 @@ NAMESPACE_COMPRESSED_IMAGE
                                                        const uint8_t* input,
                                                        uint8_t* output,
                                                        const size_t length,
-                                                       const size_t type_size)
+                                                       const size_t type_size,
+                                                       const size_t row_stride)
             {
                 if (filter.type == cuda::enums::filter::bytedelta)
                 {
@@ -35,7 +36,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::bytedelta::instance().forward(input, output, length, type_size);
+                    filter::bytedelta::instance().forward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::shuffle)
                 {
@@ -47,7 +48,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::shuffle::instance().forward(input, output, length, type_size);
+                    filter::shuffle::instance().forward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::delta)
                 {
@@ -59,7 +60,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::delta::instance().forward(input, output, length, type_size);
+                    filter::delta::instance().forward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::xordelta)
                 {
@@ -71,7 +72,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::xordelta::instance().forward(input, output, length, type_size);
+                    filter::xordelta::instance().forward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::fmap)
                 {
@@ -83,7 +84,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::fmap::instance().forward(input, output, length, type_size);
+                    filter::fmap::instance().forward(input, output, length, type_size, row_stride);
                 }
                 else
                 {
@@ -98,7 +99,8 @@ NAMESPACE_COMPRESSED_IMAGE
                                                        const uint8_t* input,
                                                        uint8_t* output,
                                                        const size_t length,
-                                                       const size_t type_size)
+                                                       const size_t type_size,
+                                                       const size_t row_stride)
             {
                 if (filter.type == cuda::enums::filter::bytedelta)
                 {
@@ -110,7 +112,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::bytedelta::instance().backward(input, output, length, type_size);
+                    filter::bytedelta::instance().backward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::shuffle)
                 {
@@ -122,7 +124,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::shuffle::instance().backward(input, output, length, type_size);
+                    filter::shuffle::instance().backward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::delta)
                 {
@@ -134,7 +136,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::delta::instance().backward(input, output, length, type_size);
+                    filter::delta::instance().backward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::xordelta)
                 {
@@ -146,7 +148,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::xordelta::instance().backward(input, output, length, type_size);
+                    filter::xordelta::instance().backward(input, output, length, type_size, row_stride);
                 }
                 else if (filter.type == cuda::enums::filter::fmap)
                 {
@@ -158,7 +160,7 @@ NAMESPACE_COMPRESSED_IMAGE
                         );
                         return false;
                     }
-                    filter::fmap::instance().backward(input, output, length, type_size);
+                    filter::fmap::instance().backward(input, output, length, type_size, row_stride);
                 }
                 else
                 {
@@ -172,7 +174,11 @@ NAMESPACE_COMPRESSED_IMAGE
 
 
         template <typename T>
-        void apply_forward_pipeline(std::vector<gpu_filter>& filters, const void* input, void* output, size_t length)
+        void apply_forward_pipeline(std::vector<gpu_filter>& filters,
+                                    const void* input,
+                                    void* output,
+                                    size_t length,
+                                    size_t row_stride = 0)
         {
             _COMPRESSED_PROFILE_FUNCTION();
 
@@ -205,7 +211,8 @@ NAMESPACE_COMPRESSED_IMAGE
                     static_cast<const uint8_t*>(input),
                     static_cast<uint8_t*>(output),
                     length,
-                    sizeof(T)
+                    sizeof(T),
+                    row_stride
                 );
 
                 // filter
@@ -239,7 +246,8 @@ NAMESPACE_COMPRESSED_IMAGE
                     static_cast<const uint8_t*>(current_src),
                     static_cast<uint8_t*>(current_dst),
                     length,
-                    sizeof(T)
+                    sizeof(T),
+                    row_stride
                 );
 
                 if (success)
@@ -270,7 +278,8 @@ NAMESPACE_COMPRESSED_IMAGE
         void apply_backward_pipeline(const std::vector<gpu_filter>& filters,
                                      const void* input,
                                      void* output,
-                                     size_t length)
+                                     size_t length,
+                                     size_t row_stride = 0)
         {
             _COMPRESSED_PROFILE_FUNCTION();
 
@@ -293,7 +302,8 @@ NAMESPACE_COMPRESSED_IMAGE
                     static_cast<const uint8_t*>(input),
                     static_cast<uint8_t*>(output),
                     length,
-                    sizeof(T)
+                    sizeof(T),
+                    row_stride
                 );
 
                 if (!success)
@@ -321,7 +331,8 @@ NAMESPACE_COMPRESSED_IMAGE
                     static_cast<const uint8_t*>(current_src),
                     static_cast<uint8_t*>(current_dst),
                     length,
-                    sizeof(T)
+                    sizeof(T),
+                    row_stride
                 );
 
                 if (success)

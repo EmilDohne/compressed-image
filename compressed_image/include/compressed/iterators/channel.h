@@ -358,7 +358,8 @@ NAMESPACE_COMPRESSED_IMAGE
                 m_state->num_threads,
                 m_state->compression_level,
                 m_state->block_size,
-                gpu_device
+                gpu_device,
+                m_state->width
             );
         }
 
@@ -490,13 +491,14 @@ NAMESPACE_COMPRESSED_IMAGE
             const size_t num_threads,
             const size_t compression_level,
             const size_t block_size,
-            const int gpu_device
+            const int gpu_device,
+            const size_t row_stride = 0
         )
         {
             if (enums::is_gpu_codec(codec))
             {
                 return gpu_compression_context{
-                    .ctx = cuda::make_compression_context<storage_type>(codec, gpu_device, block_size)
+                    .ctx = cuda::make_compression_context<storage_type>(codec, gpu_device, block_size, row_stride)
                 };
             }
 

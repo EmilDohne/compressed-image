@@ -2,22 +2,21 @@
 #include <cub/cub.cuh>
 #include <stdint.h>
 
-/// \brief bytedelta forward kernel
-///
-/// This kernel applies a bytedelta operation to the `input`, modifying the `output` in-place.
-///
-/// \param input The input buffer that must have size `length`
-/// \param output The output buffer that must have size `length`
-/// \param length The byte length of the input and output buffers
-/// \param stream_len The number of bytes per stream element
+// ##########################################################################
+// bytedelta kernels
+// ##########################################################################
+//
+// Runs on already-shuffled data: the buffer is `typesize` independent byte lanes, each
+// `stream_len = length / typesize` bytes long. Flat 1D horizontal byte delta within each lane.
+// `row_stride` is accepted only for ABI parity and is ignored.
+
 __global__ void bytedelta_forward_kernel(const uint8_t* input, uint8_t* output, size_t length, size_t stream_len)
 {
     size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < length)
     {
-        int ip = tid % stream_len;
-        if (ip == 0)
+        if (tid % stream_len == 0)
         {
             output[tid] = input[tid];
         }
@@ -28,16 +27,6 @@ __global__ void bytedelta_forward_kernel(const uint8_t* input, uint8_t* output, 
     }
 }
 
-/// \brief bytedelta backward kernel (Inverse operation)
-///
-/// This kernel reverses the bytedelta operation using a segmented inclusive
-/// prefix-sum. Each block processes a single "type" (or channel) over its `stream_len`.
-///
-/// \tparam BLOCK_THREADS The number of threads per block. Must match the launch configuration.
-/// \param input The input buffer containing the delta-encoded bytes
-/// \param output The output buffer to store the decoded bytes
-/// \param stream_len The number of bytes per segment/channel
-/// \param typesize The total number of independent segments/channels
 template <int BLOCK_THREADS>
 __global__ void bytedelta_backward_kernel(const uint8_t* input, uint8_t* output, size_t stream_len, size_t typesize)
 {
@@ -83,62 +72,40 @@ __global__ void bytedelta_backward_kernel(const uint8_t* input, uint8_t* output,
 #endif
 
 extern "C" {
-/// \brief C-API wrapper to launch the forward bytedelta kernel
-///
-/// Calculates grid dimensions based on the total `length` and launches the
-/// forward kernel on the specified stream.
-///
-/// \param d_input Device pointer to the input buffer
-/// \param d_output Device pointer to the output buffer
-/// \param length Total size of the buffers in bytes
-/// \param typesize The number of segments/channels
-/// \param stream The CUDA stream to execute the kernel on
-/// \return cudaError_t Returns cudaSuccess on success, or an error code upon failure
 PLUGIN_EXPORT cudaError_t run_bytedelta_forward(
     const uint8_t* d_input,
     uint8_t* d_output,
     size_t length,
     size_t typesize,
+    size_t row_stride,
     cudaStream_t stream)
 {
-    if (length <= 0 || typesize <= 0) return cudaErrorInvalidValue;
+    (void)row_stride; // accepted for ABI parity; this 1D filter does not use it.
+    if (length == 0 || typesize == 0) return cudaErrorInvalidValue;
 
-    int stream_len = length / typesize;
+    size_t stream_len = length / typesize;
     int threads = 256;
-    int blocks = (length + threads - 1) / threads;
+    size_t blocks = (length + threads - 1) / threads;
 
     bytedelta_forward_kernel<<<blocks, threads, 0, stream>>>(d_input, d_output, length, stream_len);
     return cudaGetLastError();
 }
 
-/// \brief C-API wrapper to launch the backward bytedelta kernel
-///
-/// Configures the grid such that each block handles one `type_size` and launches
-/// the backward kernel on the specified stream.
-///
-/// \param d_input Device pointer to the input buffer
-/// \param d_output Device pointer to the output buffer
-/// \param length Total size of the buffers in bytes
-/// \param type_size The number of segments/channels
-/// \param stream The CUDA stream to execute the kernel on
-/// \return cudaError_t Returns cudaSuccess on success, or an error code upon failure
 PLUGIN_EXPORT cudaError_t run_bytedelta_backward(
     const uint8_t* d_input,
     uint8_t* d_output,
     const size_t length,
     const size_t type_size,
+    size_t row_stride,
     cudaStream_t stream)
 {
-    if (length <= 0 || type_size <= 0)
-    {
-        return cudaErrorInvalidValue;
-    }
+    (void)row_stride;
+    if (length == 0 || type_size == 0) return cudaErrorInvalidValue;
 
-    const int stream_len = length / type_size;
+    const size_t stream_len = length / type_size;
     const int block_threads = 256;
-    int blocks = type_size;
 
-    bytedelta_backward_kernel<block_threads><<<blocks, block_threads, 0, stream>>>(
+    bytedelta_backward_kernel<block_threads><<<type_size, block_threads, 0, stream>>>(
         d_input,
         d_output,
         stream_len,

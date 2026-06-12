@@ -142,8 +142,11 @@ PLUGIN_EXPORT cudaError_t run_fmap_forward(
     uint8_t* d_output,
     size_t length_bytes,
     size_t type_size,
+    size_t row_stride,
     cudaStream_t stream)
 {
+    // fmap is an element-wise IEEE-754 order map; it has no notion of rows.
+    (void)row_stride;
     return run_fmap(d_input, d_output, length_bytes, type_size, /*forward=*/true, stream);
 }
 
@@ -152,8 +155,11 @@ PLUGIN_EXPORT cudaError_t run_fmap_backward(
     uint8_t* d_output,
     size_t length_bytes,
     size_t type_size,
+    size_t row_stride,
     cudaStream_t stream)
 {
+    // fmap is an element-wise IEEE-754 order map; it has no notion of rows.
+    (void)row_stride;
     return run_fmap(d_input, d_output, length_bytes, type_size, /*forward=*/false, stream);
 }
 

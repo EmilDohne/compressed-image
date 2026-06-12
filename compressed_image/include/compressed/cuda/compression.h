@@ -59,10 +59,14 @@ NAMESPACE_COMPRESSED_IMAGE
         nvcomp_context make_compression_context(
             const NAMESPACE_COMPRESSED_IMAGE::enums::codec codec,
             const int gpu_device,
-            const size_t block_size
+            const size_t block_size,
+            const size_t row_stride = 0
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
+
+            // row_stride (scanline width in elements) is forwarded to the filter ABI for potential
+            // 2D-aware use. All current filters are 1D and ignore it (see CLAUDE.md findings #9-#10).
             auto compressor = make_compressor<T>(codec);
 
             return std::visit(
@@ -73,7 +77,8 @@ NAMESPACE_COMPRESSED_IMAGE
                         .decomp_options = compressor_raw.default_decompression_opts(),
                         .block_size = block_size,
                         .codec = codec,
-                        .gpu_device = gpu_device
+                        .gpu_device = gpu_device,
+                        .row_stride = row_stride
                     };
                 },
                 compressor

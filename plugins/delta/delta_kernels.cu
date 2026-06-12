@@ -5,6 +5,12 @@
 // ##########################################################################
 // Regular Delta Kernels (Typed Subtraction / Addition)
 // ##########################################################################
+//
+// Flat 1D horizontal delta (residual against the left neighbour). This is the proven default.
+// `row_stride` is accepted only for ABI parity with the other filters and is ignored here.
+//
+// 16-bit data is additionally zigzag-encoded (signed residual -> small unsigned), a near-free
+// cratio win.
 
 template <typename T> // T is the unsigned type
 __device__ __forceinline__ T zigzag_encode(T v)
@@ -22,16 +28,14 @@ __device__ __forceinline__ T zigzag_decode(T u)
 }
 
 template <typename T>
-__global__ void delta_forward_kernel(const T* input, T* output, const size_t num_elements, const size_t stream_len)
+__global__ void delta_forward_kernel(const T* input, T* output, const size_t num_elements)
 {
     size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < num_elements)
     {
-        if (const size_t ip = tid % stream_len; ip == 0)
+        if (tid == 0)
         {
-            // From testing, we can typically expect a ~0-1x increase in cratio by doing a zigzag encoding of
-            // sizeof(T) == 2. This is virtually free performance wise
             if constexpr (sizeof(T) == 2)
             {
                 output[tid] = zigzag_encode(input[tid]);
@@ -45,7 +49,7 @@ __global__ void delta_forward_kernel(const T* input, T* output, const size_t num
         {
             if constexpr (sizeof(T) == 2)
             {
-                output[tid] = zigzag_encode(input[tid] - input[tid - 1]);
+                output[tid] = zigzag_encode(static_cast<T>(input[tid] - input[tid - 1]));
             }
             else
             {
@@ -56,38 +60,33 @@ __global__ void delta_forward_kernel(const T* input, T* output, const size_t num
 }
 
 template <typename T, int BLOCK_THREADS>
-__global__ void delta_backward_kernel(const T* input, T* output, size_t stream_len, size_t num_streams)
+__global__ void delta_backward_kernel(const T* input, T* output, size_t num_elements)
 {
-    size_t ich = blockIdx.x;
-    if (ich >= num_streams) return;
-
-    size_t offset = ich * stream_len;
-
     typedef cub::BlockScan<T, BLOCK_THREADS> BlockScan;
     __shared__ typename BlockScan::TempStorage temp_storage;
 
     T carry = 0;
 
-    for (size_t i_base = 0; i_base < stream_len; i_base += BLOCK_THREADS)
+    for (size_t i_base = 0; i_base < num_elements; i_base += BLOCK_THREADS)
     {
         size_t i = i_base + threadIdx.x;
-        bool valid = (i < stream_len);
+        bool valid = (i < num_elements);
 
         T thread_data{};
         if constexpr (sizeof(T) == 2)
         {
-            thread_data = valid ? zigzag_decode(input[offset + i]) : 0;
+            thread_data = valid ? zigzag_decode(input[i]) : 0;
         }
         else
         {
-            thread_data = valid ? input[offset + i] : 0;
+            thread_data = valid ? input[i] : 0;
         }
         T block_sum;
         BlockScan(temp_storage).InclusiveSum(thread_data, thread_data, block_sum);
 
         if (valid)
         {
-            output[offset + i] = thread_data + carry;
+            output[i] = thread_data + carry;
         }
 
         carry += block_sum;
@@ -106,74 +105,48 @@ __global__ void delta_backward_kernel(const T* input, T* output, size_t stream_l
 #define PLUGIN_EXPORT __attribute__((visibility("default")))
 #endif
 
+namespace
+{
+template <typename T>
+void launch_delta_forward(const uint8_t* d_in, uint8_t* d_out, size_t num_elements, cudaStream_t stream)
+{
+    const auto* in = reinterpret_cast<const T*>(d_in);
+    auto* out = reinterpret_cast<T*>(d_out);
+    const int threads = 256;
+    size_t blocks = (num_elements + threads - 1) / threads;
+    delta_forward_kernel<T><<<blocks, threads, 0, stream>>>(in, out, num_elements);
+}
+
+template <typename T>
+void launch_delta_backward(const uint8_t* d_in, uint8_t* d_out, size_t num_elements, cudaStream_t stream)
+{
+    const auto* in = reinterpret_cast<const T*>(d_in);
+    auto* out = reinterpret_cast<T*>(d_out);
+    const int block_threads = 256;
+    delta_backward_kernel<T, block_threads><<<1, block_threads, 0, stream>>>(in, out, num_elements);
+}
+}
+
 extern "C" {
 PLUGIN_EXPORT cudaError_t run_delta_forward(
     const uint8_t* d_input,
     uint8_t* d_output,
     size_t length_bytes,
     size_t type_size,
+    size_t row_stride,
     cudaStream_t stream)
 {
+    (void)row_stride; // accepted for ABI parity; this 1D filter does not use it.
     if (length_bytes == 0 || type_size == 0) return cudaErrorInvalidValue;
 
     size_t num_elements = length_bytes / type_size;
 
-    // For a flat 1D delta, the stream length is the entire array
-    size_t stream_len = num_elements;
-
-    int threads = 256;
-    int blocks = (num_elements + threads - 1) / threads;
-
     switch (type_size)
     {
-    case 1:
-        {
-            const uint8_t* in_ptr = reinterpret_cast<const uint8_t*>(d_input);
-            uint8_t* out_ptr = reinterpret_cast<uint8_t*>(d_output);
-            delta_forward_kernel<uint8_t><<<blocks, threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                num_elements,
-                stream_len
-            );
-            break;
-        }
-    case 2:
-        {
-            const uint16_t* in_ptr = reinterpret_cast<const uint16_t*>(d_input);
-            uint16_t* out_ptr = reinterpret_cast<uint16_t*>(d_output);
-            delta_forward_kernel<uint16_t><<<blocks, threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                num_elements,
-                stream_len
-            );
-            break;
-        }
-    case 4:
-        {
-            const uint32_t* in_ptr = reinterpret_cast<const uint32_t*>(d_input);
-            uint32_t* out_ptr = reinterpret_cast<uint32_t*>(d_output);
-            delta_forward_kernel<uint32_t><<<blocks, threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                num_elements,
-                stream_len
-            );
-            break;
-        }
-    case 8:
-        {
-            const uint64_t* in_ptr = reinterpret_cast<const uint64_t*>(d_input);
-            uint64_t* out_ptr = reinterpret_cast<uint64_t*>(d_output);
-            delta_forward_kernel<uint64_t><<<blocks, threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                num_elements,
-                stream_len
-            );
-            break;
-        }
+    case 1: launch_delta_forward<uint8_t>(d_input, d_output, num_elements, stream); break;
+    case 2: launch_delta_forward<uint16_t>(d_input, d_output, num_elements, stream); break;
+    case 4: launch_delta_forward<uint32_t>(d_input, d_output, num_elements, stream); break;
+    case 8: launch_delta_forward<uint64_t>(d_input, d_output, num_elements, stream); break;
     default: return cudaErrorInvalidValue;
     }
     return cudaGetLastError();
@@ -184,69 +157,20 @@ PLUGIN_EXPORT cudaError_t run_delta_backward(
     uint8_t* d_output,
     const size_t length_bytes,
     const size_t type_size,
+    size_t row_stride,
     cudaStream_t stream)
 {
+    (void)row_stride;
     if (length_bytes == 0 || type_size == 0) return cudaErrorInvalidValue;
 
     size_t num_elements = length_bytes / type_size;
 
-    // For a flat 1D delta, there is 1 stream that is the length of the array
-    size_t stream_len = num_elements;
-    size_t num_streams = 1;
-
-    const int block_threads = 256;
-    int blocks = num_streams; // 1 block loops over the single stream
-
     switch (type_size)
     {
-    case 1:
-        {
-            const uint8_t* in_ptr = reinterpret_cast<const uint8_t*>(d_input);
-            uint8_t* out_ptr = reinterpret_cast<uint8_t*>(d_output);
-            delta_backward_kernel<uint8_t, block_threads><<<blocks, block_threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                stream_len,
-                num_streams
-            );
-            break;
-        }
-    case 2:
-        {
-            const uint16_t* in_ptr = reinterpret_cast<const uint16_t*>(d_input);
-            uint16_t* out_ptr = reinterpret_cast<uint16_t*>(d_output);
-            delta_backward_kernel<uint16_t, block_threads><<<blocks, block_threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                stream_len,
-                num_streams
-            );
-            break;
-        }
-    case 4:
-        {
-            const uint32_t* in_ptr = reinterpret_cast<const uint32_t*>(d_input);
-            uint32_t* out_ptr = reinterpret_cast<uint32_t*>(d_output);
-            delta_backward_kernel<uint32_t, block_threads><<<blocks, block_threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                stream_len,
-                num_streams
-            );
-            break;
-        }
-    case 8:
-        {
-            const uint64_t* in_ptr = reinterpret_cast<const uint64_t*>(d_input);
-            uint64_t* out_ptr = reinterpret_cast<uint64_t*>(d_output);
-            delta_backward_kernel<uint64_t, block_threads><<<blocks, block_threads, 0, stream>>>(
-                in_ptr,
-                out_ptr,
-                stream_len,
-                num_streams
-            );
-            break;
-        }
+    case 1: launch_delta_backward<uint8_t>(d_input, d_output, num_elements, stream); break;
+    case 2: launch_delta_backward<uint16_t>(d_input, d_output, num_elements, stream); break;
+    case 4: launch_delta_backward<uint32_t>(d_input, d_output, num_elements, stream); break;
+    case 8: launch_delta_backward<uint64_t>(d_input, d_output, num_elements, stream); break;
     default: return cudaErrorInvalidValue;
     }
     return cudaGetLastError();

@@ -1494,8 +1494,34 @@ NAMESPACE_COMPRESSED_IMAGE
             std::future<void> processing_future;
 
             /// Resize the ring buffer slot to
-            void resize(size_t num_channels, enums::codec codec)
+            static void resize(std::vector<ring_buffer_slot>& buffers,
+                               size_t num_channels,
+                               enums::codec codec,
+                               size_t max_chunk_size,
+                               size_t chunk_size_aligned)
             {
+                for (auto& slot : buffers)
+                {
+                    slot.interleaved_buffer.resize(max_chunk_size / sizeof(T));
+                    slot.deinterleaved_buffer.resize(num_channels);
+                    for (auto& buffer : slot.deinterleaved_buffer)
+                    {
+                        buffer.resize(chunk_size_aligned / sizeof(T));
+                    }
+
+                    if (enums::is_gpu_codec(codec))
+                    {
+                        slot.memory_pinners.reserve(1 + slot.deinterleaved_buffer.size());
+                        slot.memory_pinners.emplace_back(
+                            slot.interleaved_buffer.data(),
+                            slot.interleaved_buffer.size() * sizeof(T)
+                        );
+                        for (auto& buffer : slot.deinterleaved_buffer)
+                        {
+                            slot.memory_pinners.emplace_back(buffer.data(), buffer.size() * sizeof(T));
+                        }
+                    }
+                }
             }
 
             ring_buffer_slot() = default;
@@ -1610,29 +1636,6 @@ NAMESPACE_COMPRESSED_IMAGE
             size_t ring_buffer_size = 3;
             const size_t max_chunk_size = chunk_size_aligned * max_num_channels;
             ring_buffer_t ring_buffer(ring_buffer_size);
-
-            for (auto& slot : ring_buffer)
-            {
-                slot.interleaved_buffer.resize(max_chunk_size / sizeof(T));
-                slot.deinterleaved_buffer.resize(max_num_channels);
-                for (auto& buffer : slot.deinterleaved_buffer)
-                {
-                    buffer.resize(chunk_size_aligned / sizeof(T));
-                }
-
-                if (enums::is_gpu_codec(compression_codec))
-                {
-                    slot.memory_pinners.reserve(1 + slot.deinterleaved_buffer.size());
-                    slot.memory_pinners.emplace_back(
-                        slot.interleaved_buffer.data(),
-                        slot.interleaved_buffer.size() * sizeof(T)
-                    );
-                    for (auto& buffer : slot.deinterleaved_buffer)
-                    {
-                        slot.memory_pinners.emplace_back(buffer.data(), buffer.size() * sizeof(T));
-                    }
-                }
-            }
 
             // Read and compress the channel pairs in chunks
             // -----------------------------------------------------------------------------------
@@ -1903,13 +1906,14 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
 
                 size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;
+                const size_t channel_width = static_cast<size_t>(spec.width);
 
                 // 4. STAGE 2 (COMPUTE): Delegate processing & compression of the freshly read chunk to a background task.
                 // Main thread loops back immediately to read chunk k+1 into the alternate buffer slot.
                 slot.processing_future = thread_pool.submit_task(
                     [
                         &slot, interleaved_fitted, nchannels, read_elements, compression_codec, compression_level,
-                        block_size, chbegin,
+                        block_size, chbegin, channel_width,
                         &schunks, &postprocess, current_chunk_id
                     ]()
                     {
@@ -1934,7 +1938,8 @@ NAMESPACE_COMPRESSED_IMAGE
                                 std::thread::hardware_concurrency(),
                                 compression_level,
                                 block_size,
-                                0
+                                0,
+                                channel_width
                             );
 
                             auto channel_span = std::span<T>(

@@ -170,7 +170,8 @@ NAMESPACE_COMPRESSED_IMAGE
                 m_num_threads,
                 m_compression_level,
                 block_size,
-                gpu_device_index
+                gpu_device_index,
+                m_width
             );
 
             m_schunk = std::make_shared<schunk_var<T>>(
@@ -651,7 +652,8 @@ NAMESPACE_COMPRESSED_IMAGE
                             m_num_threads,
                             m_compression_level,
                             this->block_size(),
-                            cuda::current_device()
+                            cuda::current_device(),
+                            m_width
                         );
 
                         schunk.set_chunk(
@@ -706,7 +708,8 @@ NAMESPACE_COMPRESSED_IMAGE
                             m_num_threads,
                             m_compression_level,
                             this->block_size(),
-                            cuda::current_device()
+                            cuda::current_device(),
+                            m_width
                         );
                         return schunk.to_uncompressed(std::get<gpu_compression_context>(compression_context));
                     }
@@ -744,14 +747,15 @@ NAMESPACE_COMPRESSED_IMAGE
             const size_t num_threads,
             const size_t compression_level,
             const size_t block_size,
-            const int gpu_device
+            const int gpu_device,
+            const size_t row_stride = 0
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
             if (enums::is_gpu_codec(codec))
             {
                 return gpu_compression_context{
-                    .ctx = cuda::make_compression_context<T>(codec, gpu_device, block_size)
+                    .ctx = cuda::make_compression_context<T>(codec, gpu_device, block_size, row_stride)
 
                 };
             }

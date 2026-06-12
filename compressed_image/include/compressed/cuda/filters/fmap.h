@@ -72,6 +72,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     uint8_t* d_output,
                     size_t length,
                     size_t typesize,
+                    size_t row_stride = 0,
                     cudaStream_t stream = cudaStreamPerThread) const;
 
                 void backward(
@@ -79,6 +80,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     uint8_t* d_output,
                     size_t length,
                     size_t typesize,
+                    size_t row_stride = 0,
                     cudaStream_t stream = cudaStreamPerThread) const;
 
                 /// Singleton, so no copy, move, etc.
@@ -108,10 +110,11 @@ NAMESPACE_COMPRESSED_IMAGE
                 uint8_t* d_output,
                 size_t length,
                 size_t typesize,
+                size_t row_stride,
                 cudaStream_t stream) const
             {
                 _COMPRESSED_PROFILE_FUNCTION();
-                plugin_call(forward_fn_, "run_fmap_forward", d_input, d_output, length, typesize, stream);
+                plugin_call(forward_fn_, "run_fmap_forward", d_input, d_output, length, typesize, row_stride, stream);
             }
 
             inline void fmap::backward(
@@ -119,10 +122,11 @@ NAMESPACE_COMPRESSED_IMAGE
                 uint8_t* d_output,
                 size_t length,
                 size_t typesize,
+                size_t row_stride,
                 cudaStream_t stream) const
             {
                 _COMPRESSED_PROFILE_FUNCTION();
-                plugin_call(backward_fn_, "run_fmap_backward", d_input, d_output, length, typesize, stream);
+                plugin_call(backward_fn_, "run_fmap_backward", d_input, d_output, length, typesize, row_stride, stream);
             }
 
             template <typename Func, typename... Args>

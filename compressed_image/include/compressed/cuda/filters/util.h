@@ -18,6 +18,7 @@ NAMESPACE_COMPRESSED_IMAGE
             uint8_t* /* device_output_ptr */,
             size_t /* length (bytes) */,
             size_t /* type_size */,
+            size_t /* row_stride (elements); 0 = treat the whole chunk as one row (no 2D reset) */,
             cudaStream_t /* stream */
         );
     }

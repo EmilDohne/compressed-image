@@ -88,8 +88,11 @@ PLUGIN_EXPORT cudaError_t run_shuffle_forward(
     uint8_t* d_output,
     size_t length,
     size_t typesize,
+    size_t row_stride,
     cudaStream_t stream)
 {
+    // shuffle is a pure transpose; it has no notion of rows, so row_stride is ignored.
+    (void)row_stride;
     if (length == 0 || typesize == 0) return cudaErrorInvalidValue;
 
     size_t stream_len = length / typesize;
@@ -123,8 +126,11 @@ PLUGIN_EXPORT cudaError_t run_shuffle_backward(
     uint8_t* d_output,
     const size_t length,
     const size_t typesize,
+    size_t row_stride,
     cudaStream_t stream)
 {
+    // shuffle is a pure transpose; it has no notion of rows, so row_stride is ignored.
+    (void)row_stride;
     if (length == 0 || typesize == 0) return cudaErrorInvalidValue;
 
     size_t stream_len = length / typesize;
