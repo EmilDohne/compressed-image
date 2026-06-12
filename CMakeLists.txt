@@ -68,6 +68,13 @@ target_include_directories(blosc2_include SYSTEM INTERFACE
    $<INSTALL_INTERFACE:include>
 )
 
+# Add target for bs::thread_pool headers
+add_library(compressed__bs_thread_pool INTERFACE)
+target_include_directories(compressed__bs_thread_pool SYSTEM INTERFACE
+   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/thread-pool/include>
+   $<INSTALL_INTERFACE:include>
+)
+add_library(compressed::bs_thread_pool ALIAS compressed__bs_thread_pool)
 
 # JSON module for parsing/storing metadata
 add_subdirectory(thirdparty/json)
@@ -105,6 +112,7 @@ if (COMPRESSED_IMAGE_BUILD_CUDA_FILTER_KERNELS)
    add_subdirectory(plugins/delta)
    add_subdirectory(plugins/xordelta)
    add_subdirectory(plugins/shuffle)
+   add_subdirectory(plugins/fmap)
 endif ()
 
 if (COMPRESSED_IMAGE_BUILD_TESTS)

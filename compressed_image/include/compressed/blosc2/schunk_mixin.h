@@ -59,6 +59,13 @@ NAMESPACE_COMPRESSED_IMAGE
                 return std::holds_alternative<_gpu_container_type>(m_chunks.at(index));
             };
 
+
+            /// Resize the schunk to a given number of chunks. Default initializes these.
+            void resize(size_t num_chunks)
+            {
+                this->m_chunks.resize(num_chunks);
+            }
+
             /// Generate an uncompressed vector from all of the chunks.
             ///
             /// \param cpu_ctx the decompression context for all cpu based chunks.
@@ -235,41 +242,87 @@ NAMESPACE_COMPRESSED_IMAGE
             /// \param compression_ctx the compression context to use for compression.
             /// \param uncompressed the uncompressed chunk
             /// \param index the index of the chunk within the schunk.
+            /// \param validate_chunk_sizes Whether to validate all the chunk sizes once the setting of the chunk
+            ///                             is done. This should only be disabled if appending/setting in parallel, which
+            ///                             might not guarantee chunk sizes are all consistent. It is up to the caller
+            ///                             to ensure `validate_chunk_sizes` is called at the end.
             ///
             /// \throws std::out_of_range if the index is not valid
-            virtual void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) = 0;
+            virtual void set_chunk(blosc2::context_ptr& compression_ctx,
+                                   std::span<T> uncompressed,
+                                   size_t index,
+                                   bool validate_chunk_sizes = true) = 0;
 
             /// Set the chunk at `index` to the uncompressed data (compressing it).
             ///
             /// \param compression_ctx the compression context to use for compression.
             /// \param uncompressed the uncompressed chunk
             /// \param index the index of the chunk within the schunk.
+            /// \param validate_chunk_sizes Whether to validate all the chunk sizes once the setting of the chunk
+            ///                             is done. This should only be disabled if appending/setting in parallel, which
+            ///                             might not guarantee chunk sizes are all consistent. It is up to the caller
+            ///                             to ensure `validate_chunk_sizes` is called at the end.
             ///
             /// \throws std::out_of_range if the index is not valid
-            virtual void set_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed, size_t index) = 0;
+            virtual void set_chunk(cuda::nvcomp_context compression_ctx,
+                                   std::span<T> uncompressed,
+                                   size_t index,
+                                   bool validate_chunk_sizes = true) = 0;
 
+
+            /// Set the chunk at `index` to the uncompressed data (compressing it).
+            ///
+            /// \param compression_ctx the compression context to use for compression.
+            /// \param uncompressed the uncompressed chunk
+            /// \param index the index of the chunk within the schunk.
+            /// \param validate_chunk_sizes Whether to validate all the chunk sizes once the setting of the chunk
+            ///                             is done. This should only be disabled if appending/setting in parallel, which
+            ///                             might not guarantee chunk sizes are all consistent. It is up to the caller
+            ///                             to ensure `validate_chunk_sizes` is called at the end.
+            ///
+            /// \throws std::out_of_range if the index is not valid
+            virtual void set_chunk(compression_context_var compression_ctx,
+                                   std::span<T> uncompressed,
+                                   size_t index,
+                                   bool validate_chunk_sizes = true) = 0;
 
             /// Append to the schunk with the uncompressed data (compressing it).
             ///
             /// \param compression_ctx the compression context to use for compression.
             /// \param uncompressed the uncompressed chunk
-            virtual void append_chunk(cuda::nvcomp_context compression_ctx, std::span<const T> uncompressed) = 0;
+            /// \param validate_chunk_sizes Whether to validate all the chunk sizes once the setting of the chunk
+            ///                             is done. This should only be disabled if appending/setting in parallel, which
+            ///                             might not guarantee chunk sizes are all consistent. It is up to the caller
+            ///                             to ensure `validate_chunk_sizes` is called at the end.
+            virtual void append_chunk(cuda::nvcomp_context compression_ctx,
+                                      std::span<const T> uncompressed,
+                                      bool validate_chunk_sizes = true) = 0;
 
             /// Append to the schunk with the uncompressed data (compressing it).
             ///
             /// \param compression_ctx the compression context to use for compression.
             /// \param uncompressed the uncompressed chunk
             /// \param compression_buff the compression buffer to use for temporary storage.
+            /// \param validate_chunk_sizes Whether to validate all the chunk sizes once the setting of the chunk
+            ///                             is done. This should only be disabled if appending/setting in parallel, which
+            ///                             might not guarantee chunk sizes are all consistent. It is up to the caller
+            ///                             to ensure `validate_chunk_sizes` is called at the end.
             virtual void append_chunk(blosc2::context_ptr& compression_ctx,
                                       std::span<T> uncompressed,
-                                      std::span<std::byte> compression_buff) = 0;
+                                      std::span<std::byte> compression_buff,
+                                      bool validate_chunk_sizes = true) = 0;
 
             /// Append to the schunk with the uncompressed data (compressing it).
             ///
             /// \param compression_ctx the compression context to use for compression.
             /// \param uncompressed the uncompressed chunk
+            /// \param validate_chunk_sizes Whether to validate all the chunk sizes once the setting of the chunk
+            ///                             is done. This should only be disabled if appending/setting in parallel, which
+            ///                             might not guarantee chunk sizes are all consistent. It is up to the caller
+            ///                             to ensure `validate_chunk_sizes` is called at the end.
             virtual void append_chunk(compression_context_var compression_ctx,
-                                      std::span<T> uncompressed) = 0;
+                                      std::span<T> uncompressed,
+                                      bool validate_chunk_sizes = true) = 0;
 
 
             /// Retrieve the number of elements (uncompressed) that the schunk stores.
@@ -357,30 +410,9 @@ NAMESPACE_COMPRESSED_IMAGE
                 return m_block_size;
             }
 
-        protected:
-            std::vector<std::variant<_cpu_container_type, _gpu_container_type>> m_chunks{};
-            /// The maximum size a chunk is constrained to, in bytes. This will dictate the size of all chunks from
-            ///  0 - (this->m_chunks.size() - 1). The last chunk may be any other size smaller than or equal to this value.
-            size_t m_chunk_size = s_default_chunksize;
-            size_t m_block_size = s_default_blocksize;
-
-            /// Validate the chunk index throwing a std::out_of_range if the index is not valid.
-            void validate_chunk_index(size_t index) const
-            {
-                if (index > m_chunks.size() - 1)
-                {
-                    throw std::out_of_range(
-                        std::format(
-                            "Cannot access index {} in schunk. Total amount of chunks is {}",
-                            index,
-                            m_chunks.size()
-                        )
-                    );
-                }
-            }
 
             /// Validate all the chunk sizes currently held by the super-chunk. This function
-            /// ensures that the chunks
+            /// ensures that the chunks all have the expected size.
             void validate_chunk_sizes() const
             {
                 // Check that all chunks barring the last one are equal to m_chunk_size
@@ -411,6 +443,28 @@ NAMESPACE_COMPRESSED_IMAGE
                             " instead got {:L} bytes.",
                             this->chunk_bytes(),
                             this->chunk_bytes(this->num_chunks() - 1)
+                        )
+                    );
+                }
+            }
+
+        protected:
+            std::vector<std::variant<_cpu_container_type, _gpu_container_type>> m_chunks{};
+            /// The maximum size a chunk is constrained to, in bytes. This will dictate the size of all chunks from
+            ///  0 - (this->m_chunks.size() - 1). The last chunk may be any other size smaller than or equal to this value.
+            size_t m_chunk_size = s_default_chunksize;
+            size_t m_block_size = s_default_blocksize;
+
+            /// Validate the chunk index throwing a std::out_of_range if the index is not valid.
+            void validate_chunk_index(size_t index) const
+            {
+                if (index > m_chunks.size() - 1)
+                {
+                    throw std::out_of_range(
+                        std::format(
+                            "Cannot access index {} in schunk. Total amount of chunks is {}",
+                            index,
+                            m_chunks.size()
                         )
                     );
                 }

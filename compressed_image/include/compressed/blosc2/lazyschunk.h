@@ -320,7 +320,10 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
             }
 
-            void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) override
+            void set_chunk(blosc2::context_ptr& compression_ctx,
+                           std::span<T> uncompressed,
+                           size_t index,
+                           bool validate_chunk_sizes = true) override
             {
                 this->validate_chunk_index(index);
 
@@ -331,10 +334,16 @@ NAMESPACE_COMPRESSED_IMAGE
                     uncompressed.size()
                 };
                 this->m_chunks[index] = std::move(chunk);
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             }
 
-            void set_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed, size_t index) override
+            void set_chunk(cuda::nvcomp_context compression_ctx,
+                           std::span<T> uncompressed,
+                           size_t index,
+                           bool validate_chunk_sizes = true) override
             {
                 this->validate_chunk_index(index);
 
@@ -352,10 +361,62 @@ NAMESPACE_COMPRESSED_IMAGE
                     uncompressed.size()
                 };
                 this->m_chunks[index] = std::move(chunk);
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             }
 
-            void append_chunk(cuda::nvcomp_context compression_ctx, std::span<const T> uncompressed) override
+            void set_chunk(compression_context_var compression_ctx,
+                           std::span<T> uncompressed,
+                           size_t index,
+                           bool validate_chunk_sizes = true) override
+            {
+                if (std::holds_alternative<cpu_compression_context>(compression_ctx))
+                {
+                    auto compressed = blosc2::compress_to_chunk<T>(
+                        std::get<cpu_compression_context>(compression_ctx).compression_ctx,
+                        uncompressed
+                    );
+                    auto chunk = detail::lazy_chunk<T, cpu_chunk>{
+                        cpu_chunk(compressed.begin(), compressed.end()),
+                        uncompressed.size()
+                    };
+                    this->m_chunks[index] = std::move(chunk);
+                }
+                else
+                {
+                    auto compressor = cuda::make_compressor<T>(
+                        std::get<gpu_compression_context>(compression_ctx).ctx.codec
+                    );
+                    cuda::compressed_chunk<T> gpu_chunk{};
+                    std::visit(
+                        [&](auto& _compressor)
+                        {
+                            gpu_chunk = _compressor.compress(
+                                uncompressed,
+                                std::get<gpu_compression_context>(compression_ctx).ctx
+                            );
+                        },
+                        compressor
+                    );
+
+                    auto chunk = detail::lazy_chunk<T, detail::gpu_chunk<T>>{
+                        std::move(gpu_chunk),
+                        uncompressed.size()
+                    };
+                    this->m_chunks[index] = std::move(chunk);
+                }
+
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
+            };
+
+            void append_chunk(cuda::nvcomp_context compression_ctx,
+                              std::span<const T> uncompressed,
+                              bool validate_chunk_sizes = true) override
             {
                 auto compressor = cuda::make_compressor<T>(compression_ctx.codec);
                 cuda::compressed_chunk<T> _chunk{};
@@ -372,12 +433,16 @@ NAMESPACE_COMPRESSED_IMAGE
                     uncompressed.size()
                 };
                 this->m_chunks.push_back(std::move(chunk));
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             }
 
             void append_chunk(blosc2::context_ptr& compression_ctx,
                               std::span<T> uncompressed,
-                              std::span<std::byte> compression_buff) override
+                              std::span<std::byte> compression_buff,
+                              bool validate_chunk_sizes = true) override
             {
                 auto csize = blosc2::compress<T>(compression_ctx, uncompressed, compression_buff);
                 auto chunk = detail::lazy_chunk<T, cpu_chunk>{
@@ -385,10 +450,15 @@ NAMESPACE_COMPRESSED_IMAGE
                     uncompressed.size()
                 };
                 this->m_chunks.push_back(std::move(chunk));
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             }
 
-            void append_chunk(compression_context_var compression_ctx, std::span<T> uncompressed) override
+            void append_chunk(compression_context_var compression_ctx,
+                              std::span<T> uncompressed,
+                              bool validate_chunk_sizes = true) override
             {
                 if (std::holds_alternative<cpu_compression_context>(compression_ctx))
                 {
@@ -425,7 +495,11 @@ NAMESPACE_COMPRESSED_IMAGE
                     };
                     this->m_chunks.push_back(std::move(chunk));
                 }
-                this->validate_chunk_sizes();
+
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             };
 
             /// Retrieve the total compressed size of the lazy-schunk.

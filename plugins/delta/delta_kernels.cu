@@ -6,21 +6,51 @@
 // Regular Delta Kernels (Typed Subtraction / Addition)
 // ##########################################################################
 
+template <typename T> // T is the unsigned type
+__device__ __forceinline__ T zigzag_encode(T v)
+{
+    using S = typename std::make_signed<T>::type;
+    S s = static_cast<S>(v);
+    constexpr int shift = sizeof(T) * 8 - 1;
+    return (static_cast<T>(s) << 1) ^ static_cast<T>(s >> shift); // arithmetic shift
+}
+
 template <typename T>
-__global__ void delta_forward_kernel(const T* input, T* output, size_t num_elements, size_t stream_len)
+__device__ __forceinline__ T zigzag_decode(T u)
+{
+    return (u >> 1) ^ (~(u & 1) + 1); // (u >> 1) ^ -(u & 1)
+}
+
+template <typename T>
+__global__ void delta_forward_kernel(const T* input, T* output, const size_t num_elements, const size_t stream_len)
 {
     size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (tid < num_elements)
     {
-        size_t ip = tid % stream_len;
-        if (ip == 0)
+        if (const size_t ip = tid % stream_len; ip == 0)
         {
-            output[tid] = input[tid];
+            // From testing, we can typically expect a ~0-1x increase in cratio by doing a zigzag encoding of
+            // sizeof(T) == 2. This is virtually free performance wise
+            if constexpr (sizeof(T) == 2)
+            {
+                output[tid] = zigzag_encode(input[tid]);
+            }
+            else
+            {
+                output[tid] = input[tid];
+            }
         }
         else
         {
-            output[tid] = input[tid] - input[tid - 1];
+            if constexpr (sizeof(T) == 2)
+            {
+                output[tid] = zigzag_encode(input[tid] - input[tid - 1]);
+            }
+            else
+            {
+                output[tid] = input[tid] - input[tid - 1];
+            }
         }
     }
 }
@@ -43,10 +73,16 @@ __global__ void delta_backward_kernel(const T* input, T* output, size_t stream_l
         size_t i = i_base + threadIdx.x;
         bool valid = (i < stream_len);
 
-        T thread_data = valid ? input[offset + i] : 0;
+        T thread_data{};
+        if constexpr (sizeof(T) == 2)
+        {
+            thread_data = valid ? zigzag_decode(input[offset + i]) : 0;
+        }
+        else
+        {
+            thread_data = valid ? input[offset + i] : 0;
+        }
         T block_sum;
-
-        // Addition is the inverse of subtraction
         BlockScan(temp_storage).InclusiveSum(thread_data, thread_data, block_sum);
 
         if (valid)

@@ -9,7 +9,7 @@ if (MSVC)
 endif ()
 target_link_libraries(compressed_image_benchmark PRIVATE compressed_image)
 target_link_libraries(compressed_image_benchmark PRIVATE benchmark::benchmark)
-add_dependencies(compressed_image_benchmark compressed_bytedelta_plugin compressed_shuffle_plugin compressed_delta_plugin compressed_xordelta_plugin)
+add_dependencies(compressed_image_benchmark compressed_bytedelta_plugin compressed_shuffle_plugin compressed_delta_plugin compressed_xordelta_plugin compressed_fmap_plugin)
 
 
 # Copy the images/ folder to the build dir to run the tests
@@ -24,6 +24,7 @@ copy_plugin_to_target(compressed_image_benchmark compressed_bytedelta_plugin)
 copy_plugin_to_target(compressed_image_benchmark compressed_shuffle_plugin)
 copy_plugin_to_target(compressed_image_benchmark compressed_delta_plugin)
 copy_plugin_to_target(compressed_image_benchmark compressed_xordelta_plugin)
+copy_plugin_to_target(compressed_image_benchmark compressed_fmap_plugin)
 
 if (NVCOMP_RUNTIME_BINARIES)
    add_custom_command(

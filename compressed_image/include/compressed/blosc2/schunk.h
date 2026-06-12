@@ -211,7 +211,10 @@ NAMESPACE_COMPRESSED_IMAGE
                 blosc2::decompress(decompression_ctx, std::span<T>(buffer), chunk_span);
             }
 
-            void set_chunk(blosc2::context_ptr& compression_ctx, std::span<T> uncompressed, size_t index) override
+            void set_chunk(blosc2::context_ptr& compression_ctx,
+                           std::span<T> uncompressed,
+                           size_t index,
+                           bool validate_chunk_sizes = true) override
             {
                 this->validate_chunk_index(index);
 
@@ -219,10 +222,16 @@ NAMESPACE_COMPRESSED_IMAGE
 
                 // copy over a new vector containing all the elements from the compression span.
                 this->m_chunks[index] = std::move(compressed);
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             }
 
-            void set_chunk(cuda::nvcomp_context compression_ctx, std::span<T> uncompressed, size_t index) override
+            void set_chunk(cuda::nvcomp_context compression_ctx,
+                           std::span<T> uncompressed,
+                           size_t index,
+                           bool validate_chunk_sizes = true) override
             {
                 this->validate_chunk_index(index);
 
@@ -237,12 +246,56 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
 
                 this->m_chunks[index] = std::move(_chunk);
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
+            }
+
+            void set_chunk(compression_context_var compression_ctx,
+                           std::span<T> uncompressed,
+                           size_t index,
+                           bool validate_chunk_sizes = true) override
+            {
+                this->validate_chunk_index(index);
+
+                if (std::holds_alternative<cpu_compression_context>(compression_ctx))
+                {
+                    auto compressed = blosc2::compress_to_chunk<T>(
+                        std::get<cpu_compression_context>(compression_ctx).compression_ctx,
+                        uncompressed
+                    );
+                    this->m_chunks[index] = std::move(compressed);
+                }
+                else
+                {
+                    auto compressor = cuda::make_compressor<T>(
+                        std::get<gpu_compression_context>(compression_ctx).ctx.codec
+                    );
+                    cuda::compressed_chunk<T> _chunk{};
+                    std::visit(
+                        [&](auto& _compressor)
+                        {
+                            _chunk = _compressor.compress(
+                                uncompressed,
+                                std::get<gpu_compression_context>(compression_ctx).ctx
+                            );
+                        },
+                        compressor
+                    );
+
+                    this->m_chunks[index] = std::move(_chunk);
+                    if (validate_chunk_sizes)
+                    {
+                        this->validate_chunk_sizes();
+                    }
+                }
             }
 
             void append_chunk(blosc2::context_ptr& compression_ctx,
                               std::span<T> uncompressed,
-                              std::span<std::byte> compression_buff) override
+                              std::span<std::byte> compression_buff,
+                              bool validate_chunk_sizes = true) override
             {
                 if (compression_buff.size() < blosc2::min_compressed_size(this->chunk_bytes()))
                 {
@@ -259,10 +312,15 @@ NAMESPACE_COMPRESSED_IMAGE
                 assert(csize <= compression_buff.size());
                 // copy over a new vector containing all the elements from the compression span.
                 this->m_chunks.push_back(cpu_chunk(compression_buff.begin(), compression_buff.begin() + csize));
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             }
 
-            void append_chunk(cuda::nvcomp_context compression_ctx, std::span<const T> uncompressed) override
+            void append_chunk(cuda::nvcomp_context compression_ctx,
+                              std::span<const T> uncompressed,
+                              bool validate_chunk_sizes = true) override
             {
                 auto compressor = cuda::make_compressor<T>(compression_ctx.codec);
 
@@ -276,10 +334,15 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
 
                 this->m_chunks.push_back(std::move(_chunk));
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             }
 
-            void append_chunk(compression_context_var compression_ctx, std::span<T> uncompressed) override
+            void append_chunk(compression_context_var compression_ctx,
+                              std::span<T> uncompressed,
+                              bool validate_chunk_sizes = true) override
             {
                 if (std::holds_alternative<cpu_compression_context>(compression_ctx))
                 {
@@ -308,7 +371,10 @@ NAMESPACE_COMPRESSED_IMAGE
 
                     this->m_chunks.push_back(std::move(_chunk));
                 }
-                this->validate_chunk_sizes();
+                if (validate_chunk_sizes)
+                {
+                    this->validate_chunk_sizes();
+                }
             };
 
             size_t chunk_bytes(size_t index) const override

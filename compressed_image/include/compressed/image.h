@@ -28,6 +28,8 @@
 #include "detail/oiio_util.h"
 #include "detail/scoped_timer.h"
 
+#include <BS_thread_pool.hpp>
+
 namespace
 NAMESPACE_COMPRESSED_IMAGE
 {
@@ -93,9 +95,9 @@ NAMESPACE_COMPRESSED_IMAGE
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
-            m_Width = width;
-            m_Height = height;
-            m_ChannelNames = channel_names;
+            m_width = width;
+            m_height = height;
+            m_channel_names = channel_names;
             auto comp_level_adjusted = util::ensure_compression_level(compression_level);
 
             // c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
@@ -110,7 +112,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     channel_names.size()
                 ) << std::endl;
 
-                m_ChannelNames = {};
+                m_channel_names = {};
             }
 
             // Iterate all channels and start creating channels for it.
@@ -120,7 +122,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 try
                 {
                     // Generate the channel and append it.
-                    m_Channels.push_back(
+                    m_channels.push_back(
                         NAMESPACE_COMPRESSED_IMAGE::channel<T>(
                             _channel,
                             width,
@@ -134,12 +136,12 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
                 catch (const std::exception& e)
                 {
-                    if (m_ChannelNames.size() > 0)
+                    if (m_channel_names.size() > 0)
                     {
                         throw std::runtime_error(
                             std::format(
                                 "Failed to insert channel '{}' at position {}. Full error: \n{}",
-                                m_ChannelNames[channel_idx],
+                                m_channel_names[channel_idx],
                                 channel_idx,
                                 e.what()
                             )
@@ -199,9 +201,9 @@ NAMESPACE_COMPRESSED_IMAGE
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
-            m_Width = width;
-            m_Height = height;
-            m_ChannelNames = channel_names;
+            m_width = width;
+            m_height = height;
+            m_channel_names = channel_names;
             auto comp_level_adjusted = util::ensure_compression_level(compression_level);
 
             // c-blosc2 chunks can at most be 2 gigabytes so the set chunk size should not exceed this.
@@ -216,7 +218,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     channel_names.size()
                 ) << std::endl;
 
-                m_ChannelNames = {};
+                m_channel_names = {};
             }
 
             // Iterate all channels and start creating channels for it.
@@ -226,7 +228,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 try
                 {
                     // Generate the channel and append it.
-                    m_Channels.push_back(
+                    m_channels.push_back(
                         NAMESPACE_COMPRESSED_IMAGE::channel<T>(
                             std::span<const T>(_channel.begin(), _channel.end()),
                             width,
@@ -240,12 +242,12 @@ NAMESPACE_COMPRESSED_IMAGE
                 }
                 catch (const std::exception& e)
                 {
-                    if (m_ChannelNames.size() > 0)
+                    if (m_channel_names.size() > 0)
                     {
                         throw std::runtime_error(
                             std::format(
                                 "Failed to insert channel '{}' at position {}. Full error: \n{}",
-                                m_ChannelNames[channel_idx],
+                                m_channel_names[channel_idx],
                                 channel_idx,
                                 e.what()
                             )
@@ -286,9 +288,9 @@ NAMESPACE_COMPRESSED_IMAGE
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
-            m_Width = width;
-            m_Height = height;
-            m_ChannelNames = channel_names;
+            m_width = width;
+            m_height = height;
+            m_channel_names = channel_names;
 
             if (channel_names.size() != channels.size() && channel_names.size() != 0)
             {
@@ -299,7 +301,7 @@ NAMESPACE_COMPRESSED_IMAGE
                     channel_names.size()
                 ) << std::endl;
 
-                m_ChannelNames = {};
+                m_channel_names = {};
             }
 
             size_t counter = 0;
@@ -332,7 +334,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
                 ++counter;
             }
-            m_Channels = std::move(channels);
+            m_channels = std::move(channels);
         }
 
 
@@ -980,16 +982,16 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
             }
 
-            if (name.has_value() && m_ChannelNames.size() == m_Channels.size())
+            if (name.has_value() && m_channel_names.size() == m_channels.size())
             {
-                m_ChannelNames.push_back(name.value());
+                m_channel_names.push_back(name.value());
             }
-            else if (m_ChannelNames.size() > 0)
+            else if (m_channel_names.size() > 0)
             {
-                m_ChannelNames.push_back(name.value_or(""));
+                m_channel_names.push_back(name.value_or(""));
             }
 
-            m_Channels.push_back(std::move(_channel));
+            m_channels.push_back(std::move(_channel));
         }
 
         /// Adds a channel to the image.
@@ -1042,16 +1044,16 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
             }
 
-            if (name.has_value() && m_ChannelNames.size() == m_Channels.size())
+            if (name.has_value() && m_channel_names.size() == m_channels.size())
             {
-                m_ChannelNames.push_back(name.value());
+                m_channel_names.push_back(name.value());
             }
-            else if (m_ChannelNames.size() > 0)
+            else if (m_channel_names.size() > 0)
             {
-                m_ChannelNames.push_back(name.value_or(""));
+                m_channel_names.push_back(name.value_or(""));
             }
 
-            m_Channels.push_back(
+            m_channels.push_back(
                 NAMESPACE_COMPRESSED_IMAGE::channel(
                     std::span<const T>(data.begin(), data.end()),
                     width,
@@ -1093,14 +1095,14 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \throws std::out_of_range if the index is out of bounds.
         NAMESPACE_COMPRESSED_IMAGE::channel<T> extract_channel(size_t index)
         {
-            if (index >= m_Channels.size())
+            if (index >= m_channels.size())
             {
                 throw std::out_of_range("Channel index out of range");
             }
-            auto ret = std::move(m_Channels[index]);
+            auto ret = std::move(m_channels[index]);
 
-            m_Channels.erase(m_Channels.begin() + index);
-            m_ChannelNames.erase(m_ChannelNames.begin() + index);
+            m_channels.erase(m_channels.begin() + index);
+            m_channel_names.erase(m_channel_names.begin() + index);
 
             return std::move(ret);
         }
@@ -1146,7 +1148,7 @@ NAMESPACE_COMPRESSED_IMAGE
             size_t compressed_size = 0;
             size_t uncompressed_size = 0;
             size_t num_chunks = 0;
-            for (const auto& channel : m_Channels)
+            for (const auto& channel : m_channels)
             {
                 compressed_size += channel.compressed_bytes();
                 uncompressed_size += channel.uncompressed_size();
@@ -1154,15 +1156,15 @@ NAMESPACE_COMPRESSED_IMAGE
             }
 
             std::cout << "Statistics for image buffer:" << std::endl;
-            std::cout << " Width:             " << m_Width << std::endl;
-            std::cout << " Height:            " << m_Height << std::endl;
-            std::cout << " Channels:          " << m_Channels.size() << std::endl;
+            std::cout << " Width:             " << m_width << std::endl;
+            std::cout << " Height:            " << m_height << std::endl;
+            std::cout << " Channels:          " << m_channels.size() << std::endl;
             std::cout << " Channelnames:      [";
 
-            for (size_t i = 0; i < m_ChannelNames.size(); ++i)
+            for (size_t i = 0; i < m_channel_names.size(); ++i)
             {
-                std::cout << m_ChannelNames[i];
-                if (i < m_ChannelNames.size() - 1)
+                std::cout << m_channel_names[i];
+                if (i < m_channel_names.size() - 1)
                 {
                     std::cout << ", ";
                 }
@@ -1175,14 +1177,14 @@ NAMESPACE_COMPRESSED_IMAGE
             std::cout << " Compression ratio: " << static_cast<double>(uncompressed_size) / compressed_size << "x" <<
                 std::endl;
             std::cout << " Num Chunks:        " << num_chunks << std::endl;
-            std::cout << " Metadata:          " << "\n " << m_Metadata.dump(4) << std::endl;
+            std::cout << " Metadata:          " << "\n " << m_metadata.dump(4) << std::endl;
         }
 
 
         size_t compressed_bytes() const
         {
             size_t total_compressed = 0;
-            for (const auto& channel : m_Channels)
+            for (const auto& channel : m_channels)
             {
                 total_compressed += channel.compressed_bytes();
             }
@@ -1192,7 +1194,7 @@ NAMESPACE_COMPRESSED_IMAGE
         size_t uncompressed_bytes() const
         {
             size_t total_uncompressed = 0;
-            for (const auto& channel : m_Channels)
+            for (const auto& channel : m_channels)
             {
                 total_uncompressed += channel.uncompressed_size() * sizeof(T);
             }
@@ -1212,10 +1214,10 @@ NAMESPACE_COMPRESSED_IMAGE
         // Iterators
         // ---------------------------------------------------------------------------------------------------------------------
 
-        auto begin() noexcept { return m_Channels.begin(); }
-        auto begin() const noexcept { return m_Channels.begin(); }
-        auto end() noexcept { return m_Channels.end(); }
-        auto end() const noexcept { return m_Channels.end(); }
+        auto begin() noexcept { return m_channels.begin(); }
+        auto begin() const noexcept { return m_channels.begin(); }
+        auto end() noexcept { return m_channels.end(); }
+        auto end() const noexcept { return m_channels.end(); }
 
 
         // ---------------------------------------------------------------------------------------------------------------------
@@ -1229,11 +1231,11 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \throws std::out_of_range if the index is out of bounds.
         NAMESPACE_COMPRESSED_IMAGE::channel<T>& channel(size_t index)
         {
-            if (index >= m_Channels.size())
+            if (index >= m_channels.size())
             {
                 throw std::out_of_range("Channel index out of range");
             }
-            return m_Channels[index];
+            return m_channels[index];
         }
 
         /// Retrieves a reference to a channel by its name.
@@ -1244,7 +1246,7 @@ NAMESPACE_COMPRESSED_IMAGE
         NAMESPACE_COMPRESSED_IMAGE::channel<T>& channel(const std::string_view name)
         {
             size_t index = get_channel_offset(name);
-            return m_Channels[index];
+            return m_channels[index];
         }
 
         /// Retrieves references to multiple channels by name and returns them as a tuple.
@@ -1326,7 +1328,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \return A vector containing references to the all the channels.
         std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>>& channels()
         {
-            return m_Channels;
+            return m_channels;
         }
 
         /// Retrieves const references to all of the channels in the image
@@ -1334,7 +1336,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \return A vector containing references to the all the channels.
         const std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>>& channels() const
         {
-            return m_Channels;
+            return m_channels;
         }
 
         /// Decompress all of the channels and return them in planar fashion.
@@ -1345,7 +1347,7 @@ NAMESPACE_COMPRESSED_IMAGE
         std::vector<std::vector<T>> get_decompressed() const
         {
             std::vector<std::vector<T>> result{};
-            for (const auto& channel : m_Channels)
+            for (const auto& channel : m_channels)
             {
                 result.push_back(channel.get_decompressed());
             }
@@ -1363,9 +1365,9 @@ NAMESPACE_COMPRESSED_IMAGE
         /// \throws std::invalid_argument if the channel is not available.
         size_t get_channel_offset(const std::string_view channelname) const
         {
-            for (size_t i = 0; i < m_ChannelNames.size(); ++i)
+            for (size_t i = 0; i < m_channel_names.size(); ++i)
             {
-                if (m_ChannelNames[i] == channelname)
+                if (m_channel_names[i] == channelname)
                 {
                     return i;
                 }
@@ -1376,60 +1378,60 @@ NAMESPACE_COMPRESSED_IMAGE
         /// Width of the Image
         size_t width() const noexcept
         {
-            return m_Width;
+            return m_width;
         }
 
         /// Height of the image
         size_t height() const noexcept
         {
-            return m_Height;
+            return m_height;
         }
 
         /// Total number of channels in the image
         size_t num_channels() const noexcept
         {
-            return m_Channels.size();
+            return m_channels.size();
         }
 
         /// Names of the channels stored on the image, are stored in the same order as the logical indices. So if the channelnames
         /// are { "B", "G", "R" } accessing channel "R" would be index 2.
         std::vector<std::string> channelnames() const noexcept
         {
-            return m_ChannelNames;
+            return m_channel_names;
         }
 
         /// Set the channelnames according to their logical indices,
         void channelnames(std::vector<std::string> _channelnames)
         {
-            if (_channelnames.size() != m_Channels.size())
+            if (_channelnames.size() != m_channels.size())
             {
                 throw std::invalid_argument(
                     std::format(
                         "Invalid number of arguments received for setting channelnames. Expected vector size to be exactly {} but instead got {}",
-                        m_Channels.size(),
+                        m_channels.size(),
                         _channelnames.size()
                     ).c_str()
                 );
             }
-            m_ChannelNames = _channelnames;
+            m_channel_names = _channelnames;
         }
 
         /// Arbitrary user metadata, not authored or managed by image class, it's up to the caller to handle what goes in and comes out
         void metadata(const json_ordered& _metadata) noexcept
         {
-            m_Metadata = _metadata;
+            m_metadata = _metadata;
         }
 
         /// Arbitrary user metadata, not authored or managed by the image class, it's up to the caller to handle what goes in and comes out
         json_ordered& metadata() noexcept
         {
-            return m_Metadata;
+            return m_metadata;
         }
 
         /// Arbitrary user metadata, not authored or managed by image class, it's up to the caller to handle what goes in and comes out
         const json_ordered& metadata() const noexcept
         {
-            return m_Metadata;
+            return m_metadata;
         }
 
         /// Update the number of threads used internally by c-blosc2 for compression and decompression.
@@ -1437,7 +1439,7 @@ NAMESPACE_COMPRESSED_IMAGE
         /// by specifying the compression codec.
         void update_nthreads(size_t nthreads)
         {
-            for (auto& channel : m_Channels)
+            for (auto& channel : m_channels)
             {
                 channel.update_nthreads(nthreads);
             }
@@ -1452,7 +1454,7 @@ NAMESPACE_COMPRESSED_IMAGE
         size_t chunk_size() const
         {
             size_t chunk_size = 0;
-            for (const auto& channel : m_Channels)
+            for (const auto& channel : m_channels)
             {
                 if (chunk_size != 0 && channel.chunk_size() != chunk_size)
                 {
@@ -1469,7 +1471,7 @@ NAMESPACE_COMPRESSED_IMAGE
         size_t block_size() const
         {
             size_t block_size = 0;
-            for (const auto& channel : m_Channels)
+            for (const auto& channel : m_channels)
             {
                 if (block_size != 0 && channel.block_size() != block_size)
                 {
@@ -1491,6 +1493,11 @@ NAMESPACE_COMPRESSED_IMAGE
             std::vector<cuda::scoped_host_pinner> memory_pinners;
             std::future<void> processing_future;
 
+            /// Resize the ring buffer slot to
+            void resize(size_t num_channels, enums::codec codec)
+            {
+            }
+
             ring_buffer_slot() = default;
             ring_buffer_slot(ring_buffer_slot&&) noexcept = default;
             ring_buffer_slot& operator=(ring_buffer_slot&&) noexcept = default;
@@ -1502,20 +1509,20 @@ NAMESPACE_COMPRESSED_IMAGE
 
     private:
         /// All the channels, each holding their own decompression and compression context.
-        std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> m_Channels{};
+        std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> m_channels{};
 
         /// Arbitrary user metadata, not authored or managed by us, it's up to the caller to handle what goes in and comes out
-        json_ordered m_Metadata{};
+        json_ordered m_metadata{};
 
         /// Optional set of channelnames to associate to the channels. If not specified sensible defaults are chosen. For example,
         /// if 3 channels are provided we default to { "R", "G", "B" }
-        std::vector<std::string> m_ChannelNames{};
+        std::vector<std::string> m_channel_names{};
 
         /// The width of the image file
-        size_t m_Width = 1;
+        size_t m_width = 1;
 
         /// The height of the image file
-        size_t m_Height = 1;
+        size_t m_height = 1;
 
     private:
         // Implementations for the read() functions.
@@ -1600,7 +1607,7 @@ NAMESPACE_COMPRESSED_IMAGE
 
             // Set up the Ring Buffer (Double Buffering)
             // -----------------------------------------------------------------------------------
-            constexpr size_t ring_buffer_size = 2;
+            size_t ring_buffer_size = 3;
             const size_t max_chunk_size = chunk_size_aligned * max_num_channels;
             ring_buffer_t ring_buffer(ring_buffer_size);
 
@@ -1651,7 +1658,11 @@ NAMESPACE_COMPRESSED_IMAGE
                 std::vector<detail::schunk<T>> schunks;
                 for ([[maybe_unused]] auto _ : std::views::iota(0, nchannels))
                 {
-                    schunks.push_back(detail::schunk<T>(block_size, chunk_size_aligned));
+                    auto schunk = detail::schunk<T>(block_size, chunk_size_aligned);
+                    size_t total_chunks = (spec.height + scanlines_per_chunk - 1) / scanlines_per_chunk;
+                    schunk.resize(total_chunks);
+
+                    schunks.push_back(std::move(schunk));
                 }
 
                 // Pass the managed ring buffer into our streaming implementation
@@ -1797,6 +1808,9 @@ NAMESPACE_COMPRESSED_IMAGE
         )
         {
             _COMPRESSED_PROFILE_FUNCTION();
+
+            BS::thread_pool thread_pool(ring_buffer.size());
+
             const int nchannels = chend - chbegin;
             assert(input_ptr->current_subimage() == subimage);
             const OIIO::ImageSpec& spec = input_ptr->spec();
@@ -1813,11 +1827,8 @@ NAMESPACE_COMPRESSED_IMAGE
                 );
             }
 
-
-            // Iterate all scanlines and read as many scanlines as possible in one go, compressing them on the fly
-            // into all of the super-chunks. This works for data windows as well where the y and x may not start at zero
-            std::future<void> previous_compute_future;
             size_t ring_index = 0;
+            size_t current_chunk_id = 0;
             int y = spec.y;
 
             while (y < (spec.height + spec.y))
@@ -1891,32 +1902,15 @@ NAMESPACE_COMPRESSED_IMAGE
                     );
                 }
 
-                // 3. ORDER ENFORCEMENT: Wait for chunk k-1's compression to completely finish
-                // before spawning chunk k's compute task. This guarantees blocks append to schunks in sequential order.
-                if (previous_compute_future.valid())
-                {
-                    try
-                    {
-                        previous_compute_future.get();
-                    }
-                    catch (const std::exception& e)
-                    {
-                        get_logger()->error(std::format("Exception caught from async thread: {}", e.what()));
-                        throw;
-                    }
-                }
-
                 size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;
 
                 // 4. STAGE 2 (COMPUTE): Delegate processing & compression of the freshly read chunk to a background task.
                 // Main thread loops back immediately to read chunk k+1 into the alternate buffer slot.
-                slot.processing_future = std::async(
-                    std::launch::async,
+                slot.processing_future = thread_pool.submit_task(
                     [
                         &slot, interleaved_fitted, nchannels, read_elements, compression_codec, compression_level,
                         block_size, chbegin,
-                        y, scanlines_to_read, spec_height = spec.height, spec_y = spec.y,
-                        &schunks, &postprocess
+                        &schunks, &postprocess, current_chunk_id
                     ]()
                     {
                         // Slice deinterleaved spans for this active task
@@ -1954,50 +1948,41 @@ NAMESPACE_COMPRESSED_IMAGE
                                 postprocess(absolute_channel_idx, channel_span);
                             }
 
-                            schunks[channel_idx].append_chunk(std::move(context), channel_span);
-
-                            // Logging
-                            if (y + scanlines_to_read == (spec_height + spec_y))
-                            {
-                                std::string_view codec_name = enums::to_string(compression_codec);
-                                std::string backend = enums::is_gpu_codec(compression_codec) ? "cuda" : "blosc2";
-                                get_logger()->debug(
-                                    std::format(
-                                        "[channel: {}] {} {}: uncompressed {} bytes; compressed {} bytes; cratio {}",
-                                        channel_idx,
-                                        backend,
-                                        codec_name,
-                                        schunks[channel_idx].chunk_bytes(),
-                                        schunks[channel_idx].csize(),
-                                        static_cast<double>(schunks[channel_idx].chunk_bytes()) / schunks[channel_idx].
-                                        csize()
-                                    )
-                                );
-                            }
+                            schunks[channel_idx].set_chunk(
+                                std::move(context),
+                                channel_span,
+                                current_chunk_id,
+                                false /* validate_chunk_sizes */
+                            );
                         }
                     }
                 );
 
-                // Save our background work task tracking token to previous handle
-                previous_compute_future = std::move(slot.processing_future);
-
-                // Cycle the Ring Buffer index and step image coordinate offset
+                current_chunk_id++;
                 ring_index = (ring_index + 1) % ring_buffer.size();
                 y += scanlines_to_read;
             }
 
-            // 5. Final sync: block until the last chunk's processing pipeline completely winds down
-            if (previous_compute_future.valid())
+            for (auto& slot : ring_buffer)
             {
-                try
+                if (slot.processing_future.valid())
                 {
-                    previous_compute_future.get();
+                    try
+                    {
+                        slot.processing_future.get();
+                    }
+                    catch (const std::exception& e)
+                    {
+                        get_logger()->error(std::format("Exception caught from async thread: {}", e.what()));
+                        throw;
+                    }
                 }
-                catch (const std::exception& e)
-                {
-                    get_logger()->error(std::format("Exception caught from async thread: {}", e.what()));
-                    throw;
-                }
+            }
+
+            // Now that all threads have safely populated the vectors, validate the sizes
+            for (auto& schunk : schunks)
+            {
+                schunk.validate_chunk_sizes();
             }
         }
 

@@ -16,7 +16,7 @@
 // Note:
 //      This more heavily affects gpu benchmarks as we do more verbose tracking there. This should only be used if you
 //      want to debug performance issues in the library as it might skew the results.
-#define _COMPRESSED_PROFILE 1
+// #define _COMPRESSED_PROFILE 1
 
 #include <compressed/enums.h>
 #include <compressed/image.h>
@@ -329,7 +329,7 @@ auto main(int argc, char** argv) -> int
 
     const auto images = get_images();
 
-    register_all_permutations</*uint8_t, uint16_t, uint32_t, */Imath::half, float>(images);
+    register_all_permutations</*uint8_t, */ uint16_t, uint32_t, Imath::half, float>(images);
 
     benchmark::Initialize(&argc, argv);
     benchmark::RunSpecifiedBenchmarks();

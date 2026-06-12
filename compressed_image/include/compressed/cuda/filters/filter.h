@@ -5,21 +5,18 @@
 #include "compressed/macros.h"
 #include "compressed/cuda/memory.h"
 #include "compressed/cuda/filters/enums.h"
+#include "compressed/cuda/filters/struct.h"
 #include "compressed/cuda/filters/bytedelta.h"
 #include "compressed/cuda/filters/delta.h"
 #include "compressed/cuda/filters/xordelta.h"
 #include "compressed/cuda/filters/shuffle.h"
+#include "compressed/cuda/filters/fmap.h"
 
 namespace
 NAMESPACE_COMPRESSED_IMAGE
 {
     namespace cuda
     {
-        struct gpu_filter
-        {
-            cuda::enums::filter type;
-        };
-
         namespace detail
         {
             [[nodiscard]] inline bool apply_fwd_filter(const gpu_filter& filter,
@@ -75,6 +72,18 @@ NAMESPACE_COMPRESSED_IMAGE
                         return false;
                     }
                     filter::xordelta::instance().forward(input, output, length, type_size);
+                }
+                else if (filter.type == cuda::enums::filter::fmap)
+                {
+                    if (auto& inst = filter::fmap::instance(); !inst.available())
+                    {
+                        get_logger()->warn(
+                            "CUDA fmap filter unavailable, likely because of a missing shared library."
+                            " Skipping this filter."
+                        );
+                        return false;
+                    }
+                    filter::fmap::instance().forward(input, output, length, type_size);
                 }
                 else
                 {
@@ -138,6 +147,18 @@ NAMESPACE_COMPRESSED_IMAGE
                         return false;
                     }
                     filter::xordelta::instance().backward(input, output, length, type_size);
+                }
+                else if (filter.type == cuda::enums::filter::fmap)
+                {
+                    if (auto& inst = filter::fmap::instance(); !inst.available())
+                    {
+                        get_logger()->warn(
+                            "CUDA fmap filter unavailable, likely because of a missing shared library."
+                            " Skipping this filter in backward pipeline."
+                        );
+                        return false;
+                    }
+                    filter::fmap::instance().backward(input, output, length, type_size);
                 }
                 else
                 {

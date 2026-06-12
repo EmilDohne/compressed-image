@@ -17,6 +17,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 delta,
                 xordelta,
                 shuffle,
+                fmap,
             };
 
             constexpr std::string_view to_string(const filter _filter)
@@ -27,6 +28,7 @@ NAMESPACE_COMPRESSED_IMAGE
                 case filter::delta: return "delta";
                 case filter::xordelta: return "xordelta";
                 case filter::shuffle: return "shuffle";
+                case filter::fmap: return "fmap";
                 default: return "unknown";
                 }
             }

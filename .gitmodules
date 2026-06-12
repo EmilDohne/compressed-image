@@ -28,3 +28,6 @@
 [submodule "thirdparty/spdlog"]
 	path = thirdparty/spdlog
 	url = https://github.com/gabime/spdlog
+[submodule "thirdparty/thread-pool"]
+	path = thirdparty/thread-pool
+	url = https://github.com/bshoshany/thread-pool

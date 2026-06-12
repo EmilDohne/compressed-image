@@ -186,7 +186,14 @@ NAMESPACE_COMPRESSED_IMAGE
                             gpu_filter{cuda::enums::filter::delta},
                         };
                     }
-                    if constexpr (std::is_integral_v<T>)
+                    else if constexpr (std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t>)
+                    {
+                        return {
+                            gpu_filter{cuda::enums::filter::xordelta},
+                            gpu_filter{cuda::enums::filter::shuffle},
+                        };
+                    }
+                    else if constexpr (std::is_integral_v<T>)
                     {
                         return {
                             gpu_filter{cuda::enums::filter::delta},
@@ -196,8 +203,9 @@ NAMESPACE_COMPRESSED_IMAGE
                     else
                     {
                         return {
-                            gpu_filter{cuda::enums::filter::xordelta},
+                            gpu_filter{cuda::enums::filter::fmap},
                             gpu_filter{cuda::enums::filter::shuffle},
+                            gpu_filter{cuda::enums::filter::bytedelta},
                         };
                     }
                 }
