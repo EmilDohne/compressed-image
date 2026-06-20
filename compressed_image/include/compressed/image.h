@@ -6,9 +6,9 @@
 #include <memory>
 #include <optional>
 #include <limits>
-#include <execution>
 #include <tuple>
 #include <filesystem>
+#include <chrono>
 
 #include <blosc2.h>
 #include <nlohmann/json.hpp>
@@ -18,7 +18,6 @@
 #endif
 
 #include "macros.h"
-#include "blosc2/wrapper.h"
 #include "blosc2/schunk.h"
 #include "blosc2/lazyschunk.h"
 #include "constants.h"
@@ -1533,6 +1532,22 @@ NAMESPACE_COMPRESSED_IMAGE
 
         using ring_buffer_t = std::vector<ring_buffer_slot>;
 
+        /// Ring buffer grows on demand from s_ring_min_slots up to the codec-dependent maximum (see
+        /// read_contiguous_channels_impl). We start small to keep the memory/pinning footprint low
+        /// and only grow when the producer (file I/O) is observed to stall on the compressors.
+        static constexpr size_t s_ring_min_slots = 2;
+        /// GPU growth cap: extra in-flight chunks help keep the device fed across the H2D copy /
+        /// kernel / D2H pipeline.
+        static constexpr size_t s_ring_max_slots_gpu = 6;
+
+        /// Maximum ring slots for a codec. CPU (blosc2) compression is already heavily
+        /// multithreaded internally, so a single extra slot is enough to overlap I/O with compute --
+        /// more slots add buffers/threads without extra throughput. GPU benefits from more.
+        static size_t max_ring_slots(enums::codec codec)
+        {
+            return enums::is_gpu_codec(codec) ? s_ring_max_slots_gpu : s_ring_min_slots;
+        }
+
     private:
         /// All the channels, each holding their own decompression and compression context.
         std::vector<NAMESPACE_COMPRESSED_IMAGE::channel<T>> m_channels{};
@@ -1633,9 +1648,21 @@ NAMESPACE_COMPRESSED_IMAGE
 
             // Set up the Ring Buffer (Double Buffering)
             // -----------------------------------------------------------------------------------
-            size_t ring_buffer_size = 3;
+            // Start at the minimum number of slots; read_contiguous_channels_impl grows it up to
+            // the codec-dependent max on demand. Capacity is reserved up front so that growth (emplace_back)
+            // never reallocates the vector -- in-flight compression tasks capture `&slot` by pointer
+            // and a reallocation would dangle them.
             const size_t max_chunk_size = chunk_size_aligned * max_num_channels;
-            ring_buffer_t ring_buffer(ring_buffer_size);
+            ring_buffer_t ring_buffer;
+            ring_buffer.reserve(max_ring_slots(compression_codec));
+            ring_buffer.resize(s_ring_min_slots);
+            ring_buffer_slot::resize(
+                ring_buffer,
+                max_num_channels,
+                compression_codec,
+                max_chunk_size,
+                chunk_size_aligned
+            );
 
             // Read and compress the channel pairs in chunks
             // -----------------------------------------------------------------------------------
@@ -1682,6 +1709,9 @@ NAMESPACE_COMPRESSED_IMAGE
                             comp_level_adjusted,
                             block_size,
                             ring_buffer,
+                            max_num_channels,
+                            max_chunk_size,
+                            chunk_size_aligned,
                             scanlines_per_chunk,
                             schunks,
                             std::forward<PostProcess>(postprocess)
@@ -1698,6 +1728,9 @@ NAMESPACE_COMPRESSED_IMAGE
                             comp_level_adjusted,
                             block_size,
                             ring_buffer,
+                            max_num_channels,
+                            max_chunk_size,
+                            chunk_size_aligned,
                             scanlines_per_chunk,
                             schunks,
                             std::forward<PostProcess>(postprocess)
@@ -1717,6 +1750,9 @@ NAMESPACE_COMPRESSED_IMAGE
                             comp_level_adjusted,
                             block_size,
                             ring_buffer,
+                            max_num_channels,
+                            max_chunk_size,
+                            chunk_size_aligned,
                             scanlines_per_chunk,
                             schunks,
                             std::nullopt
@@ -1733,6 +1769,9 @@ NAMESPACE_COMPRESSED_IMAGE
                             comp_level_adjusted,
                             block_size,
                             ring_buffer,
+                            max_num_channels,
+                            max_chunk_size,
+                            chunk_size_aligned,
                             scanlines_per_chunk,
                             schunks,
                             std::nullopt
@@ -1805,6 +1844,9 @@ NAMESPACE_COMPRESSED_IMAGE
             const size_t compression_level,
             const size_t block_size,
             ring_buffer_t& ring_buffer,
+            size_t max_num_channels,
+            size_t max_chunk_size,
+            size_t chunk_size_aligned,
             size_t scanlines_per_chunk,
             std::vector<detail::schunk<T>>& schunks,
             PostProcess&& postprocess
@@ -1812,6 +1854,11 @@ NAMESPACE_COMPRESSED_IMAGE
         {
             _COMPRESSED_PROFILE_FUNCTION();
 
+            // Keep the pool sized to the number of ring slots, and grow it in lockstep when the ring
+            // grows (below). The compression tasks run on cudaStreamPerThread, so each worker thread
+            // owns its own CUDA stream; sizing the pool to the actual concurrency (= number of slots)
+            // keeps each in-flight chunk on a stable, reused stream. An oversized pool would scatter
+            // the same work across more threads/streams, churning per-thread CUDA state.
             BS::thread_pool thread_pool(ring_buffer.size());
 
             const int nchannels = chend - chbegin;
@@ -1845,17 +1892,22 @@ NAMESPACE_COMPRESSED_IMAGE
                 // Select active slot in our ring buffer
                 auto& slot = ring_buffer[ring_index];
 
-                // 1. Wait if this slot's own previous turn hasn't finished (Safe Guard for small ring buffers)
+                // 1. Wait if this slot's own previous turn hasn't finished (Safe Guard for small ring buffers).
+                //    The time we block here is the "read gap": the producer has lapped the ring and is
+                //    waiting on the background compressors. We measure it to decide whether to grow.
+                const auto wait_start = std::chrono::steady_clock::now();
                 if (slot.processing_future.valid())
                 {
                     slot.processing_future.get();
                 }
+                const auto read_gap = std::chrono::steady_clock::now() - wait_start;
 
                 // Slice out exact span dimensions required for the OIIO validation checks and bounds
                 const size_t chunk_size_all = scanlines_per_chunk * spec.width * nchannels;
                 auto interleaved_fitted = std::span<T>(slot.interleaved_buffer.data(), chunk_size_all);
 
                 // 2. STAGE 1 (I/O): Synchronously read next file chunk on main thread
+                const auto read_start = std::chrono::steady_clock::now();
                 bool read_successful = false;
                 if constexpr (read_tiles)
                 {
@@ -1903,6 +1955,30 @@ NAMESPACE_COMPRESSED_IMAGE
                             input_ptr->geterror()
                         )
                     );
+                }
+                const auto read_duration = std::chrono::steady_clock::now() - read_start;
+
+                // Grow the ring buffer (up to max_ring_slots for this codec) when the producer is stalling on the
+                // compressors: if we blocked longer waiting for a free slot than this read took, more
+                // in-flight slots let I/O and compression overlap further. Reserved capacity means the
+                // emplace never reallocates, so `slot` and any in-flight `&slot` captures stay valid.
+                if (ring_buffer.size() < max_ring_slots(compression_codec) && read_gap > read_duration / 2)
+                {
+                    std::vector<ring_buffer_slot> grown(1);
+                    ring_buffer_slot::resize(
+                        grown,
+                        max_num_channels,
+                        compression_codec,
+                        max_chunk_size,
+                        chunk_size_aligned
+                    );
+                    ring_buffer.emplace_back(std::move(grown[0]));
+
+                    // Grow the pool in lockstep so each concurrent chunk keeps its own worker thread
+                    // (and thus its own cudaStreamPerThread). reset() drains the in-flight tasks
+                    // first -- a brief barrier, but we only grow a couple of times and only while
+                    // already stalling, so it pays for itself.
+                    thread_pool.reset(ring_buffer.size());
                 }
 
                 size_t read_elements = static_cast<size_t>(scanlines_to_read) * spec.width;

@@ -93,7 +93,7 @@ void bench_image_iteration_normal(benchmark::State& state, const std::filesystem
     auto input_ptr = OIIO::ImageInput::open(image_path);
     if (!input_ptr) return;
     const OIIO::ImageSpec& spec = input_ptr->spec();
-    std::vector<T> pixels(spec.width * spec.height * spec.nchannels);
+    std::vector<T> pixels(static_cast<size_t>(spec.width) * spec.height * spec.nchannels);
     std::vector<std::vector<T>> channels(spec.nchannels, std::vector<T>(spec.width * spec.height));
 
     auto typedesc = compressed::enums::get_type_desc<T>();

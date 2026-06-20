@@ -37,8 +37,8 @@ def main():
     logger.info(f"Generating Read Benchmark graphs in '{args.output}'...")
     generate_read_benchmark_plots(read_groups, args.output)
 
-    logger.info(f"Generating Iteration Benchmark graphs in '{args.output}'...")
-    generate_iteration_benchmark_plots(iter_groups, args.output)
+    # logger.info(f"Generating Iteration Benchmark graphs in '{args.output}'...")
+    # generate_iteration_benchmark_plots(iter_groups, args.output)
 
     logger.info("All graphs successfully generated!")
 
