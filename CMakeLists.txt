@@ -37,7 +37,6 @@ endif ()
 
 option(COMPRESSED_IMAGE_USE_VCPKG "Whether to use the submodule version of vcpkg to resolve the dependencies instead of system libraries." OFF)
 option(COMPRESSED_IMAGE_EXTENDED_WARNINGS "Whether to compile with extended warnings (-Wextra, -Werror etc.)" OFF)
-option(COMPRESSED_IMAGE_CUDA_VERSION "CUDA Runtime/Toolkit version" 12)
 option(COMPRESSED_IMAGE_BUILD_CUDA_FILTER_KERNELS "Whether to compile the CUDA filter kernels ran prior to compression/decompression." ON)
 option(COMPRESSED_IMAGE_BUILD_TESTS OFF)
 option(COMPRESSED_IMAGE_BUILD_EXAMPLES OFF)
@@ -51,7 +50,9 @@ option(_COMPRESSED_IMAGE_SANITIZE_FLAGS "Internal CI flag for enabling sanitizer
 # Add thirdparty libraries
 # --------------------------------------------------------------------------
 
-find_package(CUDAToolkit REQUIRED COMPRESSED_IMAGE_CUDA_VERSION)
+# Detect the CUDA toolkit, resolve the nvcomp variant, and pick GPU architectures.
+# Defines COMPRESSED_IMAGE_CUDA_MAJOR and sets CMAKE_CUDA_ARCHITECTURES.
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/setup_cuda.cmake)
 
 # Add c-blosc2
 set(DEACTIVATE_ZLIB ON)
