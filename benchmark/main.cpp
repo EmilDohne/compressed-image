@@ -253,25 +253,25 @@ void register_codec_benchmarks_for_type(const std::filesystem::path& image,
         )
         ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
 
-    benchmark::RegisterBenchmark(
-            std::format("iter_chunked<{}_{}>/{}", tname, cname, filename),
-            &bench_image_iteration_compressed<T, codec>,
-            image
-        )
-        ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
-
-    benchmark::RegisterBenchmark(
-            std::format("iter_zip_rgb<{}_{}>/{}", tname, cname, filename),
-            &bench_image_iteration_compressed_zip<T, codec>,
-            image
-        )
-        ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
-    benchmark::RegisterBenchmark(
-            std::format("iter_get_decompressed<{}_{}>/{}", tname, cname, filename),
-            &bench_image_iteration_compressed_get_decompressed<T, codec>,
-            image
-        )
-        ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
+    // benchmark::RegisterBenchmark(
+    //         std::format("iter_chunked<{}_{}>/{}", tname, cname, filename),
+    //         &bench_image_iteration_compressed<T, codec>,
+    //         image
+    //     )
+    //     ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
+    //
+    // benchmark::RegisterBenchmark(
+    //         std::format("iter_zip_rgb<{}_{}>/{}", tname, cname, filename),
+    //         &bench_image_iteration_compressed_zip<T, codec>,
+    //         image
+    //     )
+    //     ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
+    // benchmark::RegisterBenchmark(
+    //         std::format("iter_get_decompressed<{}_{}>/{}", tname, cname, filename),
+    //         &bench_image_iteration_compressed_get_decompressed<T, codec>,
+    //         image
+    //     )
+    //     ->Unit(benchmark::kMillisecond)->Iterations(s_iterations);
 }
 
 /// Unrolls the global codec array via index_sequence mapping
