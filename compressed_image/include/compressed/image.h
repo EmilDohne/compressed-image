@@ -15,6 +15,7 @@
 
 #ifdef COMPRESSED_IMAGE_OIIO_AVAILABLE
 #include <OpenImageIO/imageio.h>
+#include <OpenImageIO/filesystem.h>
 #endif
 
 #include "macros.h"
@@ -938,6 +939,184 @@ NAMESPACE_COMPRESSED_IMAGE
             return detail::param_value::to_json(input_ptr->spec().extra_attribs);
         }
 
+        /// \brief Write the image to disk via OpenImageIO.
+        ///
+        /// The output format is inferred from the file extension (e.g. `.exr`, `.tif`, `.png`).
+        ///
+        /// The image is written scanline-by-scanline: for each chunk index the corresponding chunk of
+        /// every channel is decompressed, interleaved and flushed as complete scanlines. Peak extra
+        /// memory is therefore roughly one chunk per channel rather than the whole uncompressed image,
+        /// mirroring the streaming behaviour of the `read()` methods.
+        ///
+        /// Channel names (if set) and simple scalar metadata (string / integer / float) are written to
+        /// the file; array-valued metadata is currently not written back
+        /// (see \ref detail::param_value::from_json).
+        ///
+        /// \param filepath The destination path; its extension selects the output format.
+        /// \throws std::runtime_error if the image has no channels, the dtype is unsupported by
+        ///         OpenImageIO, or the file cannot be created/written.
+        void write(const std::filesystem::path& filepath) const
+        {
+            _COMPRESSED_PROFILE_FUNCTION();
+
+            if (m_channels.empty())
+            {
+                throw std::runtime_error(
+                    std::format("Unable to write image to '{}': the image has no channels.", filepath.string()));
+            }
+
+            const OIIO::TypeDesc type = enums::get_type_desc<T>();
+            if (type == OIIO::TypeDesc::UNKNOWN)
+            {
+                throw std::runtime_error(
+                    std::format("Unable to write image to '{}': the element type is not supported by OpenImageIO.",
+                        filepath.string()));
+            }
+
+            // Validate that all channels share one chunk layout (throws with a clear message if not);
+            // this guarantees chunk index `ci` covers the same pixel range in every channel below.
+            (void)this->chunk_size();
+
+            auto out = OIIO::ImageOutput::create(filepath.string());
+            if (!out)
+            {
+                throw std::runtime_error(
+                    std::format("Unable to create an image writer for '{}': {}",
+                        filepath.string(), OIIO::geterror()));
+            }
+
+            const int width = static_cast<int>(this->width());
+            const int height = static_cast<int>(this->height());
+            const int nchannels = static_cast<int>(this->num_channels());
+
+            OIIO::ImageSpec spec(width, height, nchannels, type);
+            if (!m_channel_names.empty())
+            {
+                spec.channelnames = m_channel_names;
+            }
+            detail::param_value::from_json(spec, m_metadata);
+
+            if (!out->open(filepath.string(), spec))
+            {
+                throw std::runtime_error(
+                    std::format("Unable to open '{}' for writing: {}", filepath.string(), out->geterror()));
+            }
+
+            // Stream chunk-by-chunk. `band` accumulates interleaved pixels that have not yet formed a
+            // whole number of scanlines (a chunk boundary need not fall on a scanline boundary), and we
+            // flush every complete scanline as soon as it is available.
+            const size_t num_chunks = m_channels.front().num_chunks();
+            const size_t row_stride = static_cast<size_t>(width) * static_cast<size_t>(nchannels);
+
+            std::vector<T> band;
+            std::vector<std::vector<T>> per_channel(static_cast<size_t>(nchannels));
+            int next_y = 0;
+
+            for (size_t ci = 0; ci < num_chunks; ++ci)
+            {
+                const size_t elems = m_channels.front().chunk_elems(ci);
+                for (int c = 0; c < nchannels; ++c)
+                {
+                    per_channel[static_cast<size_t>(c)].resize(elems);
+                    m_channels[static_cast<size_t>(c)].get_chunk(std::span<T>(per_channel[static_cast<size_t>(c)]), ci);
+                }
+
+                const size_t base = band.size();
+                band.resize(base + elems * static_cast<size_t>(nchannels));
+                for (size_t p = 0; p < elems; ++p)
+                {
+                    for (int c = 0; c < nchannels; ++c)
+                    {
+                        band[base + p * static_cast<size_t>(nchannels) + static_cast<size_t>(c)] =
+                            per_channel[static_cast<size_t>(c)][p];
+                    }
+                }
+
+                const size_t complete_rows = band.size() / row_stride;
+                if (complete_rows > 0)
+                {
+                    const int y_end = next_y + static_cast<int>(complete_rows);
+                    if (!out->write_scanlines(next_y, y_end, 0, type, band.data()))
+                    {
+                        throw std::runtime_error(
+                            std::format("Failed to write scanlines to '{}': {}", filepath.string(), out->geterror()));
+                    }
+                    next_y = y_end;
+                    band.erase(band.begin(), band.begin() + complete_rows * row_stride);
+                }
+            }
+
+            if (!out->close())
+            {
+                throw std::runtime_error(
+                    std::format("Failed to finalize '{}': {}", filepath.string(), out->geterror()));
+            }
+        }
+
+        /// \brief Read a compressed image from an in-memory encoded image buffer via OpenImageIO.
+        ///
+        /// This is the in-memory counterpart to \ref read: instead of a path on disk it takes a buffer
+        /// containing a full encoded image (e.g. the bytes of an `.exr`/`.png` file) and an OpenImageIO
+        /// IOProxy is used to decode it without touching the filesystem. See GitHub issue #7.
+        ///
+        /// \param buffer   The encoded image bytes.
+        /// \param format   Format/extension hint used to select the OpenImageIO reader, e.g. "exr", "png".
+        /// \param channelnames Channels to read; empty reads every channel of the subimage.
+        /// \param subimage The subimage to read.
+        /// \throws std::runtime_error / std::invalid_argument if the buffer cannot be decoded.
+        static image read_from_memory(
+            std::span<const std::byte> buffer,
+            const std::string& format,
+            std::vector<std::string> channelnames = {},
+            int subimage = 0,
+            enums::codec compression_codec = enums::codec::lz4,
+            size_t compression_level = 9,
+            size_t block_size = s_default_blocksize,
+            size_t chunk_size = s_default_chunksize
+        )
+        {
+            _COMPRESSED_PROFILE_FUNCTION();
+
+            // The IOMemReader must outlive every use of the ImageInput, so it lives in this scope and
+            // the delegated read() (which consumes the input fully) completes before we return.
+            // IOMemReader only reads from the buffer; the const_cast keeps this compatible with
+            // OpenImageIO versions whose constructor takes a non-const void*.
+            OIIO::Filesystem::IOMemReader memreader(
+                const_cast<void*>(static_cast<const void*>(buffer.data())), buffer.size());
+            OIIO::Filesystem::IOProxy* proxy = &memreader;
+
+            OIIO::ImageSpec config;
+            config.attribute("oiio:ioproxy", OIIO::TypeDesc::PTR, &proxy);
+
+            const std::string name_hint = "buffer." + format;
+            auto input_ptr = OIIO::ImageInput::open(name_hint, &config);
+            if (!input_ptr)
+            {
+                throw std::runtime_error(
+                    std::format("Unable to decode in-memory image (format hint '{}'): {}",
+                        format, OIIO::geterror()));
+            }
+
+            if (channelnames.empty())
+            {
+                if (!input_ptr->seek_subimage(subimage, 0))
+                {
+                    throw std::invalid_argument(
+                        std::format("In-memory image has no subimage {}", subimage));
+                }
+                channelnames = input_ptr->spec().channelnames;
+            }
+
+            return image<T>::read(
+                std::move(input_ptr),
+                std::move(channelnames),
+                subimage,
+                compression_codec,
+                compression_level,
+                block_size,
+                chunk_size
+            );
+        }
 
 #endif // COMPRESSED_IMAGE_OIIO_AVAILABLE
 

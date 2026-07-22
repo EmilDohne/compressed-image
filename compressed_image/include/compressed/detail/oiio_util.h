@@ -238,6 +238,42 @@ NAMESPACE_COMPRESSED_IMAGE
 
                 return out;
             }
+
+            /// \brief Write simple json metadata back onto an OIIO ImageSpec (inverse of \ref to_json).
+            ///
+            /// Only scalar string / integer / floating-point entries are written; array-valued and
+            /// nested-object entries are skipped, so this is not a fully lossless inverse of `to_json`.
+            ///
+            /// \param spec     The spec to attach the attributes to.
+            /// \param metadata The json metadata to encode.
+            inline void from_json(OIIO::ImageSpec& spec, const json_ordered& metadata)
+            {
+                _COMPRESSED_PROFILE_FUNCTION();
+                if (!metadata.is_object())
+                {
+                    return;
+                }
+
+                for (auto it = metadata.begin(); it != metadata.end(); ++it)
+                {
+                    const std::string& name = it.key();
+                    const auto& value = it.value();
+
+                    if (value.is_string())
+                    {
+                        spec.attribute(name, value.get<std::string>());
+                    }
+                    else if (value.is_number_integer() || value.is_number_unsigned())
+                    {
+                        spec.attribute(name, value.get<int>());
+                    }
+                    else if (value.is_number_float())
+                    {
+                        spec.attribute(name, static_cast<float>(value.get<double>()));
+                    }
+                    // Arrays and nested objects are intentionally not round-tripped (v1 limitation).
+                }
+            }
         }
     } // detail
 } // NAMESPACE_COMPRESSED_IMAGE

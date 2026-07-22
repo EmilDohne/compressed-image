@@ -11,15 +11,14 @@
 #   COMPRESSED_IMAGE_CUDA_VERSION        "AUTO" (default) or a CUDA major (11/12/13).
 #                                        Selects which prebuilt nvcomp redistributable
 #                                        is fetched. AUTO follows the detected toolkit.
-#   COMPRESSED_IMAGE_CUDA_ARCHITECTURES  GPU architectures to compile device code for.
-#                                        Default "native" (detect the local GPU).
-#                                        Accepts anything CMAKE_CUDA_ARCHITECTURES does,
-#                                        e.g. "75;86;120" or "all-major". For a machine
-#                                        without a GPU (CI), set an explicit list.
+#   CMAKE_CUDA_ARCHITECTURES             GPU architectures to compile device code for (the
+#                                        standard CMake knob). Defaults to "native" (detect the
+#                                        local GPU); accepts e.g. "75;86;120" or "all-major".
+#                                        On a machine without a GPU (CI), pass an explicit list.
 #
 # Provides to the rest of the build:
 #   COMPRESSED_IMAGE_CUDA_MAJOR          Resolved CUDA major (used to pick the nvcomp variant).
-#   CMAKE_CUDA_ARCHITECTURES             Set so every CUDA target inherits it consistently.
+#   CMAKE_CUDA_ARCHITECTURES             Defaulted so every CUDA target inherits it consistently.
 
 # ##############################################################################
 # Locate the toolkit (detect what is actually installed)
@@ -62,14 +61,22 @@ endif ()
 # ##############################################################################
 # Default to 'native' so device code matches the GPU in the build machine. This is
 # what prevents "works on the old card, illegal memory access on the new one".
-set(COMPRESSED_IMAGE_CUDA_ARCHITECTURES "native" CACHE STRING
-   "CUDA architectures to build device code for (feeds CMAKE_CUDA_ARCHITECTURES). "
-   "'native' auto-detects the local GPU; or set e.g. '75;86;120' or 'all-major'.")
+# Override with the standard CMake knob, e.g. -DCMAKE_CUDA_ARCHITECTURES="75;86;120"
+# or "all-major"; on a machine without a GPU (CI) pass an explicit list.
 
-# Respect an explicit CMAKE_CUDA_ARCHITECTURES if the user passed one; otherwise drive
-# it from our option so every CUDA target (the filter plugins) inherits one consistent value.
+# Self-heal a value corrupted by an earlier bug in this file (a multi-argument
+# docstring leaked into the value, giving "native;CACHE;STRING;..."). Without this
+# the bad value sticks in the CMake cache across reconfigures.
+if (DEFINED CMAKE_CUDA_ARCHITECTURES AND CMAKE_CUDA_ARCHITECTURES MATCHES "CACHE|STRING")
+   message(WARNING
+      "Resetting malformed CMAKE_CUDA_ARCHITECTURES='${CMAKE_CUDA_ARCHITECTURES}' back to 'native'.")
+   unset(CMAKE_CUDA_ARCHITECTURES CACHE)
+endif ()
+
+# Respect an explicit user value; otherwise default to native so every CUDA target
+# (the filter plugins) inherits one consistent architecture list.
 if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
-   set(CMAKE_CUDA_ARCHITECTURES "${COMPRESSED_IMAGE_CUDA_ARCHITECTURES}")
+   set(CMAKE_CUDA_ARCHITECTURES "native")
 endif ()
 
 # 'native' requires CMake >= 3.24 - fall back to an explicit, reasonably broad list on
@@ -87,8 +94,7 @@ if (CMAKE_CUDA_ARCHITECTURES STREQUAL "native" AND CMAKE_VERSION VERSION_LESS 3.
    endif ()
    message(WARNING
       "CMAKE_CUDA_ARCHITECTURES=native needs CMake >= 3.24 (have ${CMAKE_VERSION}); "
-      "falling back to '${CMAKE_CUDA_ARCHITECTURES}'. Pass "
-      "-DCOMPRESSED_IMAGE_CUDA_ARCHITECTURES=... to override.")
+      "falling back to '${CMAKE_CUDA_ARCHITECTURES}'. Pass -DCMAKE_CUDA_ARCHITECTURES=... to override.")
 endif ()
 
 message(STATUS "compressed-image: CUDA architectures = ${CMAKE_CUDA_ARCHITECTURES}")

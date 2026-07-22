@@ -151,6 +151,17 @@ namespace compressed_py
 				}, other->m_ClassVariant);
 		}
 
+		/// Create an independent, cheap deep copy of this channel (copies compressed bytes only).
+		std::shared_ptr<dynamic_channel> copy() const
+		{
+			return std::visit([](auto&& ch_ptr)
+				{
+					using T = typename std::decay_t<decltype(*ch_ptr)>::value_type;
+					auto channel = std::make_shared<compressed::channel<T>>(ch_ptr->clone());
+					return std::make_shared<dynamic_channel>(channel);
+				}, base_variant_class::m_ClassVariant);
+		}
+
 		/// Returns the shape of the channel as (height, width).
 		std::tuple<size_t, size_t> shape() const 
 		{

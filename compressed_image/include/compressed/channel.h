@@ -64,6 +64,32 @@ NAMESPACE_COMPRESSED_IMAGE
         channel(const channel&) = delete;
         channel& operator=(const channel&) = delete;
 
+        /// \brief Create an independent, cheap deep copy of this channel.
+        ///
+        /// The channel's compressed chunk data is copied directly (the underlying schunk stores the
+        /// already-compressed bytes), so this is no more expensive than copying those bytes - it does
+        /// NOT decompress and recompress. The returned channel shares no mutable state with this one.
+        ///
+        /// Copy construction is deliberately deleted to avoid accidental copies that *look* free; use
+        /// this named method when a copy is actually intended.
+        ///
+        /// \return A new channel holding an independent copy of this channel's data.
+        [[nodiscard]] channel clone() const
+        {
+            channel copy;
+            if (m_schunk)
+            {
+                copy.m_schunk = std::make_shared<schunk_var<T>>(*m_schunk);
+            }
+            copy.m_scratch_pool = m_scratch_pool;
+            copy.m_codec = m_codec;
+            copy.m_compression_level = m_compression_level;
+            copy.m_num_threads = m_num_threads;
+            copy.m_width = m_width;
+            copy.m_height = m_height;
+            return copy;
+        }
+
 
         /// Default ctor, ensures the schunk and compression/decompression contexts are always initialized
         /// into valid states. This will not generate a valid channel however, and the ctor taking data or the static

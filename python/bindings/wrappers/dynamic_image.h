@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <variant>
+#include <span>
 
 #include "util/variant_t.h"
 #include "util/dtype_util.h"
@@ -158,6 +159,38 @@ namespace compressed_py
 				});
 		}
 
+		static std::shared_ptr<dynamic_image> read_from_memory(
+			const py::object& dtype_,
+			py::bytes data,
+			std::string format,
+			int subimage = 0,
+			std::vector<std::string> channel_names = {},
+			compressed::enums::codec compression_codec = compressed::enums::codec::lz4,
+			size_t compression_level = 9,
+			size_t block_size = compressed::s_default_blocksize,
+			size_t chunk_size = compressed::s_default_chunksize
+		)
+		{
+			auto dtype = py::dtype::from_args(dtype_);
+
+			// Copy the bytes into storage that outlives the (fully-consuming) read below.
+			std::string storage = data.cast<std::string>();
+			std::span<const std::byte> buffer(
+				reinterpret_cast<const std::byte*>(storage.data()), storage.size());
+
+			return dispatch_by_dtype(dtype, [&](auto tag) -> std::shared_ptr<dynamic_image>
+				{
+					using T = decltype(tag);
+					static_assert(np_bitdepth<T>, "Unsupported type passed to read_from_memory");
+
+					auto image = compressed::image<T>::read_from_memory(
+						buffer, format, channel_names, subimage,
+						compression_codec, compression_level, block_size, chunk_size);
+					auto image_ptr = std::make_shared<compressed::image<T>>(std::move(image));
+					return std::make_shared<dynamic_image>(image_ptr);
+				});
+		}
+
 		static py::dtype dtype_from_file(std::string filepath)
 		{
 			auto input_ptr = OIIO::ImageInput::open(filepath);
@@ -232,6 +265,32 @@ namespace compressed_py
 			);
 		}
 
+		/// Add a cheap copy of an existing channel to the image. This copies only the compressed
+		/// bytes (no decompress/recompress) and requires the channel dtype to match the image dtype.
+		/// Combined with `extract_channel` this is how channels are moved between images.
+		void add_channel(std::shared_ptr<dynamic_channel> channel, std::optional<std::string> name = std::nullopt)
+		{
+			std::visit([&](auto&& img_ptr)
+				{
+					using T = typename std::decay_t<decltype(*img_ptr)>::value_type;
+
+					std::visit([&](auto&& src_ch_ptr)
+						{
+							using U = typename std::decay_t<decltype(*src_ch_ptr)>::value_type;
+							if constexpr (std::is_same_v<T, U>)
+							{
+								img_ptr->add_channel(src_ch_ptr->clone(), name);
+							}
+							else
+							{
+								throw std::invalid_argument(
+									"Channel dtype does not match the image dtype; cannot add it.");
+							}
+						}, channel->variant());
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
 		void remove_channel(std::variant<size_t, std::string> index_or_name)
 		{
 			std::visit([&](auto&& img_ptr)
@@ -277,11 +336,36 @@ namespace compressed_py
 			);
 		}
 
+		std::shared_ptr<dynamic_channel> extract_channel(std::variant<size_t, std::string> index_or_name)
+		{
+			return std::visit([&](auto&& img_ptr) -> std::shared_ptr<dynamic_channel>
+				{
+					using T = typename std::decay_t<decltype(*img_ptr)>::value_type;
+
+					compressed::channel<T> extracted = std::holds_alternative<size_t>(index_or_name)
+						? img_ptr->extract_channel(std::get<size_t>(index_or_name))
+						: img_ptr->extract_channel(std::get<std::string>(index_or_name));
+
+					auto channel_ptr = std::make_shared<compressed::channel<T>>(std::move(extracted));
+					return std::make_shared<dynamic_channel>(channel_ptr);
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
 		void print_statistics()
 		{
 			std::visit([](auto&& img_ptr)
 				{
 					img_ptr->print_statistics();
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
+		void write(const std::string& filepath) const
+		{
+			std::visit([&](auto&& img_ptr)
+				{
+					img_ptr->write(filepath);
 				}, base_variant_class::m_ClassVariant
 			);
 		}
@@ -337,6 +421,44 @@ namespace compressed_py
 						out_channels.push_back(std::make_shared<dynamic_channel>(aliasing_ptr));
 					}
 
+					return out_channels;
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
+		/// Retrieve a subset of channels by their logical indices, in the requested order.
+		std::vector<std::shared_ptr<dynamic_channel>> channels(std::vector<size_t> indices)
+		{
+			return std::visit([&](auto&& img_ptr)
+				{
+					using T = typename std::decay_t<decltype(*img_ptr)>::value_type;
+
+					std::vector<std::shared_ptr<dynamic_channel>> out_channels;
+					for (auto index : indices)
+					{
+						auto& channel = img_ptr->channel(index);
+						auto aliasing_ptr = std::shared_ptr<compressed::channel<T>>(img_ptr, &channel);
+						out_channels.push_back(std::make_shared<dynamic_channel>(aliasing_ptr));
+					}
+					return out_channels;
+				}, base_variant_class::m_ClassVariant
+			);
+		}
+
+		/// Retrieve a subset of channels by their names, in the requested order.
+		std::vector<std::shared_ptr<dynamic_channel>> channels(std::vector<std::string> names)
+		{
+			return std::visit([&](auto&& img_ptr)
+				{
+					using T = typename std::decay_t<decltype(*img_ptr)>::value_type;
+
+					std::vector<std::shared_ptr<dynamic_channel>> out_channels;
+					for (const auto& name : names)
+					{
+						auto& channel = img_ptr->channel(name);
+						auto aliasing_ptr = std::shared_ptr<compressed::channel<T>>(img_ptr, &channel);
+						out_channels.push_back(std::make_shared<dynamic_channel>(aliasing_ptr));
+					}
 					return out_channels;
 				}, base_variant_class::m_ClassVariant
 			);
