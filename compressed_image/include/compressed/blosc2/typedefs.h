@@ -8,15 +8,10 @@
 
 namespace NAMESPACE_COMPRESSED_IMAGE
 {
-
-	namespace blosc2
-	{
 		
-		template <typename T>
-		using schunk_var_ptr = std::shared_ptr<std::variant<blosc2::schunk<T>, blosc2::lazy_schunk<T>>>;
-		template <typename T>
-		using schunk_var = std::variant<blosc2::schunk<T>, blosc2::lazy_schunk<T>>;
-
-	} // blosc2
+	template <typename T>
+	using schunk_var_ptr = std::shared_ptr<std::variant<detail::schunk<T>, detail::lazy_schunk<T>>>;
+	template <typename T>
+	using schunk_var = std::variant<detail::schunk<T>, detail::lazy_schunk<T>>;
 
 } // NAMESPACE_COMPRESSED_IMAGE

@@ -8,36 +8,39 @@
 
 #include <OpenImageIO/half.h>
 
+#define _COMPRESSED_PROFILE 1
 #include <compressed/channel.h>
+#include <compressed/blosc2/schunk.h>
 #include <compressed/blosc2/wrapper.h>
 
 #include "util.h"
 
 
-
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
-TEST_CASE("Initialize channel from incorrect schunk"
-	* doctest::no_breaks(true)
-	* doctest::no_output(true)
-	* doctest::should_fail(true)
+TEST_CASE(
+    "Initialize channel from incorrect schunk"
+    * doctest::no_breaks(true)
+    * doctest::no_output(true)
+    * doctest::should_fail(true)
 )
 {
-	auto schunk = compressed::blosc2::schunk<uint8_t>();
-	auto channel = compressed::channel<uint8_t>(std::move(schunk), 1, 1);
+    auto schunk = compressed::detail::schunk<uint8_t>();
+    auto channel = compressed::channel<uint8_t>(std::move(schunk), 1, 1);
 }
 
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
-TEST_CASE("Initialize channel from incorrect span"
-	* doctest::no_breaks(true)
-	* doctest::no_output(true)
-	* doctest::should_fail(true)
+TEST_CASE(
+    "Initialize channel from incorrect span"
+    * doctest::no_breaks(true)
+    * doctest::no_output(true)
+    * doctest::should_fail(true)
 )
 {
-	auto vec = std::vector<uint8_t>(50);
-	auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 1, 1);
+    auto vec = std::vector<uint8_t>(50);
+    auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 1, 1);
 }
 
 
@@ -45,29 +48,29 @@ TEST_CASE("Initialize channel from incorrect span"
 // -----------------------------------------------------------------------------------
 TEST_CASE("Empty channel creation")
 {
-	auto vec = std::vector<uint8_t>(0);
+    auto vec = std::vector<uint8_t>(0);
 
-	auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 0, 0);
-	
-	CHECK(channel.uncompressed_size() == 0);
-	CHECK(channel.width() == 0);
-	CHECK(channel.height() == 0);
+    auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 0, 0);
 
-	auto decompressed = channel.get_decompressed();
-	CHECK(decompressed.size() == 0);
+    CHECK(channel.uncompressed_size() == 0);
+    CHECK(channel.width() == 0);
+    CHECK(channel.height() == 0);
+
+    auto decompressed = channel.get_decompressed();
+    CHECK(decompressed.size() == 0);
 }
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
 TEST_CASE("Roundtrip channel creation")
 {
-	auto vec = std::vector<uint8_t>(50);
-	std::iota(vec.begin(), vec.end(), 0);
+    auto vec = std::vector<uint8_t>(50);
+    std::iota(vec.begin(), vec.end(), 0);
 
-	auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 10, 5);
-	auto roundtripped = channel.get_decompressed();
+    auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 10, 5);
+    auto roundtripped = channel.get_decompressed();
 
-	CHECK(vec == roundtripped);
+    CHECK(vec == roundtripped);
 }
 
 
@@ -75,68 +78,117 @@ TEST_CASE("Roundtrip channel creation")
 // -----------------------------------------------------------------------------------
 TEST_CASE("Roundtrip channel creation larger than chunksize")
 {
-	auto vec = std::vector<uint8_t>(8192);
-	std::iota(vec.begin(), vec.end(), 0);
+    auto vec = std::vector<uint8_t>(8192);
+    std::iota(vec.begin(), vec.end(), 0);
 
-	auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 128, 64, compressed::enums::codec::lz4, 9, 128, 4096);
-	auto roundtripped = channel.get_decompressed();
+    auto channel = compressed::channel<uint8_t>(
+        std::span<uint8_t>(vec),
+        128,
+        64,
+        compressed::enums::codec::lz4,
+        9,
+        128,
+        4096
+    );
+    auto roundtripped = channel.get_decompressed();
 
-	CHECK(vec == roundtripped);
+    CHECK(vec == roundtripped);
 }
 
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
-TEST_CASE("Channel get attributes"
+TEST_CASE(
+    "Channel get attributes"
 )
 {
-	auto vec = std::vector<uint8_t>(50);
-	auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 10, 5, compressed::enums::codec::blosclz, 9);
+    auto vec = std::vector<uint8_t>(50);
+    auto channel = compressed::channel<uint8_t>(std::span<uint8_t>(vec), 10, 5, compressed::enums::codec::blosclz, 9);
 
-	CHECK(channel.width() == 10);
-	CHECK(channel.height() == 5);
-	CHECK(channel.compression() == compressed::enums::codec::blosclz);
-	CHECK(channel.compression_context() != nullptr);
-	CHECK(channel.decompression_context() != nullptr);
-	CHECK(channel.uncompressed_size() == 50);
-	CHECK(channel.num_chunks() == 1);
+    CHECK(channel.width() == 10);
+    CHECK(channel.height() == 5);
+    CHECK(channel.compression() == compressed::enums::codec::blosclz);
+    CHECK(channel.uncompressed_size() == 50);
+    CHECK(channel.num_chunks() == 1);
 }
-
 
 // -----------------------------------------------------------------------------------
 // -----------------------------------------------------------------------------------
 TEST_CASE("Channel iterate")
 {
-	auto vec = std::vector<uint16_t>(128, 255);
-	auto channel = compressed::channel<uint16_t>(std::span<uint16_t>(vec), 16, 8);
+    auto vec = std::vector<uint16_t>(128, 255);
+    auto channel = compressed::channel<uint16_t>(std::span<uint16_t>(vec), 16, 8);
 
-	SUBCASE("Read")
-	{
-		for (auto chunk_span : channel)
-		{
-			for (auto& pixel : chunk_span)
-			{
-				CHECK(pixel == 255);
-			}
-		}
-	}
+    SUBCASE("Read")
+    {
+        size_t count = 0;
 
-	SUBCASE("Modify")
-	{
-		for (auto chunk_span : channel)
-		{
-			for (auto& pixel : chunk_span)
-			{
-				pixel = 128;
-			}
-		}
+        for (auto chunk_span : channel)
+        {
+            for (auto& pixel : chunk_span)
+            {
+                CHECK(pixel == 255);
+                ++count;
+            }
+        }
 
-		for (auto chunk_span : channel)
-		{
-			for (auto& pixel : chunk_span)
-			{
-				CHECK(pixel == 128);
-			}
-		}
-	}
+        CHECK(count == vec.size());
+    }
+
+    SUBCASE("Modify")
+    {
+        for (auto chunk_span : channel)
+        {
+            for (auto& pixel : chunk_span)
+            {
+                pixel = 128;
+            }
+        }
+
+        for (auto chunk_span : channel)
+        {
+            for (auto& pixel : chunk_span)
+            {
+                CHECK(pixel == 128);
+            }
+        }
+
+        auto decompressed = channel.get_decompressed();
+        test_util::check_vector_verbose(decompressed, static_cast<uint16_t>(128));
+    }
+}
+
+
+// -----------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------
+TEST_CASE("Channel iterate multiple chunks")
+{
+    auto vec = std::vector<uint16_t>(128);
+    std::iota(vec.begin(), vec.end(), uint16_t{0});
+
+    auto channel = compressed::channel<uint16_t>(
+        std::span<uint16_t>(vec),
+        16,
+        8,
+        compressed::enums::codec::lz4,
+        9,
+        64,
+        64
+    );
+
+    size_t count = 0;
+    for (auto chunk_span : channel)
+    {
+        for (auto& pixel : chunk_span)
+        {
+            pixel = 42;
+            ++count;
+        }
+    }
+
+    CHECK(count == vec.size());
+
+    auto decompressed = channel.get_decompressed();
+    CHECK(decompressed.size() == vec.size());
+    CHECK(std::ranges::all_of(decompressed, [](auto value) { return value == 42; }));
 }

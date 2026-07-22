@@ -46,6 +46,42 @@ class TestCompressedImage:
         dtype = compressed.Image.dtype_from_file(img_path)
 
         assert dtype == np.dtype(np.float32)
+
+    def test_write_roundtrip(self, tmp_path):
+        width, height = 32, 16
+        image = compressed.Image(np.float32, [], width, height)
+
+        values = [0.25, 0.5, 0.75]
+        for name, val in zip(["R", "G", "B"], values):
+            image.add_channel(np.full((height, width), val, np.float32), width, height, name)
+
+        out_path = str(tmp_path / "roundtrip.exr")
+        image.write(out_path)
+        assert os.path.exists(out_path)
+
+        read_back = compressed.Image.read(np.float32, out_path, subimage=0)
+        assert read_back.shape == (3, height, width)
+        assert read_back.get_channel_names() == ["R", "G", "B"]
+        for i, val in enumerate(values):
+            assert np.allclose(read_back[i].get_decompressed(), val)
+
+    def test_write_no_channels_raises(self, tmp_path):
+        image = compressed.Image(np.uint8, [], 16, 16)
+        with pytest.raises(RuntimeError):
+            image.write(str(tmp_path / "empty.tif"))
+
+    def test_read_from_memory(self):
+        img_path = os.path.join(_BASE_IMAGE_PATH_ABS, "multilayer_1920x1080.exr")
+        with open(img_path, "rb") as f:
+            data = f.read()
+
+        from_disk = compressed.Image.read(np.float16, img_path, subimage=0)
+        from_mem = compressed.Image.read_from_memory(np.float16, data, "exr", subimage=0)
+
+        assert from_mem.num_channels == from_disk.num_channels
+        assert from_mem.shape == from_disk.shape
+        for i in range(from_disk.num_channels):
+            assert np.array_equal(from_mem[i].get_decompressed(), from_disk[i].get_decompressed())
         
     def test_dtypes_from_file_multi_dtype(self):
         img_path = os.path.join(_BASE_IMAGE_PATH_ABS, "multilayer_1920x1080.exr")
@@ -233,3 +269,97 @@ class TestCompressedImageParametrized:
         assert len(image) == 2
         assert image.get_channel_names() == ["G", "A"]
         assert image.num_channels == 2
+
+    def test_dtype_property(self, dtype: npt.DTypeLike):
+        image = compressed.Image(dtype, [], 64, 64)
+        image.add_channel(np.full((64, 64), 3, dtype), 64, 64)
+
+        assert image.dtype == np.dtype(dtype)
+        # The channel dtype must agree with its containing image.
+        assert image[0].dtype == np.dtype(dtype)
+
+    def test_channels_subset(self, dtype: npt.DTypeLike):
+        img_path = os.path.join(_BASE_IMAGE_PATH_ABS, "multilayer_1920x1080.exr")
+        image = compressed.Image.read(dtype, img_path, subimage = 0, channel_names = ["R", "G", "B", "A"])
+
+        by_index = image.channels([2, 0])
+        by_name = image.channels(["B", "R"])
+
+        assert len(by_index) == 2
+        assert len(by_name) == 2
+        # Subset selection preserves the requested order.
+        assert np.array_equal(by_index[0].get_decompressed(), by_name[0].get_decompressed())
+        assert np.array_equal(by_index[1].get_decompressed(), by_name[1].get_decompressed())
+        # And matches the corresponding full-image channels.
+        assert np.array_equal(by_index[0].get_decompressed(), image[2].get_decompressed())
+        assert np.array_equal(by_index[1].get_decompressed(), image[0].get_decompressed())
+
+        with pytest.raises(IndexError):
+            image.channels([99])
+
+    def test_extract_channel(self, dtype: npt.DTypeLike):
+        image = compressed.Image(dtype, [], 64, 64)
+        for name in ("R", "G", "B"):
+            image.add_channel(np.full((64, 64), 7, dtype), 64, 64, name)
+
+        extracted = image.extract_channel("G")
+
+        # The channel is detached from the image but remains usable on its own.
+        assert image.num_channels == 2
+        assert image.get_channel_names() == ["R", "B"]
+        assert extracted.shape == (64, 64)
+        assert np.all(extracted.get_decompressed() == 7)
+
+    def test_iteration(self, dtype: npt.DTypeLike):
+        image = compressed.Image(dtype, [], 64, 64)
+        for _ in range(3):
+            image.add_channel(np.full((64, 64), 5, dtype), 64, 64)
+
+        iterated = list(image)
+        assert len(iterated) == 3
+        for channel in iterated:
+            assert channel.shape == (64, 64)
+
+    def test_repr(self, dtype: npt.DTypeLike):
+        image = compressed.Image(dtype, [], 64, 64)
+        image.add_channel(np.full((64, 64), 1, dtype), 64, 64)
+
+        assert "compressed_image.Image" in repr(image)
+        assert "compressed_image.Channel" in repr(image[0])
+
+    def test_channel_copy(self, dtype: npt.DTypeLike):
+        image = compressed.Image(dtype, [], 32, 16)
+        image.add_channel(np.full((16, 32), 4, dtype), 32, 16, "A")
+
+        original = image[0]
+        duplicate = original.copy()
+
+        assert duplicate.dtype == original.dtype
+        assert duplicate.shape == original.shape
+        assert np.array_equal(duplicate.get_decompressed(), original.get_decompressed())
+
+    def test_add_channel_from_channel_copies(self, dtype: npt.DTypeLike):
+        src = compressed.Image(dtype, [], 32, 16)
+        src.add_channel(np.full((16, 32), 6, dtype), 32, 16, "R")
+
+        dst = compressed.Image(dtype, [], 32, 16)
+        dst.add_channel(src.channel("R"), name="R_copied")
+
+        assert dst.num_channels == 1
+        assert dst.get_channel_names() == ["R_copied"]
+        assert np.array_equal(dst[0].get_decompressed(), src[0].get_decompressed())
+        # The source is untouched by the copy.
+        assert np.all(src[0].get_decompressed() == 6)
+
+    def test_move_channel_between_images(self, dtype: npt.DTypeLike):
+        src = compressed.Image(dtype, [], 32, 16)
+        src.add_channel(np.full((16, 32), 8, dtype), 32, 16, "R")
+        src.add_channel(np.full((16, 32), 9, dtype), 32, 16, "G")
+
+        dst = compressed.Image(dtype, [], 32, 16)
+        dst.add_channel(src.extract_channel("R"), name="R")
+
+        assert src.num_channels == 1
+        assert src.get_channel_names() == ["G"]
+        assert dst.num_channels == 1
+        assert np.all(dst[0].get_decompressed() == 8)

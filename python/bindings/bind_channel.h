@@ -127,6 +127,16 @@ Create a new channel with the same shape and dtype as another, filled with zeros
 :param other: Another `compressed_image.Channel` to mimic.
 :return: A new `compressed_image.Channel`.
             )doc")
+            .def("copy", &compressed_py::dynamic_channel::copy,
+                R"doc(
+Return an independent, cheap deep copy of this channel.
+
+Only the already-compressed bytes are copied (no decompression/recompression), so this is about as
+cheap as copying the compressed data. The returned channel shares no state with this one, which makes
+it the primitive for duplicating a channel or adding it to another image via `Image.add_channel`.
+
+:return: A new, independent `compressed_image.Channel`.
+            )doc")
             .def_property_readonly("dtype", &compressed_py::dynamic_channel::dtype, R"doc(
 :return: The numpy dtype of the underlying data.
             )doc")
@@ -252,7 +262,15 @@ the number of threads for the rest of the compressed_image library.
                     .def("compression_level", &compressed_py::dynamic_channel::compression_level,
                         R"doc(
 :return: The compression level used.
-            )doc");
+            )doc")
+                    .def("__repr__", [](const std::shared_ptr<compressed_py::dynamic_channel>& self)
+                    {
+                        return std::format(
+                            "<compressed_image.Channel dtype={} height={} width={} codec={}>",
+                            py::str(self->dtype()).cast<std::string>(),
+                            self->height(), self->width(),
+                            compressed::enums::to_string(self->compression()));
+                    });
     }
 
 } // compressed_py

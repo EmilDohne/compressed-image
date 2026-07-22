@@ -261,10 +261,36 @@ with the image metadata.
                    These defaults are tuned for good performance on a wide range of systems.
             )doc")
 
+            .def_static("read_from_memory", &compressed_py::dynamic_image::read_from_memory,
+                py::arg("dtype"),
+                py::arg("data"),
+                py::arg("format"),
+                py::arg("subimage") = 0,
+                py::arg("channel_names") = std::vector<std::string>{},
+                py::arg("compression_codec") = compressed::enums::codec::lz4,
+                py::arg("compression_level") = 9,
+                py::arg("block_size") = compressed::s_default_blocksize,
+                py::arg("chunk_size") = compressed::s_default_chunksize,
+                R"doc(
+Read an image from an in-memory encoded image buffer (e.g. the bytes of an .exr/.png file), decoding
+it via OpenImageIO without touching the filesystem. This is the in-memory counterpart to `read`.
+
+:param dtype: The data type to read as (the pixel data is converted to this on read).
+:param data: The encoded image bytes.
+:param format: Format/extension hint used to pick the OpenImageIO reader, e.g. "exr" or "png".
+:param subimage: The subimage within the image to read.
+:param channel_names: Channels to read; an empty list (default) reads every channel of the subimage.
+:param compression_codec: Compression codec (default: lz4).
+:param compression_level: Compression level (default: 9).
+:param block_size: Block size for compression.
+:param chunk_size: Chunk size for compression.
+:returns: The decoded, compressed image.
+            )doc")
+
             .def_static("dtype_from_file", &compressed_py::dynamic_image::dtype_from_file,
                 py::arg("filepath"),
                 R"doc(
-Extract the dtype from a given image file without having to read the whole image. This is the 
+Extract the dtype from a given image file without having to read the whole image. This is the
 recommended method for extracting the files' dtype from an image.
 
 :returns: The dtype of the image at the given filepath.
@@ -289,7 +315,16 @@ it might be like this:
 :returns: The dtypes of the image at the given filepath.
             )doc")
 
-            .def("add_channel", &compressed_py::dynamic_image::add_channel,
+            .def("add_channel",
+                py::overload_cast<
+                    py::array,
+                    size_t,
+                    size_t,
+                    std::optional<std::string>,
+                    compressed::enums::codec,
+                    uint8_t,
+                    size_t,
+                    size_t>(&compressed_py::dynamic_image::add_channel),
                 py::arg("data"),
                 py::arg("width"),
                 py::arg("height"),
@@ -325,6 +360,29 @@ Add a channel to the image from the given uncompressed data. Compresses it and s
                    - **Large enough** to saturate available cores when divided by `block_size`.
                    
                    These defaults are tuned for good performance on a wide range of systems.
+            )doc")
+
+            .def("add_channel",
+                py::overload_cast<
+                    std::shared_ptr<compressed_py::dynamic_channel>,
+                    std::optional<std::string>>(&compressed_py::dynamic_image::add_channel),
+                py::arg("channel"),
+                py::arg("name") = std::nullopt,
+                R"doc(
+Add an existing compressed_image.Channel to the image. A cheap copy of the channel is stored (only
+the compressed bytes are copied, no decompress/recompress), so the source channel remains valid and
+independent.
+
+The channel's dtype must match the image's dtype, and its dimensions must match the rest of the image.
+Together with `extract_channel` this is the recommended way to move a channel from one image to another:
+
+.. code-block:: python
+
+    dst.add_channel(src.extract_channel("R"), name="R")   # move R from src to dst
+    dst.add_channel(src.channel("G").copy(), name="G")     # copy G, leaving src intact
+
+:param channel: The channel to add. Must match the image dtype and dimensions.
+:param name: Optional name for the channel.
             )doc")
 
             .def("remove_channel", &compressed_py::dynamic_image::remove_channel,
@@ -373,11 +431,41 @@ Retrieve a channel by its name
 :returns: The channel, this may be modified in-place and will be updated on the containing image.
             )doc")
 
-            .def("channels", &compressed_py::dynamic_image::channels,
+            .def("channels", py::overload_cast<>(&compressed_py::dynamic_image::channels),
                 R"doc(
-Retrieve a reference to all the channels of the image, the compressed_image.Channel instances may be modified 
+Retrieve a reference to all the channels of the image, the compressed_image.Channel instances may be modified
 directly but modifying the list will not update the channels of the image. To add or remove a channel please call
 `add_channel` or `remove_channel`.
+            )doc")
+
+            .def("channels", py::overload_cast<std::vector<size_t>>(&compressed_py::dynamic_image::channels),
+                py::arg("indices"),
+                R"doc(
+Retrieve a subset of channels by their logical indices, returned in the requested order. The indices must all be
+valid or a IndexError is raised.
+
+:param indices: The indices of the channels to retrieve.
+:returns: The requested channels. These alias the image and may be modified in-place.
+            )doc")
+
+            .def("channels", py::overload_cast<std::vector<std::string>>(&compressed_py::dynamic_image::channels),
+                py::arg("names"),
+                R"doc(
+Retrieve a subset of channels by their names, returned in the requested order. The names must all be valid or a
+ValueError is raised.
+
+:param names: The names of the channels to retrieve.
+:returns: The requested channels. These alias the image and may be modified in-place.
+            )doc")
+
+            .def("extract_channel", &compressed_py::dynamic_image::extract_channel,
+                py::arg("name_or_index"),
+                R"doc(
+Remove a channel from the image and return it as a standalone compressed_image.Channel. Unlike `remove_channel`,
+which discards the channel, this hands ownership of the (still compressed) channel back to the caller.
+
+:param name_or_index: The name or index of the channel to extract. Must be valid.
+:returns: The extracted channel, detached from the image.
             )doc")
 
             .def("get_decompressed", &compressed_py::dynamic_image::get_decompressed,
@@ -390,6 +478,19 @@ underlying channels so it is safe to access these by their logical index.
                 py::arg("channelname"),
                 R"doc(
 Return the index of a channel by its name, raising a ValueError if the name is not valid.
+            )doc")
+
+            .def("write", &compressed_py::dynamic_image::write, py::arg("filepath"),
+                R"doc(
+Write the image to disk via OpenImageIO. The output format is inferred from the file extension
+(e.g. ".exr", ".tif", ".png").
+
+All channels are decompressed, interleaved and written in a single pass, so peak memory use is
+roughly the size of the full uncompressed image. Channel names (if set) and simple scalar metadata
+(str / int / float entries from `get_metadata()`) are written to the file; array-valued metadata is
+not currently written back.
+
+:param filepath: The destination path as a string. Its extension selects the output format.
             )doc")
 
             .def("print_statistics", &compressed_py::dynamic_image::print_statistics,
@@ -472,9 +573,30 @@ This may for example encode color space information.
             )doc"
             )
             .def("get_metadata", &compressed_py::dynamic_image::get_metadata, R"doc(
-Retrieve the metadata stored on the image. If the image was created via one of the `read()` methods this will be populated with 
+Retrieve the metadata stored on the image. If the image was created via one of the `read()` methods this will be populated with
 the image metadata which will store additional information.
-            )doc");
+            )doc")
+
+            .def_property_readonly("dtype", &compressed_py::dynamic_image::dtype, R"doc(
+:return: The numpy dtype of the image data. All channels of the image share this dtype.
+            )doc")
+
+            .def("__iter__", [](const std::shared_ptr<compressed_py::dynamic_image>& self)
+            {
+                // Materialise the channels into a python list and iterate that; the list keeps the
+                // aliasing channel handles (and therefore the image) alive for the iterator's lifetime.
+                return py::iter(py::cast(self->channels()));
+            }, py::keep_alive<0, 1>(), R"doc(
+Iterate over the channels of the image in logical order, yielding compressed_image.Channel instances.
+            )doc")
+
+            .def("__repr__", [](const std::shared_ptr<compressed_py::dynamic_image>& self)
+            {
+                return std::format(
+                    "<compressed_image.Image dtype={} channels={} height={} width={}>",
+                    py::str(self->dtype()).cast<std::string>(),
+                    self->num_channels(), self->height(), self->width());
+            });
     }
 
 } // compressed_py

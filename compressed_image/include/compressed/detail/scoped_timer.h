@@ -22,19 +22,21 @@
 #include <thread>
 
 #ifdef _COMPRESSED_PROFILE
-#define _COMPRESSED_PROFILE_SCOPE(name) NAMESPACE_COMPRESSED_IMAGE::detail::InstrumentationTimer timer##__LINE__(name)
-#define _COMPRESSED_PROFILE_FUNCTION()  NAMESPACE_COMPRESSED_IMAGE::detail::InstrumentationTimer timer##__FUNCTION__##__LINE__(__FUNCTION__)
+#define CONCAT_2_IMPL(x, y) x##y
+#define CONCAT_2(x, y) CONCAT_2_IMPL(x, y)
+
+#define _COMPRESSED_PROFILE_SCOPE(name) NAMESPACE_COMPRESSED_IMAGE::detail::InstrumentationTimer CONCAT_2(timer, __LINE__)(name)
+#define _COMPRESSED_PROFILE_FUNCTION()  NAMESPACE_COMPRESSED_IMAGE::detail::InstrumentationTimer CONCAT_2(timer, __LINE__)(__FUNCTION__)
 #else
 #define _COMPRESSED_PROFILE_SCOPE(name)
 #define _COMPRESSED_PROFILE_FUNCTION()
 #endif
 
-namespace NAMESPACE_COMPRESSED_IMAGE
+namespace
+NAMESPACE_COMPRESSED_IMAGE
 {
-
     namespace detail
     {
-
         struct ProfileResult
         {
             std::string Name;
@@ -54,6 +56,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
             std::ofstream m_OutputStream;
             int m_ProfileCount;
             std::mutex m_lock;
+
         public:
             Instrumentor()
                 : m_CurrentSession(nullptr), m_ProfileCount(0)
@@ -64,7 +67,7 @@ namespace NAMESPACE_COMPRESSED_IMAGE
             {
                 m_OutputStream.open(filepath);
                 WriteHeader();
-                m_CurrentSession = new InstrumentationSession{ name };
+                m_CurrentSession = new InstrumentationSession{name};
             }
 
             void EndSession()
@@ -137,19 +140,21 @@ namespace NAMESPACE_COMPRESSED_IMAGE
             {
                 auto endTimepoint = std::chrono::high_resolution_clock::now();
 
-                long long start = std::chrono::time_point_cast<std::chrono::microseconds>(m_StartTimepoint).time_since_epoch().count();
-                long long end = std::chrono::time_point_cast<std::chrono::microseconds>(endTimepoint).time_since_epoch().count();
+                long long start = std::chrono::time_point_cast<std::chrono::microseconds>(m_StartTimepoint).
+                                  time_since_epoch().count();
+                long long end = std::chrono::time_point_cast<std::chrono::microseconds>(endTimepoint).time_since_epoch()
+                    .count();
 
                 uint32_t threadID = static_cast<uint32_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                Instrumentor::Get().WriteProfile({ m_Name, start, end, threadID });
+                Instrumentor::Get().WriteProfile({m_Name, start, end, threadID});
 
                 m_Stopped = true;
             }
+
         private:
             const std::string m_Name{};
             std::chrono::time_point<std::chrono::high_resolution_clock> m_StartTimepoint;
             bool m_Stopped = false;
         };
-
     } // detail
 } // NAMESPACE_COMPRESSED_IMAGE

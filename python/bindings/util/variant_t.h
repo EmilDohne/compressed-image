@@ -126,13 +126,19 @@ namespace compressed_py
 		{
 		}
 
-		py::dtype dtype() const 
+		py::dtype dtype() const
 		{
 			return std::visit([](const auto& ptr)
 				{
 				using T = typename std::decay_t<decltype(*ptr)>::value_type;
 				return py::dtype::of<T>();
 				}, m_ClassVariant);
+		}
+
+		/// \brief Access the underlying typed variant (e.g. to interoperate between wrapped instances).
+		const variant_t<Class>& variant() const noexcept
+		{
+			return m_ClassVariant;
 		}
 	};
 
